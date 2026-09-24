@@ -1,0 +1,18 @@
+# Secrets and the local development config (a copy of docker/meeting.ini with Windows paths).
+.env
+/meeting.ini
+
+# Recordings, voice clips, transcripts and voiceprints never enter the repository.
+data/
+cache/
+docker/*.tar
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/.tmp_data_directories/
+
+# Claude Code worktrees
+.claude/worktrees/
