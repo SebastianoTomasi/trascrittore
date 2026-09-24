@@ -32,8 +32,9 @@ RUN --mount=type=cache,target=/root/.cache/pypoetry \
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib
 
 COPY docker/prefetch_models.py docker/
+# A Xet transfer of Whisper stalled for 45 minutes on a slow link; plain HTTP downloads time out and resume.
 RUN --mount=type=secret,id=hf_token,required=true \
-    HF_TOKEN="$(cat /run/secrets/hf_token)" python docker/prefetch_models.py
+    HF_TOKEN="$(cat /run/secrets/hf_token)" HF_HUB_DISABLE_XET=1 python docker/prefetch_models.py
 
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \

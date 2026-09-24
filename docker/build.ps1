@@ -34,9 +34,11 @@ finally {
     Remove-Item Env:HF_TOKEN -ErrorAction SilentlyContinue
 }
 
-# The previous build loses its tag but keeps its own layers on disk until removed.
+# The previous build can lose its tag but keep its own layers on disk until removed.
+# Docker sometimes removes it by itself, so check it still exists before removing it.
 $currentId = docker images -q --no-trunc $Tag
-if ($previousId -and $previousId -ne $currentId) {
+$previousStillThere = $previousId -and ((docker images -a -q --no-trunc) -contains $previousId)
+if ($previousStillThere -and $previousId -ne $currentId) {
     docker rmi $previousId | Out-Null
 }
 
