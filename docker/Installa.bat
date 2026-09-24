@@ -33,8 +33,12 @@ echo Controllo la GPU...
 docker run --rm --gpus all --entrypoint python %IMAGE% -c "import torch; print('GPU pronta: ' + torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'ATTENZIONE: Docker non vede la GPU')"
 if errorlevel 1 echo ATTENZIONE: Docker non riesce a usare la GPU. Il trascrittore funzionera' sulla CPU, molto piu' lento.
 
+rem The agent skill always comes with the image of the same version, so it is installed every time.
 echo.
-echo Installazione completata. Per trascrivere, trascina un audio su Trascrivi.bat.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0trascrittore.ps1" install-skill
+
+echo.
+echo Installazione completata. Per trascrivere, trascina una registrazione su Trascrivi.bat.
 goto :end
 
 :no_docker

@@ -43,12 +43,13 @@ if ($previousStillThere -and $previousId -ne $currentId) {
 }
 
 if ($Export) {
-    # Lay out the shared folder colleagues use: image, scripts, guide, settings and voice library.
+    # Lay out the shared folder colleagues use: image, scripts, guide, agent skill, settings and voice library.
+    # The skill ships only here, next to the image it describes.
     New-Item -ItemType Directory -Force (Join-Path $Export "voci") | Out-Null
     $tarPath = Join-Path $Export "meeting-transcriber.tar"
     docker save -o $tarPath $Tag
     if ($LASTEXITCODE -ne 0) { throw "docker save failed." }
-    foreach ($name in "Trascrivi.bat", "Installa.bat", "LEGGIMI.md") {
+    foreach ($name in "Trascrivi.bat", "Verifica.bat", "Installa.bat", "trascrittore.ps1", "skill-trascrittore.md", "LEGGIMI.md") {
         Copy-Item (Join-Path $PSScriptRoot $name) $Export -Force
     }
     # meeting.ini in the shared folder may hold tuned thresholds: never overwrite it.

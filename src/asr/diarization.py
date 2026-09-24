@@ -439,6 +439,17 @@ def _identify_speakers_in_diarized_result(
     if enroll_db is None:
         raw_diarization = _raw_diarization_records(diarize_df)
         diarized_speakers = list(dict.fromkeys(record["speaker"] for record in raw_diarization))
+        # Nobody to recognize, but the windows are still recorded: naming a speaker later cuts clips from them.
+        window_result = speaker_embeddings_from_diarization_with_diagnostics(
+            None,
+            audio_path,
+            diarize_df,
+            device=device,
+            window_sec=_matching_settings.window_sec,
+            min_window_sec=_matching_settings.min_window_sec,
+            min_total_speech_sec=_matching_settings.min_total_speech_sec,
+            max_windows_per_spk=_matching_settings.max_windows_per_spk,
+        )
         match_result = match_speakers_to_names_with_diagnostics(
             {},
             {},
@@ -452,7 +463,7 @@ def _identify_speakers_in_diarized_result(
         diagnostics = _merge_identification_diagnostics(
             threshold=threshold,
             enroll_db=None,
-            embedding_diagnostics={"speakers": {}},
+            embedding_diagnostics=window_result.diagnostics,
             match_diagnostics=match_result.diagnostics,
         )
         diagnostics_path = save_speaker_identification_diagnostics(diagnostics, audio_path)

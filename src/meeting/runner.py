@@ -1,5 +1,8 @@
 """
-Transcribe one meeting recording and write "<name> - trascrizione.txt/.json" next to it.
+Transcribe one recording and write "<name> - trascrizione.txt/.json" next to it.
+
+Nothing here asks a question: naming speakers is a separate command, which Trascrivi.bat
+calls after asking the person, and an agent calls with names the person confirmed.
 """
 
 from __future__ import annotations
@@ -8,7 +11,6 @@ import json
 import os
 import tempfile
 import time
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable
 
@@ -16,13 +18,22 @@ import soundfile as sf
 
 from src.asr.utils.config import WhisperSettings, get_speaker_settings, get_whisper_settings
 from src.asr.utils.output_format import format_offset
+from src.meeting.summary import (
+    FILE_NOT_FOUND,
+    GPU_OUT_OF_MEMORY,
+    OK,
+    UNREADABLE_AUDIO,
+    CommandError,
+    guarded,
+    host_path,
+    say as _say,
+)
 from src.meeting.transcript import (
-    ask_names as ask_names_for,
     build_payload,
     display_labels,
+    is_anonymous,
     participant_names,
-    rename_labels,
-    render_text,
+    render_payload_text,
     speaker_summaries,
 )
 from src.paths import safe_filename_part
@@ -33,16 +44,9 @@ logger = get_logger("meeting")
 
 SAMPLE_RATE = 16000
 OUTPUT_SUFFIX = " - trascrizione"
+COMMAND = "transcribe"
 _RULE = "=" * 70
 _ALERT = "!" * 70
-
-
-class MeetingError(Exception):
-    """A problem the user can fix, reported in Italian without a traceback."""
-
-
-def _say(message: str = "") -> None:
-    print(message, flush=True)
 
 
 def output_paths(audio_path: str | os.PathLike[str], out_dir: str | None) -> tuple[Path, Path]:
@@ -84,45 +88,37 @@ def _is_out_of_memory(exc: BaseException) -> bool:
     return isinstance(exc, torch.OutOfMemoryError) or "out of memory" in str(exc).lower()
 
 
-def _write_outputs(
-    *,
-    txt_path: Path,
-    json_path: Path,
-    source_name: str,
-    duration_sec: float,
-    settings: WhisperSettings,
-    elapsed_sec: float,
-    turns: list[dict[str, Any]],
-    labels: dict[str, str],
-    diagnostics: dict[str, Any],
-) -> None:
+def _write_outputs(txt_path: Path, json_path: Path, payload: dict[str, Any]) -> None:
     txt_path.parent.mkdir(parents=True, exist_ok=True)
-    txt_path.write_text(
-        render_text(
-            source_name=source_name,
-            duration_sec=duration_sec,
-            device=settings.device,
-            fallback_reason=settings.fallback_reason,
-            turns=turns,
-            labels=labels,
-        ),
-        encoding="utf-8",
-    )
-    payload = build_payload(
-        source_name=source_name,
-        duration_sec=duration_sec,
-        device=settings.device,
-        compute_type=settings.compute_type,
-        fallback_reason=settings.fallback_reason,
-        elapsed_sec=elapsed_sec,
-        turns=turns,
-        labels=labels,
-        speakers=speaker_summaries(turns, labels, diagnostics),
-    )
     json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    txt_path.write_text(render_payload_text(payload), encoding="utf-8")
 
 
-def _transcribe(source: Path, *, speakers: int | None, ask_names: bool, out_dir: str | None) -> int:
+def _summary(payload: dict[str, Any], txt_path: Path, json_path: Path) -> dict[str, Any]:
+    anonymous = [speaker["label"] for speaker in payload["speakers"] if is_anonymous(speaker["label"])]
+    message = f"Trascrizione completata in {format_duration(payload['elapsed_sec'])}."
+    if anonymous:
+        message += f" Senza nome: {', '.join(anonymous)}."
+    return {
+        "command": COMMAND,
+        "status": OK,
+        "message": message,
+        "recording": payload["recording"],
+        "transcript_txt": host_path(txt_path),
+        "transcript_json": host_path(json_path),
+        "duration_sec": payload["duration_sec"],
+        "elapsed_sec": payload["elapsed_sec"],
+        "device": payload["device"],
+        "compute_type": payload["compute_type"],
+        "warnings": payload["warnings"],
+        "speakers": [
+            {"label": speaker["label"], "recognized": speaker["recognized"], "speech_sec": speaker["speech_sec"]}
+            for speaker in payload["speakers"]
+        ],
+    }
+
+
+def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> dict[str, Any]:
     started = time.perf_counter()
     settings = get_whisper_settings()
 
@@ -144,7 +140,9 @@ def _transcribe(source: Path, *, speakers: int | None, ask_names: bool, out_dir:
             audio = diarization.load_audio(str(source))
         except RuntimeError as exc:
             logger.debug("Audio decoding failed", exc_info=exc)
-            raise MeetingError(f"non riesco a leggere l'audio di '{source.name}'. È un file audio o video?") from exc
+            raise CommandError(
+                UNREADABLE_AUDIO, f"Non riesco a leggere l'audio di '{source.name}'. È un file audio o video?"
+            ) from exc
         duration_sec = len(audio) / SAMPLE_RATE
         sf.write(work_audio, audio, SAMPLE_RATE)
         del audio
@@ -164,24 +162,19 @@ def _transcribe(source: Path, *, speakers: int | None, ask_names: bool, out_dir:
     elapsed_sec = time.perf_counter() - started
     labels = display_labels(turns, get_speaker_settings().unknown_prefix)
     txt_path, json_path = output_paths(source, out_dir)
-    write = partial(
-        _write_outputs,
-        txt_path=txt_path,
-        json_path=json_path,
+    payload = build_payload(
         source_name=source.name,
+        recording=host_path(source),
         duration_sec=duration_sec,
-        settings=settings,
+        device=settings.device,
+        compute_type=settings.compute_type,
+        fallback_reason=settings.fallback_reason,
         elapsed_sec=elapsed_sec,
         turns=turns,
-        diagnostics=diagnostics,
+        labels=labels,
+        speakers=speaker_summaries(turns, labels, diagnostics),
     )
-    # Write before asking names, so closing the window mid-prompt loses nothing.
-    write(labels=labels)
-    if ask_names:
-        names = ask_names_for(turns, labels, print_fn=_say)
-        if names:
-            labels = rename_labels(labels, names)
-            write(labels=labels)
+    _write_outputs(txt_path, json_path, payload)
 
     _say("")
     _say(_RULE)
@@ -194,33 +187,31 @@ def _transcribe(source: Path, *, speakers: int | None, ask_names: bool, out_dir:
         for line in _cpu_alert(settings):
             _say(line)
     _say(_RULE)
-    return 0
+    return _summary(payload, txt_path, json_path)
 
 
-def run(audio_path: str, *, speakers: int | None = None, ask_names: bool = False, out_dir: str | None = None) -> int:
-    """
-    Transcribe one recording end to end; return a process exit code.
-    """
-    source = Path(audio_path)
+def _transcribe_or_explain(source: Path, *, speakers: int | None, out_dir: str | None) -> dict[str, Any]:
     if not source.is_file():
-        _say(f"Errore: file non trovato: {audio_path}")
-        return 1
+        raise CommandError(FILE_NOT_FOUND, f"File non trovato: {host_path(source)}")
     try:
-        return _transcribe(source, speakers=speakers, ask_names=ask_names, out_dir=out_dir)
-    except KeyboardInterrupt:
-        _say("\nInterrotto.")
-        return 130
-    except MeetingError as exc:
-        _say(f"\nErrore: {exc}")
-        return 1
+        return _transcribe(source, speakers=speakers, out_dir=out_dir)
     except Exception as exc:
-        logger.exception("Meeting transcription failed")
-        _say("")
-        if _is_out_of_memory(exc):
-            _say(
-                "Errore: memoria della GPU esaurita. Nella sezione [whisper] di meeting.ini "
-                "abbassa batch_size (per esempio a 4, poi 2) e riprova."
-            )
-        else:
-            _say(f"Errore: la trascrizione non è riuscita ({type(exc).__name__}: {exc}).")
-        return 1
+        if not _is_out_of_memory(exc):
+            raise
+        logger.debug("GPU out of memory", exc_info=exc)
+        raise CommandError(
+            GPU_OUT_OF_MEMORY,
+            "Memoria della GPU esaurita. Nella sezione [whisper] di meeting.ini "
+            "abbassa batch_size (per esempio a 4, poi 2) e riprova.",
+        ) from exc
+
+
+def run(audio_path: str, *, speakers: int | None = None, out_dir: str | None = None) -> dict[str, Any]:
+    """
+    Transcribe one recording end to end; return the result summary.
+    """
+    return guarded(
+        COMMAND,
+        lambda: _transcribe_or_explain(Path(audio_path), speakers=speakers, out_dir=out_dir),
+        failed="La trascrizione non è riuscita",
+    )

@@ -120,6 +120,14 @@ class SpeakerSettings:
     unknown_prefix: str
 
 
+@dataclass(frozen=True)
+class LibrarySettings:
+    """How clips of a named speaker are selected for the voice library."""
+
+    keep_clips: int
+    min_consistency: float
+
+
 @lru_cache(maxsize=1)
 def _device_choice() -> DeviceChoice:
     """
@@ -276,3 +284,19 @@ def get_speaker_settings() -> SpeakerSettings:
     section = config["speaker"] if "speaker" in config else {}
     unknown_prefix = section.get("unknown_prefix", "").strip()
     return SpeakerSettings(unknown_prefix=unknown_prefix)
+
+
+def get_library_settings() -> LibrarySettings:
+    """
+    Return the clip selection used when naming a speaker adds clips to the voice library.
+
+    A meeting.ini written before this section existed gets the defaults.
+    """
+    section = config["library"] if "library" in config else {}
+    settings = LibrarySettings(
+        keep_clips=int(section.get("keep_clips", "8")),
+        min_consistency=float(section.get("min_consistency", "0.60")),
+    )
+    if settings.keep_clips <= 0:
+        raise RuntimeError("library.keep_clips must be greater than zero.")
+    return settings

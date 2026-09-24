@@ -1,10 +1,10 @@
 """
-Pure formatting for meeting transcripts: display labels, speaker summaries, text and JSON output.
+Pure formatting for transcripts: display labels, speaker summaries, text and JSON output, renaming.
 """
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any
 
 from src.asr.utils.output_format import format_offset
 
@@ -12,8 +12,9 @@ from src.asr.utils.output_format import format_offset
 UNKNOWN_DISPLAY_PREFIX = "Persona"
 UNATTRIBUTED_LABEL = "UNKNOWN"
 UNATTRIBUTED_DISPLAY = "Voce non attribuita"
-_SAMPLE_TURNS = 2
-_SAMPLE_MAX_CHARS = 160
+CPU_WARNING_PREFIX = "Elaborata su CPU invece che su GPU. "
+# Windows that were, or could have been, embedded to recognize a speaker; "skipped" ones failed.
+_USABLE_WINDOW_STATUSES = {"embedded", "not_embedded"}
 
 
 def display_labels(turns: list[dict[str, Any]], unknown_prefix: str) -> dict[str, str]:
@@ -60,6 +61,14 @@ def _rounded(value: Any) -> float | None:
     return round(float(value), 3) if value is not None else None
 
 
+def _windows(speaker_diag: dict[str, Any]) -> list[dict[str, float]]:
+    return [
+        {"start": round(float(window["start"]), 3), "end": round(float(window["end"]), 3)}
+        for window in speaker_diag.get("windows", [])
+        if window.get("embedding_status") in _USABLE_WINDOW_STATUSES
+    ]
+
+
 def speaker_summaries(
     turns: list[dict[str, Any]],
     labels: dict[str, str],
@@ -68,7 +77,9 @@ def speaker_summaries(
     """
     Summarize each voice for the output file: who, how much they spoke, and how sure recognition was.
 
-    Scores and margins let the team calibrate matching.threshold and matching.margin on real meetings.
+    Scores and margins let the maintainer calibrate matching.threshold and matching.margin on real
+    recordings. The windows are the stretches used to recognize the voice, from which naming a
+    speaker later cuts voice clips.
     """
     diag_by_label = {
         speaker_diag.get("assigned_label"): speaker_diag
@@ -90,16 +101,10 @@ def speaker_summaries(
                 "second_match": speaker_diag.get("second_best_name"),
                 "margin": _rounded(speaker_diag.get("score_margin")) if speaker_diag.get("second_best_name") else None,
                 "reason": speaker_diag.get("rejection_reason"),
+                "windows": _windows(speaker_diag),
             }
         )
     return summaries
-
-
-def rename_labels(labels: dict[str, str], names: dict[str, str]) -> dict[str, str]:
-    """
-    Apply names typed by the user ("Persona 1" -> "Luca Bianchi") to the raw->display mapping.
-    """
-    return {raw_label: names.get(display, display) for raw_label, display in labels.items()}
 
 
 def _format_minutes(seconds: float) -> str:
@@ -146,6 +151,7 @@ def render_text(
 def build_payload(
     *,
     source_name: str,
+    recording: str,
     duration_sec: float,
     device: str,
     compute_type: str,
@@ -160,10 +166,11 @@ def build_payload(
     """
     return {
         "file": source_name,
+        "recording": recording,
         "duration_sec": round(duration_sec, 1),
         "device": device,
         "compute_type": compute_type,
-        "warnings": [f"Elaborata su CPU invece che su GPU. {fallback_reason}"] if fallback_reason else [],
+        "warnings": [f"{CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else [],
         "elapsed_sec": round(elapsed_sec, 1),
         "speakers": speakers,
         "turns": [
@@ -179,46 +186,50 @@ def build_payload(
     }
 
 
-def _sample_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    longest = sorted(turns, key=lambda turn: len(turn["text"].split()), reverse=True)[:_SAMPLE_TURNS]
-    return sorted(longest, key=lambda turn: float(turn["start_sec"]))
+def _fallback_reason(payload: dict[str, Any]) -> str | None:
+    for warning in payload.get("warnings", []):
+        if warning.startswith(CPU_WARNING_PREFIX):
+            return warning[len(CPU_WARNING_PREFIX):]
+    return None
 
 
-def _clip(text: str) -> str:
-    return text if len(text) <= _SAMPLE_MAX_CHARS else text[: _SAMPLE_MAX_CHARS - 1].rstrip() + "…"
-
-
-def ask_names(
-    turns: list[dict[str, Any]],
-    labels: dict[str, str],
-    *,
-    input_fn: Callable[[str], str] | None = None,
-    print_fn: Callable[[str], None] = print,
-) -> dict[str, str]:
+def render_payload_text(payload: dict[str, Any]) -> str:
     """
-    Ask a name for every anonymous voice, showing two of its longest turns as a reminder.
-
-    Enter keeps "Persona N"; end of input stops asking. Names are used only for this transcript.
+    Render the text transcript from its JSON payload, so both files always agree.
     """
-    anonymous = [(raw, display) for raw, display in labels.items() if is_anonymous(display)]
-    if not anonymous:
-        return {}
-    input_fn = input_fn or input
+    turns = payload["turns"]
+    return render_text(
+        source_name=payload["file"],
+        duration_sec=float(payload["duration_sec"]),
+        device=payload["device"],
+        fallback_reason=_fallback_reason(payload),
+        turns=turns,
+        labels={turn["speaker"]: turn["speaker"] for turn in turns},
+    )
 
-    print_fn("")
-    print_fn("Alcune voci non sono state riconosciute.")
-    print_fn("Scrivi il nome e premi Invio, oppure premi solo Invio per lasciare 'Persona N'.")
-    names: dict[str, str] = {}
-    for raw_label, display in anonymous:
-        speaker_turns = [turn for turn in turns if turn["speaker"] == raw_label]
-        print_fn("")
-        print_fn(f"{display}: {len(speaker_turns)} interventi, {_format_minutes(_speech_sec(speaker_turns))} di parlato")
-        for turn in _sample_turns(speaker_turns):
-            print_fn(f"  [{format_offset(turn['start_sec'])}] \"{_clip(turn['text'])}\"")
-        try:
-            answer = input_fn(f"Nome per {display}: ").strip()
-        except EOFError:
-            break
-        if answer:
-            names[display] = answer
-    return names
+
+def speaker_labels(payload: dict[str, Any]) -> list[str]:
+    """
+    Return the displayed speaker labels of a transcript, in order of first appearance.
+    """
+    labels = [speaker["label"] for speaker in payload.get("speakers", [])]
+    labels += [turn["speaker"] for turn in payload.get("turns", [])]
+    return list(dict.fromkeys(labels))
+
+
+def rename_speakers(payload: dict[str, Any], names: dict[str, str]) -> dict[str, Any]:
+    """
+    Return a copy of the transcript payload with displayed labels replaced ("Persona 2" -> "Luca Bianchi").
+
+    Renamed speakers are marked "named": a person gave that name, unlike a recognized one, so the
+    recognition check can trust it. Everything else stays as it was.
+    """
+    renamed = dict(payload)
+    renamed["speakers"] = [
+        {**speaker, "label": names[speaker["label"]], "named": True} if speaker["label"] in names else speaker
+        for speaker in payload.get("speakers", [])
+    ]
+    renamed["turns"] = [
+        {**turn, "speaker": names.get(turn["speaker"], turn["speaker"])} for turn in payload.get("turns", [])
+    ]
+    return renamed

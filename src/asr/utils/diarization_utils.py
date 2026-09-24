@@ -221,13 +221,14 @@ def speaker_embeddings_from_diarization_with_diagnostics(
 
     Windows cover only speech where no other speaker overlaps. When a speaker has more
     candidate windows than `max_windows_per_spk`, only the longest window of each bucket
-    of consecutive windows is embedded.
+    of consecutive windows is embedded. Without `emb_model`, as when the voice library is
+    empty, the windows are still recorded, because naming a speaker later cuts clips from them.
     """
-    full_audio = whisperx.load_audio(audio_path)
     diarize_df = diarization_to_dataframe(diarize_segments)
     diagnostics: Dict[str, Any] = {"speakers": {}}
     if diarize_df.empty:
         return SpeakerEmbeddingDiagnosticsResult({}, diagnostics)
+    full_audio = whisperx.load_audio(audio_path) if emb_model is not None else None
 
     speech_sec_by_spk: Dict[str, float] = {}
     for _, row in diarize_df.iterrows():
@@ -269,6 +270,12 @@ def speaker_embeddings_from_diarization_with_diagnostics(
             window_diag["clip_path"] = None
             window_diag["clip_error"] = None
             window_diag["embedding_status"] = "pending"
+
+            if emb_model is None:
+                window_diag["embedding_status"] = "not_embedded"
+                speaker_diag["windows"].append(window_diag)
+                clip_index += 1
+                continue
 
             try:
                 clip_path = (
@@ -312,6 +319,8 @@ def speaker_embeddings_from_diarization_with_diagnostics(
         if embeds and accepted_duration >= min_total_speech_sec:
             spk_embeddings[spk] = embeds
             speaker_diag["eligible_for_matching"] = True
+        elif emb_model is None and attempted_windows:
+            speaker_diag["embedding_rejection_reason"] = "enrollment_not_configured"
         elif not embeds:
             speaker_diag["embedding_rejection_reason"] = "no_embedding_windows"
         else:

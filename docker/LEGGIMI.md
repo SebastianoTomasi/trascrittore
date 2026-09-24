@@ -17,7 +17,9 @@ Tutto gira sul tuo PC. Le registrazioni non vengono mandate a nessun servizio es
 ## Installazione (una volta sola)
 
 1. Installa Docker Desktop, riavvia il PC e aprilo.
-2. Nella cartella condivisa fai doppio clic su `Installa.bat`. Carica il programma (qualche minuto) e ti dice se la GPU funziona.
+2. Nella cartella condivisa fai doppio clic su `Installa.bat`. Carica il programma (qualche minuto) e ti dice se la GPU funziona. Installa anche la skill che permette a Claude Code e Codex di usare il trascrittore.
+
+Se la cartella cambia posto, fai di nuovo doppio clic su `Installa.bat`: la skill deve sapere dove si trova il trascrittore.
 
 Quando esce una versione nuova, chi gestisce il pilota avvisa: basta rieseguire `Installa.bat`, che sostituisce quella vecchia.
 
@@ -26,14 +28,23 @@ Quando esce una versione nuova, chi gestisce il pilota avvisa: basta rieseguire 
 1. Apri Docker Desktop, se non è già aperto.
 2. Trascina il file della riunione (m4a, mp3, wav, mp4 di Teams…) sopra `Trascrivi.bat`, un file alla volta.
 3. Scrivi quante persone parlano, oppure premi solo Invio se non lo sai.
-4. Alla fine, per ogni voce non riconosciuta, ti mostra due frasi di quella persona e ti chiede il nome. Con Invio resta "Persona 1", "Persona 2"… I nomi scritti qui finiscono solo in questa trascrizione.
+4. Alla fine, per ogni voce non riconosciuta, ti mostra due frasi di quella persona e ti chiede il nome. Con Invio resta "Persona 1", "Persona 2"…
+5. Per le voci a cui hai dato un nome si apre il lettore con qualche secondo di quella voce: ascoltala e conferma che è davvero quella persona. Solo allora il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta.
 
 Accanto all'audio trovi:
 
 - `<nome audio> - trascrizione.txt`: il testo da leggere;
 - `<nome audio> - trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce.
 
-Con la GPU un'ora di riunione richiede pochi minuti. Sulla CPU può volerci più della durata dell'audio.
+Con la GPU un'ora di riunione richiede pochi minuti. Sulla CPU può volerci più della durata dell'audio. Si fa una trascrizione alla volta: se ne è già in corso una, aspetta che finisca.
+
+**Dare i nomi più tardi.** Trascina il file `<nome audio> - trascrizione.json` sopra `Trascrivi.bat`: ti fa le stesse domande sui nomi, senza trascrivere di nuovo. Se nel frattempo hai spostato la registrazione, ti chiede di trascinarla nella finestra.
+
+## Con Claude Code o Codex
+
+Dopo l'installazione puoi chiedere al tuo agente, per esempio: "trascrivi la registrazione che ho appena salvato con OBS" e poi "chi è Persona 2?". L'agente usa lo stesso trascrittore sul tuo PC, e la trascrizione non esce dal PC, a meno che l'agente non la legga per risponderti.
+
+Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce.
 
 ## Farsi riconoscere: la libreria delle voci
 
@@ -49,12 +60,21 @@ Se il programma non è abbastanza sicuro, preferisce scrivere "Persona N" piutto
 
 **OneDrive.** Imposta la cartella condivisa su "Mantieni sempre su questo dispositivo" (tasto destro sulla cartella). Le clip rimaste "solo online" non vengono lette.
 
+### Le voci a cui dai un nome
+
+Quando dai un nome a una voce, le sue clip finiscono in `voci\Nome Cognome\registrazioni`. Il nome del file dice da quale registrazione vengono e da che minuto.
+
+All'inizio il programma è in **periodo di prova**: tiene tutte le clip, anche quelle che secondo lui sono brutte. Ascoltale e cancella quelle con altre voci, risate o rumori. Dopo 10 voci con nome fai doppio clic su `Verifica.bat`: se il programma non aveva mai tenuto una clip che poi hai cancellato, ti chiede se le hai controllate tutte e, se rispondi di sì, da lì in poi scarta da solo le peggiori.
+
+`Verifica.bat` controlla anche quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia `threshold` in `meeting.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome.
+
 ## Se qualcosa non va
 
 | Messaggio | Cosa fare |
 |---|---|
 | Docker Desktop non è avviato | Apri Docker Desktop, aspetta che sia pronto e riprova. |
 | Il trascrittore non è installato | Esegui `Installa.bat`. |
+| Un'altra trascrizione è in corso su questo PC | Aspetta che finisca e riprova. |
 | Non riesco a leggere l'audio | Controlla che sia un file audio o video. Se è su OneDrive, tasto destro → "Mantieni sempre su questo dispositivo" e riprova. |
 | ATTENZIONE: nessuna GPU disponibile, elaboro su CPU | Funziona lo stesso, ma lento. Aggiorna il driver NVIDIA e riavvia Docker Desktop. |
 | Memoria della GPU esaurita | In `meeting.ini` (nella cartella condivisa) abbassa `batch_size` a 4 e riprova, poi a 2. |

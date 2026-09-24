@@ -9,13 +9,13 @@ import pytest
 import src.asr.diarization as diarization
 import src.meeting.runner as runner
 from src.asr.utils.config import SpeakerSettings, WhisperSettings
-from src.meeting.cli import parse_args
 from src.meeting.transcript import (
-    ask_names,
     build_payload,
     display_labels,
-    rename_labels,
+    render_payload_text,
     render_text,
+    rename_speakers,
+    speaker_labels,
     speaker_summaries,
 )
 
@@ -48,6 +48,11 @@ DIAGNOSTICS = {
             "second_best_name": "Mario Rossi",
             "score_margin": 0.2,
             "rejection_reason": "below_threshold",
+            "windows": [
+                {"start": 66.0, "end": 76.0, "embedding_status": "embedded"},
+                {"start": 76.0, "end": 80.0, "embedding_status": "skipped"},
+                {"start": 76.12345, "end": 79.5, "embedding_status": "not_embedded"},
+            ],
         },
         "SPEAKER_01": {
             "assigned_label": "UNKNOWN_SPEAKER_01",
@@ -147,6 +152,7 @@ def test_speaker_summaries_expose_scores_for_calibration():
             "second_match": "Luca Bianchi",
             "margin": 0.401,
             "reason": "accepted",
+            "windows": [],
         },
         {
             "label": "Persona 1",
@@ -158,6 +164,7 @@ def test_speaker_summaries_expose_scores_for_calibration():
             "second_match": "Mario Rossi",
             "margin": 0.2,
             "reason": "below_threshold",
+            "windows": [{"start": 66.0, "end": 76.0}, {"start": 76.123, "end": 79.5}],
         },
         {
             "label": "Persona 2",
@@ -169,15 +176,33 @@ def test_speaker_summaries_expose_scores_for_calibration():
             "second_match": None,
             "margin": None,
             "reason": "no_embedding_windows",
+            "windows": [],
         },
     ]
 
 
+def _payload(labels: dict[str, str] | None = None) -> dict[str, object]:
+    labels = labels or display_labels(TURNS, "UNKNOWN_")
+    return build_payload(
+        source_name="Riunione budget.m4a",
+        recording="C:\\Riunioni\\Riunione budget.m4a",
+        duration_sec=95.96,
+        device="cpu",
+        compute_type="int8",
+        fallback_reason="Nessuna GPU NVIDIA disponibile.",
+        elapsed_sec=301.26,
+        turns=TURNS,
+        labels=labels,
+        speakers=speaker_summaries(TURNS, labels, DIAGNOSTICS),
+    )
+
+
 def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
-    labels = rename_labels(display_labels(TURNS, "UNKNOWN_"), {"Persona 1": "Luca Bianchi"})
+    labels = {**display_labels(TURNS, "UNKNOWN_"), "UNKNOWN_SPEAKER_03": "Luca Bianchi"}
 
     payload = build_payload(
         source_name="Riunione budget.m4a",
+        recording="C:\\Riunioni\\Riunione budget.m4a",
         duration_sec=95.04,
         device="cpu",
         compute_type="int8",
@@ -188,6 +213,7 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         speakers=speaker_summaries(TURNS, labels, DIAGNOSTICS),
     )
 
+    assert payload["recording"] == "C:\\Riunioni\\Riunione budget.m4a"
     assert payload["device"] == "cpu"
     assert payload["compute_type"] == "int8"
     assert payload["warnings"] == ["Elaborata su CPU invece che su GPU. Nessuna GPU NVIDIA disponibile."]
@@ -202,45 +228,30 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
     }
 
 
-def test_ask_names_keeps_persona_on_enter_and_shows_examples():
-    labels = display_labels(TURNS, "UNKNOWN_")
-    answers = iter(["  Luca Bianchi ", ""])
-    printed: list[str] = []
+def test_rename_speakers_changes_only_the_named_labels():
+    payload = _payload()
 
-    names = ask_names(TURNS, labels, input_fn=lambda _prompt: next(answers), print_fn=printed.append)
+    renamed = rename_speakers(payload, {"Persona 1": "Luca Bianchi"})
 
-    assert names == {"Persona 1": "Luca Bianchi"}
-    assert '  [00:01:06] "io direi di rimandare"' in printed
-
-
-def test_ask_names_stops_at_end_of_input():
-    labels = display_labels(TURNS, "UNKNOWN_")
-
-    def closed_input(_prompt: str) -> str:
-        raise EOFError
-
-    assert ask_names(TURNS, labels, input_fn=closed_input, print_fn=lambda _line: None) == {}
+    assert speaker_labels(renamed) == ["Mario Rossi", "Luca Bianchi", "Persona 2"]
+    assert [turn["speaker"] for turn in renamed["turns"]] == ["Mario Rossi", "Luca Bianchi", "Mario Rossi", "Persona 2"]
+    assert renamed["speakers"][1]["windows"] == payload["speakers"][1]["windows"]
+    assert {key: value for key, value in renamed.items() if key not in ("speakers", "turns")} == {
+        key: value for key, value in payload.items() if key not in ("speakers", "turns")
+    }
+    assert speaker_labels(payload) == ["Mario Rossi", "Persona 1", "Persona 2"]
 
 
-def test_ask_names_does_not_prompt_when_everyone_is_recognized():
-    def unexpected_input(_prompt: str) -> str:
-        raise AssertionError("no prompt expected")
+def test_text_rendered_from_the_payload_matches_after_renaming():
+    payload = _payload()
+    renamed_by_labels = _payload({**display_labels(TURNS, "UNKNOWN_"), "UNKNOWN_SPEAKER_03": "Luca Bianchi"})
 
-    labels = {"Mario Rossi": "Mario Rossi"}
-    assert ask_names(TURNS[:1], labels, input_fn=unexpected_input, print_fn=lambda _line: None) == {}
+    text = render_payload_text(rename_speakers(payload, {"Persona 1": "Luca Bianchi"}))
 
-
-def test_cli_parses_speakers_and_flags():
-    args = parse_args(["Riunione.m4a", "--speakers", "3", "--ask-names"])
-
-    assert (args.audio, args.speakers, args.ask_names, args.out_dir) == ("Riunione.m4a", 3, True, None)
-    assert parse_args(["Riunione.m4a"]).speakers is None
-
-
-@pytest.mark.parametrize("value", ["0", "-2", "tre"])
-def test_cli_rejects_invalid_speaker_counts(value):
-    with pytest.raises(SystemExit):
-        parse_args(["Riunione.m4a", "--speakers", value])
+    assert text == render_payload_text(renamed_by_labels)
+    assert text.splitlines()[1] == "Durata: 00:01:36 · Elaborata su CPU"
+    assert "ATTENZIONE: elaborata su CPU invece che su GPU. Nessuna GPU NVIDIA disponibile." in text.splitlines()
+    assert "[00:01:06] Luca Bianchi: io direi di rimandare" in text.splitlines()
 
 
 def test_output_paths_sit_next_to_the_audio(tmp_path):
@@ -295,35 +306,48 @@ def fake_pipeline(tmp_path, monkeypatch):
     return calls
 
 
-def test_run_writes_transcript_next_to_audio_and_applies_typed_names(tmp_path, monkeypatch, capsys, fake_pipeline):
+def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch, capsys, fake_pipeline):
     audio = tmp_path / "Riunione di prova è.m4a"
     audio.write_bytes(b"not decoded: load_audio is faked")
-    answers = iter(["Luca Bianchi", ""])
-    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("transcribing asks nothing"))
 
-    exit_code = runner.run(str(audio), speakers=3, ask_names=True)
+    summary = runner.run(str(audio), speakers=3)
 
-    assert exit_code == 0
     assert fake_pipeline == [("transcribe", ".wav"), "align", ("diarize", 3), "identify"]
-    text = (tmp_path / "Riunione di prova è - trascrizione.txt").read_text(encoding="utf-8")
-    assert "[00:01:06] Luca Bianchi: io direi di rimandare" in text
-    assert "Persona 1" not in text
+    txt_path = tmp_path / "Riunione di prova è - trascrizione.txt"
+    json_path = tmp_path / "Riunione di prova è - trascrizione.json"
+    text = txt_path.read_text(encoding="utf-8")
+    assert "[00:01:06] Persona 1: io direi di rimandare" in text
     assert "ATTENZIONE: elaborata su CPU" in text
-    payload = json.loads((tmp_path / "Riunione di prova è - trascrizione.json").read_text(encoding="utf-8"))
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["recording"] == str(audio)
     assert payload["warnings"] and payload["device"] == "cpu"
-    assert [speaker["label"] for speaker in payload["speakers"]] == ["Mario Rossi", "Luca Bianchi", "Persona 2"]
-    output = capsys.readouterr().out
-    assert output.count("ATTENZIONE: nessuna GPU disponibile, elaboro su CPU") == 2
+    assert payload["speakers"][1]["windows"] == [{"start": 66.0, "end": 76.0}, {"start": 76.123, "end": 79.5}]
+    assert text == render_payload_text(payload)
+
+    assert summary["status"] == "ok"
+    assert summary["message"].endswith("Senza nome: Persona 1, Persona 2.")
+    assert (summary["transcript_txt"], summary["transcript_json"]) == (str(txt_path), str(json_path))
+    assert summary["warnings"] == payload["warnings"]
+    assert summary["speakers"] == [
+        {"label": "Mario Rossi", "recognized": True, "speech_sec": 71.0},
+        {"label": "Persona 1", "recognized": False, "speech_sec": 14.0},
+        {"label": "Persona 2", "recognized": False, "speech_sec": 4.0},
+    ]
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err.count("ATTENZIONE: nessuna GPU disponibile, elaboro su CPU") == 2
 
 
-def test_run_without_prompt_keeps_anonymous_voices(tmp_path, fake_pipeline):
+def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
+    monkeypatch.setenv("MEETING_HOST_PATHS", f"{tmp_path.as_posix()}=C:\\Riunioni|")
 
-    assert runner.run(str(audio)) == 0
+    summary = runner.run(str(audio))
 
-    text = (tmp_path / "call - trascrizione.txt").read_text(encoding="utf-8")
-    assert "[00:01:06] Persona 1: io direi di rimandare" in text
+    assert summary["transcript_json"] == "C:\\Riunioni\\call - trascrizione.json"
+    assert summary["recording"] == "C:\\Riunioni\\call.mp4"
 
 
 def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipeline):
@@ -335,8 +359,11 @@ def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipe
 
     monkeypatch.setattr(diarization, "transcribe_audio", out_of_memory)
 
-    assert runner.run(str(audio)) == 1
-    assert "memoria della GPU esaurita" in capsys.readouterr().out
+    summary = runner.run(str(audio))
+
+    assert summary["status"] == "gpu_out_of_memory"
+    assert "batch_size" in summary["message"]
+    assert "Memoria della GPU esaurita" in capsys.readouterr().err
     assert not (tmp_path / "call - trascrizione.txt").exists()
 
 
@@ -349,13 +376,18 @@ def test_run_explains_a_file_without_readable_audio(tmp_path, monkeypatch, capsy
 
     monkeypatch.setattr(diarization, "load_audio", undecodable)
 
-    assert runner.run(str(document)) == 1
+    summary = runner.run(str(document))
+
+    assert summary["status"] == "unreadable_audio"
+    assert "Non riesco a leggere l'audio di 'Verbale.docx'" in summary["message"]
     output = capsys.readouterr()
-    assert "non riesco a leggere l'audio di 'Verbale.docx'" in output.out
+    assert "Non riesco a leggere l'audio di 'Verbale.docx'" in output.err
     assert "Traceback" not in output.out + output.err
     assert fake_pipeline == []
 
 
 def test_run_reports_a_missing_file(tmp_path, capsys):
-    assert runner.run(str(tmp_path / "manca.m4a")) == 1
-    assert "file non trovato" in capsys.readouterr().out
+    summary = runner.run(str(tmp_path / "manca.m4a"))
+
+    assert summary["status"] == "file_not_found"
+    assert "File non trovato" in capsys.readouterr().err

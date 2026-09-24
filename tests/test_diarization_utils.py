@@ -213,6 +213,38 @@ def test_speaker_embeddings_diagnostics_records_windows_and_clips(monkeypatch):
             shutil.rmtree(scratch_dir)
 
 
+def test_speaker_windows_are_recorded_without_an_embedding_model(monkeypatch):
+    diarize_df = pd.DataFrame(
+        [
+            {"start": 0.0, "end": 12.0, "speaker": "SPEAKER_00"},
+            {"start": 20.0, "end": 21.0, "speaker": "SPEAKER_01"},
+        ]
+    )
+
+    def no_audio(_path):
+        raise AssertionError("windows alone need no audio")
+
+    monkeypatch.setattr(du.whisperx, "load_audio", no_audio)
+
+    result = du.speaker_embeddings_from_diarization_with_diagnostics(
+        None,
+        "dummy.wav",
+        diarize_df,
+        device="cpu",
+        window_sec=10.0,
+        min_window_sec=2.0,
+        min_total_speech_sec=4.0,
+        max_windows_per_spk=12,
+    )
+
+    assert result.embeddings == {}
+    speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
+    assert [(window["start"], window["end"]) for window in speaker_diag["windows"]] == [(0.0, 10.0), (10.0, 12.0)]
+    assert all(window["embedding_status"] == "not_embedded" for window in speaker_diag["windows"])
+    assert speaker_diag["embedding_rejection_reason"] == "enrollment_not_configured"
+    assert result.diagnostics["speakers"]["SPEAKER_01"]["embedding_rejection_reason"] == "no_embedding_windows"
+
+
 def test_match_uses_best_pairwise_pool_score():
     spk_embeddings = {
         "SPEAKER_00": [_unit([1.0, 0.0]), _unit([0.0, 1.0])],
