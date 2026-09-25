@@ -12,9 +12,9 @@ url = "https://download.pytorch.org/whl/cu128"
 priority = "explicit"
 
 [project]
-name = "meeting-transcriber"
+name = "transcriber"
 version = "0.1.0"
-description = "Trascrive le riunioni in italiano con i nomi di chi parla, in un container Docker."
+description = "Trascrive registrazioni in italiano con i nomi di chi parla, in un container Docker."
 authors = [
     {name = "SebastianoTomasi",email = "sebastiantum12@gmail.com"}
 ]

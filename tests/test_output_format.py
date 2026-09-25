@@ -99,7 +99,7 @@ def test_build_transcript_turns_uses_offsets_for_free_form_filenames():
         ]
     }
 
-    turns = build_transcript_turns(result, "Riunione budget è.m4a")
+    turns = build_transcript_turns(result, "Registrazione budget è.m4a")
 
     assert [(turn["speaker"], turn["time"], turn["start_sec"]) for turn in turns] == [
         ("Alice", "00:00:05", 5.2),

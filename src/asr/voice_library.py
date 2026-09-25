@@ -11,27 +11,26 @@ from src.utils.logging_setup import get_logger, log_event, log_warning
 
 
 _AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".opus"}
-logger = get_logger("asr.enrollment")
+logger = get_logger("asr.voice_library")
 
 
-def _resolve_enrollment_dir() -> str | None:
+def _resolve_voice_library_dir() -> str | None:
     """
-    Read the enrollment directory from config, resolve it to an absolute path,
-    and validate that it exists.  Returns ``None`` when enrollment is not
-    configured.
+    Read the voice library folder from the settings, resolve it to an absolute path,
+    and check that it exists. Returns ``None`` when no voice library is configured.
     """
-    raw = get_paths_settings().enrollment_dir.strip()
+    raw = get_paths_settings().voice_library_dir.strip()
     if not raw:
         return None
 
     resolved = os.path.abspath(os.path.expanduser(raw))
     if not os.path.isdir(resolved):
-        raise RuntimeError(f"Enrollment directory not found: {resolved}")
+        raise RuntimeError(f"Voice library not found: {resolved}")
 
     return resolved
 
 
-EnrollmentPools = Dict[str, Dict[str, List[str]]]
+LibraryPools = Dict[str, Dict[str, List[str]]]
 
 # Pool name for clips placed directly in a person's folder.
 ROOT_POOL = "."
@@ -41,13 +40,13 @@ def _is_audio_file(path: str) -> bool:
     return os.path.isfile(path) and os.path.splitext(path)[1].lower() in _AUDIO_EXTS
 
 
-def _build_enrollment_from_dir(enrollment_dir: str) -> EnrollmentPools:
+def scan_voice_library(voice_library_dir: str) -> LibraryPools:
     """
-    Build a person->pool->clips mapping by scanning an enrollment directory tree.
+    Build a person->pool->clips mapping by scanning a voice library folder.
 
     Expected layout::
 
-        enrollment_clips/
+        voci/
             PersonA/
                 clip0.m4a              <- clips directly in the person folder form pool "."
                 inside/  clip1.mp3  clip2.wav  ...
@@ -55,16 +54,16 @@ def _build_enrollment_from_dir(enrollment_dir: str) -> EnrollmentPools:
             PersonB/
                 outside/ ...
 
-    People without any usable clip are skipped with a warning, so one empty folder in a
-    shared library does not block everyone else. Returns an empty mapping when nobody has clips.
+    People without any usable clip are skipped with a warning, so one empty folder in the
+    library does not block everyone else. Returns an empty mapping when nobody has clips.
     """
-    enrollment_dir = os.path.abspath(os.path.expanduser(enrollment_dir))
-    if not os.path.isdir(enrollment_dir):
-        raise RuntimeError(f"Enrollment dir not found: {enrollment_dir}")
+    voice_library_dir = os.path.abspath(os.path.expanduser(voice_library_dir))
+    if not os.path.isdir(voice_library_dir):
+        raise RuntimeError(f"Voice library not found: {voice_library_dir}")
 
-    enrollment: EnrollmentPools = {}
+    voice_library: LibraryPools = {}
 
-    for person_entry in sorted(os.scandir(enrollment_dir), key=lambda e: e.name.lower()):
+    for person_entry in sorted(os.scandir(voice_library_dir), key=lambda e: e.name.lower()):
         if not person_entry.is_dir():
             continue
 
@@ -90,14 +89,14 @@ def _build_enrollment_from_dir(enrollment_dir: str) -> EnrollmentPools:
                 pools[pool_entry.name] = clips
             else:
                 log_warning(
-                    "Speaker '%s': enrollment pool '%s' contains no supported audio clips; skipping it.",
+                    "Person '%s': pool '%s' contains no supported voice clips; skipping it.",
                     person_entry.name,
                     pool_entry.name,
                 )
 
         if not pools:
             log_warning(
-                "Speaker '%s' has no supported audio clips in '%s'; skipping this person.",
+                "Person '%s' has no supported voice clips in '%s'; skipping this person.",
                 person_entry.name,
                 person_entry.path,
             )
@@ -106,40 +105,39 @@ def _build_enrollment_from_dir(enrollment_dir: str) -> EnrollmentPools:
         for pool_name, clips in pools.items():
             log_event(
                 logger,
-                "enrollment speaker pool clips discovered",
+                "voice library pool clips discovered",
                 level=logging.DEBUG,
-                speaker=person_entry.name,
+                person=person_entry.name,
                 pool=pool_name,
                 clip_count=len(clips),
             )
-        enrollment[person_entry.name] = pools
+        voice_library[person_entry.name] = pools
 
-    return enrollment
+    return voice_library
 
 
-def load_enrollment_embeddings(device: str) -> Dict[str, List[np.ndarray]] | None:
+def load_library_voiceprints(device: str) -> Dict[str, List[np.ndarray]] | None:
     """
-    End-to-end enrollment: read config, scan the enrollment directory, and
-    return cached (or freshly computed) speaker embeddings.
+    Read the settings, scan the voice library, and return each person's voiceprints,
+    from the cache or freshly computed.
 
-    Returns ``None`` when no enrollment directory is configured or it holds no clips.
+    Returns ``None`` when no voice library is configured or it holds no clips.
     """
-    enrollment_dir = _resolve_enrollment_dir()
-    if enrollment_dir is None:
-        log_warning("Enrollment is empty; speaker identity recognition cannot be performed.")
+    voice_library_dir = _resolve_voice_library_dir()
+    if voice_library_dir is None:
+        log_warning("No voice library is configured; every speaker stays anonymous.")
         return None
 
     # Import lazily to avoid heavy transitive imports at module load time.
-    from src.asr.enrollment_cache import build_enrollment_db
+    from src.asr.voiceprint_cache import build_library_voiceprints
 
-    enrollment = _build_enrollment_from_dir(enrollment_dir)
-    if not enrollment:
+    voice_library = scan_voice_library(voice_library_dir)
+    if not voice_library:
         log_warning(
-            "No enrollment clips found under %s (supported formats: %s); every speaker stays anonymous.",
-            enrollment_dir,
+            "No voice clips found under %s (supported formats: %s); every speaker stays anonymous.",
+            voice_library_dir,
             ", ".join(sorted(_AUDIO_EXTS)),
         )
         return None
-    log_event(logger, "enrollment directory loaded", level=logging.DEBUG, speaker_count=len(enrollment))
-    return build_enrollment_db(enrollment, enrollment_dir, device)
-
+    log_event(logger, "voice library loaded", level=logging.DEBUG, person_count=len(voice_library))
+    return build_library_voiceprints(voice_library, voice_library_dir, device)

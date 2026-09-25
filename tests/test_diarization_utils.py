@@ -82,7 +82,7 @@ def test_sample_longest_per_bucket_ignores_float_noise_in_durations():
     assert sampled == [windows[1]]
 
 
-def test_speaker_embeddings_windowing_min_total_and_normalization(monkeypatch):
+def test_speaker_voiceprints_windowing_min_total_and_normalization(monkeypatch):
     diarize_df = pd.DataFrame(
         [
             {"start": 0.0, "end": 12.0, "speaker": "SPEAKER_00"},
@@ -91,17 +91,17 @@ def test_speaker_embeddings_windowing_min_total_and_normalization(monkeypatch):
     )
     monkeypatch.setattr(du.whisperx, "load_audio", MagicMock(return_value=np.zeros(30 * 16000, dtype=np.float32)))
 
-    raw_embeds = iter([
+    raw_voiceprints = iter([
         np.asarray([2.0, 0.0], dtype=np.float32),
         np.asarray([0.0, 3.0], dtype=np.float32),
     ])
 
-    def fake_embed(_model, _audio, device, crop, min_duration_sec):
-        return next(raw_embeds)
+    def fake_voiceprint(_model, _audio, device, crop, min_duration_sec):
+        return next(raw_voiceprints)
 
-    monkeypatch.setattr(du, "embed_audio_waveform", fake_embed)
+    monkeypatch.setattr(du, "compute_voiceprint", fake_voiceprint)
 
-    result = du.speaker_embeddings_from_diarization(
+    result = du.speaker_voiceprints_from_diarization(
         object(),
         "dummy.wav",
         diarize_df,
@@ -117,7 +117,7 @@ def test_speaker_embeddings_windowing_min_total_and_normalization(monkeypatch):
     assert np.linalg.norm(result["SPEAKER_00"][0]) == pytest.approx(1.0)
 
 
-def test_speaker_embeddings_samples_per_bucket_when_capped(monkeypatch):
+def test_speaker_voiceprints_sample_per_bucket_when_capped(monkeypatch):
     diarize_df = pd.DataFrame(
         [
             {"start": float(i), "end": float(i + 1), "speaker": "SPEAKER_00"}
@@ -126,15 +126,15 @@ def test_speaker_embeddings_samples_per_bucket_when_capped(monkeypatch):
     )
     monkeypatch.setattr(du.whisperx, "load_audio", MagicMock(return_value=np.zeros(10 * 16000, dtype=np.float32)))
 
-    embedded_starts = []
+    measured_starts = []
 
-    def fake_embed(_model, _audio, device, crop, min_duration_sec):
-        embedded_starts.append(crop.start)
+    def fake_voiceprint(_model, _audio, device, crop, min_duration_sec):
+        measured_starts.append(crop.start)
         return np.asarray([1.0, 0.0], dtype=np.float32)
 
-    monkeypatch.setattr(du, "embed_audio_waveform", fake_embed)
+    monkeypatch.setattr(du, "compute_voiceprint", fake_voiceprint)
 
-    result = du.speaker_embeddings_from_diarization_with_diagnostics(
+    result = du.speaker_voiceprints_from_diarization_with_diagnostics(
         object(),
         "dummy.wav",
         diarize_df,
@@ -146,13 +146,13 @@ def test_speaker_embeddings_samples_per_bucket_when_capped(monkeypatch):
     )
 
     speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
-    assert embedded_starts == [0.0, 3.0, 5.0, 8.0]
+    assert measured_starts == [0.0, 3.0, 5.0, 8.0]
     assert speaker_diag["candidate_window_count"] == 10
     assert speaker_diag["sampled_window_count"] == 4
     assert speaker_diag["sampling_strategy"] == "longest_per_bucket"
 
 
-def test_speaker_embeddings_diagnostics_records_windows_and_clips(monkeypatch):
+def test_speaker_voiceprints_diagnostics_record_windows_and_clips(monkeypatch):
     scratch_dir = Path("tests/.tmp_speaker_diagnostics").resolve()
     if scratch_dir.exists():
         shutil.rmtree(scratch_dir)
@@ -166,18 +166,18 @@ def test_speaker_embeddings_diagnostics_records_windows_and_clips(monkeypatch):
     )
     monkeypatch.setattr(du.whisperx, "load_audio", MagicMock(return_value=np.zeros(30 * 16000, dtype=np.float32)))
 
-    raw_embeds = iter([
+    raw_voiceprints = iter([
         np.asarray([2.0, 0.0], dtype=np.float32),
         np.asarray([0.0, 3.0], dtype=np.float32),
     ])
 
-    def fake_embed(_model, _audio, device, crop, min_duration_sec):
-        return next(raw_embeds)
+    def fake_voiceprint(_model, _audio, device, crop, min_duration_sec):
+        return next(raw_voiceprints)
 
-    monkeypatch.setattr(du, "embed_audio_waveform", fake_embed)
+    monkeypatch.setattr(du, "compute_voiceprint", fake_voiceprint)
 
     try:
-        result = du.speaker_embeddings_from_diarization_with_diagnostics(
+        result = du.speaker_voiceprints_from_diarization_with_diagnostics(
             object(),
             "dummy.wav",
             diarize_df,
@@ -192,13 +192,13 @@ def test_speaker_embeddings_diagnostics_records_windows_and_clips(monkeypatch):
             sample_rate=16000,
         )
 
-        assert set(result.embeddings) == {"SPEAKER_00"}
+        assert set(result.voiceprints) == {"SPEAKER_00"}
         assert "raw_diarization" not in result.diagnostics
         speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
         assert speaker_diag["sampled_window_count"] == 2
-        assert speaker_diag["embedding_count"] == 2
+        assert speaker_diag["voiceprint_count"] == 2
         assert speaker_diag["eligible_for_matching"] is True
-        assert all(window["embedding_status"] == "embedded" for window in speaker_diag["windows"])
+        assert all(window["voiceprint_status"] == "computed" for window in speaker_diag["windows"])
         assert all(window["clip_path"] for window in speaker_diag["windows"])
         assert all(os.path.isfile(window["clip_path"]) for window in speaker_diag["windows"])
         assert os.path.basename(speaker_diag["windows"][0]["clip_path"]) == (
@@ -207,13 +207,13 @@ def test_speaker_embeddings_diagnostics_records_windows_and_clips(monkeypatch):
 
         short_diag = result.diagnostics["speakers"]["SPEAKER_01"]
         assert short_diag["sampled_window_count"] == 0
-        assert short_diag["embedding_rejection_reason"] == "no_embedding_windows"
+        assert short_diag["voiceprint_rejection_reason"] == "no_voiceprint_windows"
     finally:
         if scratch_dir.exists():
             shutil.rmtree(scratch_dir)
 
 
-def test_speaker_windows_are_recorded_without_an_embedding_model(monkeypatch):
+def test_speaker_windows_are_recorded_without_a_voiceprint_model(monkeypatch):
     diarize_df = pd.DataFrame(
         [
             {"start": 0.0, "end": 12.0, "speaker": "SPEAKER_00"},
@@ -226,7 +226,7 @@ def test_speaker_windows_are_recorded_without_an_embedding_model(monkeypatch):
 
     monkeypatch.setattr(du.whisperx, "load_audio", no_audio)
 
-    result = du.speaker_embeddings_from_diarization_with_diagnostics(
+    result = du.speaker_voiceprints_from_diarization_with_diagnostics(
         None,
         "dummy.wav",
         diarize_df,
@@ -237,26 +237,26 @@ def test_speaker_windows_are_recorded_without_an_embedding_model(monkeypatch):
         max_windows_per_spk=12,
     )
 
-    assert result.embeddings == {}
+    assert result.voiceprints == {}
     speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
     assert [(window["start"], window["end"]) for window in speaker_diag["windows"]] == [(0.0, 10.0), (10.0, 12.0)]
-    assert all(window["embedding_status"] == "not_embedded" for window in speaker_diag["windows"])
-    assert speaker_diag["embedding_rejection_reason"] == "enrollment_not_configured"
-    assert result.diagnostics["speakers"]["SPEAKER_01"]["embedding_rejection_reason"] == "no_embedding_windows"
+    assert all(window["voiceprint_status"] == "not_computed" for window in speaker_diag["windows"])
+    assert speaker_diag["voiceprint_rejection_reason"] == "voice_library_empty"
+    assert result.diagnostics["speakers"]["SPEAKER_01"]["voiceprint_rejection_reason"] == "no_voiceprint_windows"
 
 
 def test_match_uses_best_pairwise_pool_score():
-    spk_embeddings = {
+    speaker_voiceprints = {
         "SPEAKER_00": [_unit([1.0, 0.0]), _unit([0.0, 1.0])],
     }
-    enroll_db = {
+    library_voiceprints = {
         "Alice": [_unit([1.0, 0.0])],
         "Bob": [_unit([0.8, 0.6])],
     }
 
     mapping = du.match_speakers_to_names(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.6,
         margin=0.1,
     )
@@ -265,17 +265,17 @@ def test_match_uses_best_pairwise_pool_score():
 
 
 def test_match_diagnostics_include_scores_and_acceptance_reason():
-    spk_embeddings = {
+    speaker_voiceprints = {
         "SPEAKER_00": [_unit([1.0, 0.0]), _unit([0.9, 0.1])],
     }
-    enroll_db = {
+    library_voiceprints = {
         "Alice": [_unit([1.0, 0.0]), _unit([0.8, 0.2])],
         "Bob": [_unit([0.0, 1.0])],
     }
 
     result = du.match_speakers_to_names_with_diagnostics(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.6,
         margin=0.1,
     )
@@ -290,69 +290,69 @@ def test_match_diagnostics_include_scores_and_acceptance_reason():
 
 
 def test_match_rejects_ambiguous_margin():
-    spk_embeddings = {"SPEAKER_00": [_unit([1.0, 0.0])]}
-    enroll_db = {
+    speaker_voiceprints = {"SPEAKER_00": [_unit([1.0, 0.0])]}
+    library_voiceprints = {
         "Alice": [_unit([1.0, 0.0])],
         "Bob": [_unit([0.99, 0.01])],
     }
 
     mapping = du.match_speakers_to_names(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.6,
         margin=0.05,
     )
 
-    assert mapping == {"SPEAKER_00": "UNKNOWN_SPEAKER_00"}
+    assert mapping == {"SPEAKER_00": "ANONYMOUS_SPEAKER_00"}
 
 
-def test_match_diagnostics_include_speakers_without_embeddings():
+def test_match_diagnostics_include_speakers_without_voiceprints():
     result = du.match_speakers_to_names_with_diagnostics(
         {},
         {"Alice": [_unit([1.0, 0.0])]},
         threshold=0.6,
         margin=0.05,
         diarized_speakers=["SPEAKER_00"],
-        embedding_rejection_reasons={"SPEAKER_00": "min_total_speech_not_met"},
+        voiceprint_rejection_reasons={"SPEAKER_00": "min_total_speech_not_met"},
     )
 
     speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
-    assert result.mapping == {"SPEAKER_00": "UNKNOWN_SPEAKER_00"}
+    assert result.mapping == {"SPEAKER_00": "ANONYMOUS_SPEAKER_00"}
     assert speaker_diag["scores"] == {}
-    assert speaker_diag["assigned_label"] == "UNKNOWN_SPEAKER_00"
+    assert speaker_diag["assigned_label"] == "ANONYMOUS_SPEAKER_00"
     assert speaker_diag["rejection_reason"] == "min_total_speech_not_met"
 
 
 def test_match_rejects_below_threshold():
-    spk_embeddings = {"SPEAKER_00": [_unit([1.0, 0.0])]}
-    enroll_db = {"Alice": [_unit([0.0, 1.0])]}
+    speaker_voiceprints = {"SPEAKER_00": [_unit([1.0, 0.0])]}
+    library_voiceprints = {"Alice": [_unit([0.0, 1.0])]}
 
     mapping = du.match_speakers_to_names(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.6,
         margin=0.05,
     )
 
-    assert mapping == {"SPEAKER_00": "UNKNOWN_SPEAKER_00"}
+    assert mapping == {"SPEAKER_00": "ANONYMOUS_SPEAKER_00"}
 
 
 def test_match_assigns_duplicate_known_person_to_best_scoring_speaker():
-    spk_embeddings = {
+    speaker_voiceprints = {
         "SPEAKER_00": [_unit([0.8, 0.6])],
         "SPEAKER_01": [_unit([1.0, 0.0])],
     }
-    enroll_db = {"Alice": [_unit([1.0, 0.0])]}
+    library_voiceprints = {"Alice": [_unit([1.0, 0.0])]}
 
     result = du.match_speakers_to_names_with_diagnostics(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.6,
         margin=0.05,
     )
 
     assert result.mapping == {
-        "SPEAKER_00": "UNKNOWN_SPEAKER_00",
+        "SPEAKER_00": "ANONYMOUS_SPEAKER_00",
         "SPEAKER_01": "Alice",
     }
     assert result.diagnostics["speakers"]["SPEAKER_00"]["rejection_reason"] == (
@@ -362,25 +362,25 @@ def test_match_assigns_duplicate_known_person_to_best_scoring_speaker():
 
 
 def test_match_does_not_fallback_to_second_best_when_best_person_is_taken():
-    spk_embeddings = {
+    speaker_voiceprints = {
         "SPEAKER_00": [_unit([0.8, 0.6])],
         "SPEAKER_01": [_unit([1.0, 0.0])],
     }
-    enroll_db = {
+    library_voiceprints = {
         "Alice": [_unit([1.0, 0.0])],
         "Bob": [_unit([0.0, 1.0])],
     }
 
     result = du.match_speakers_to_names_with_diagnostics(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=0.5,
         margin=0.1,
     )
 
     speaker_diag = result.diagnostics["speakers"]["SPEAKER_00"]
     assert result.mapping == {
-        "SPEAKER_00": "UNKNOWN_SPEAKER_00",
+        "SPEAKER_00": "ANONYMOUS_SPEAKER_00",
         "SPEAKER_01": "Alice",
     }
     assert speaker_diag["best_name"] == "Alice"
@@ -407,7 +407,7 @@ def test_exclusive_speaker_segments_removes_overlapped_speech():
     }
 
 
-def test_speaker_embeddings_skip_overlapped_speech(monkeypatch):
+def test_speaker_voiceprints_skip_overlapped_speech(monkeypatch):
     diarize_df = pd.DataFrame(
         [
             {"start": 0.0, "end": 12.0, "speaker": "SPEAKER_00"},
@@ -415,15 +415,15 @@ def test_speaker_embeddings_skip_overlapped_speech(monkeypatch):
         ]
     )
     monkeypatch.setattr(du.whisperx, "load_audio", MagicMock(return_value=np.zeros(12 * 16000, dtype=np.float32)))
-    embedded_crops = []
+    measured_crops = []
 
-    def fake_embed(_model, _audio, device, crop, min_duration_sec):
-        embedded_crops.append((crop.start, crop.end))
+    def fake_voiceprint(_model, _audio, device, crop, min_duration_sec):
+        measured_crops.append((crop.start, crop.end))
         return np.asarray([1.0, 0.0], dtype=np.float32)
 
-    monkeypatch.setattr(du, "embed_audio_waveform", fake_embed)
+    monkeypatch.setattr(du, "compute_voiceprint", fake_voiceprint)
 
-    result = du.speaker_embeddings_from_diarization_with_diagnostics(
+    result = du.speaker_voiceprints_from_diarization_with_diagnostics(
         object(),
         "dummy.wav",
         diarize_df,
@@ -434,8 +434,8 @@ def test_speaker_embeddings_skip_overlapped_speech(monkeypatch):
         max_windows_per_spk=12,
     )
 
-    assert embedded_crops == [(0.0, 3.0), (9.0, 12.0)]
+    assert measured_crops == [(0.0, 3.0), (9.0, 12.0)]
     assert result.diagnostics["speakers"]["SPEAKER_00"]["overlap_excluded_sec"] == pytest.approx(6.0)
     fully_overlapped = result.diagnostics["speakers"]["SPEAKER_01"]
     assert fully_overlapped["candidate_window_count"] == 0
-    assert fully_overlapped["embedding_rejection_reason"] == "no_embedding_windows"
+    assert fully_overlapped["voiceprint_rejection_reason"] == "no_voiceprint_windows"

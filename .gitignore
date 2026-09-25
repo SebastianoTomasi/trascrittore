@@ -1,6 +1,6 @@
-# Secrets and the local development config (a copy of docker/meeting.ini with Windows paths).
+# Secrets and the settings a developer changes for local runs, such as folders on this PC.
 .env
-/meeting.ini
+/trascrittore.ini
 
 # Recordings, voice clips, transcripts and voiceprints never enter the repository.
 data/

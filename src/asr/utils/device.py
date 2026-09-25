@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 
 # Set by Trascrivi.bat when `docker run --gpus all` failed and it retried without a GPU.
-DOCKER_GPU_FALLBACK_ENV = "MEETING_GPU_FALLBACK"
+DOCKER_GPU_FALLBACK_ENV = "TRANSCRIBER_GPU_FALLBACK"
 
 # CTranslate2 has no half-precision kernels on CPU.
 _CPU_UNSUPPORTED_COMPUTE_TYPES = {"float16", "int8_float16"}

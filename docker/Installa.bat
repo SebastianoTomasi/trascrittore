@@ -1,11 +1,11 @@
 @echo off
-rem Load the meeting transcriber image from meeting-transcriber.tar next to this file.
+rem Load the transcriber image from trascrittore.tar next to this file.
 setlocal EnableExtensions
 chcp 65001 >nul <nul
-title Installazione trascrittore riunioni
+title Installazione trascrittore
 
-set "IMAGE=meeting-transcriber:pilot"
-set "IMAGE_TAR=%~dp0meeting-transcriber.tar"
+set "IMAGE=trascrittore:latest"
+set "IMAGE_TAR=%~dp0trascrittore.tar"
 
 docker info >nul 2>&1
 if errorlevel 1 goto :no_docker
@@ -27,15 +27,20 @@ echo Rimuovo la versione precedente...
 docker rmi %OLD_ID% >nul 2>&1
 
 :check_gpu
-if not exist "%LOCALAPPDATA%\MeetingTranscriber\cache" mkdir "%LOCALAPPDATA%\MeetingTranscriber\cache"
+rem Versions installed before the rename used other names: free their disk space and the voiceprints in their cache.
+docker image inspect meeting-transcriber:pilot >nul 2>&1
+if not errorlevel 1 docker rmi meeting-transcriber:pilot >nul 2>&1
+if exist "%LOCALAPPDATA%\MeetingTranscriber" rmdir /s /q "%LOCALAPPDATA%\MeetingTranscriber"
+if exist "%~dp0meeting.ini" echo Il file meeting.ini non serve piu': se avevi cambiato qualcosa, scrivi solo quelle righe in trascrittore.ini, poi cancellalo.
+if not exist "%LOCALAPPDATA%\Trascrittore\cache" mkdir "%LOCALAPPDATA%\Trascrittore\cache"
 echo.
 echo Controllo la GPU...
 docker run --rm --gpus all --entrypoint python %IMAGE% -c "import torch; print('GPU pronta: ' + torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'ATTENZIONE: Docker non vede la GPU')"
 if errorlevel 1 echo ATTENZIONE: Docker non riesce a usare la GPU. Il trascrittore funzionera' sulla CPU, molto piu' lento.
 
-rem The agent skill always comes with the image of the same version, so it is installed every time.
+rem The launcher creates trascrittore.ini the first time, and installs the agent skill of this version every time.
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0trascrittore.ps1" install-skill
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0trascrittore.ps1" install
 
 echo.
 echo Installazione completata. Per trascrivere, trascina una registrazione su Trascrivi.bat.
@@ -46,7 +51,7 @@ echo Docker Desktop non e' avviato. Aprilo, aspetta che sia pronto e riprova.
 goto :end
 
 :missing_tar
-echo Non trovo meeting-transcriber.tar accanto a Installa.bat.
+echo Non trovo trascrittore.tar accanto a Installa.bat.
 goto :end
 
 :failed

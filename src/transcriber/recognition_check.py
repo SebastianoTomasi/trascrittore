@@ -8,7 +8,7 @@ It repeats the 2026-09-24 calibration as a command, with three precautions again
    speaker is matched against their own clips;
 3. voices missing from the library are simulated by removing one named person at a time.
 
-It suggests a threshold above every wrong name, with some slack, but never writes meeting.ini:
+It suggests a threshold above every wrong name, with some slack, but never writes trascrittore.ini:
 a person applies the suggestion.
 """
 
@@ -23,9 +23,9 @@ import numpy as np
 
 from src.asr.utils.config import get_matching_settings
 from src.asr.utils.diarization_utils import match_speakers_to_names_with_diagnostics
-from src.meeting import library, naming, voices
-from src.meeting.summary import INVALID_ARGUMENTS, OK, CommandError, guarded, host_path, say
-from src.meeting.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
+from src.transcriber import library, naming, voices
+from src.transcriber.summary import INVALID_ARGUMENTS, OK, CommandError, guarded, host_path, say
+from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
 
 
 COMMAND = "check"
@@ -33,8 +33,8 @@ LIBRARY = "library"
 MISSING = "missing"
 # The 2026-09-24 calibration put the threshold 0.035 above the best-scoring missing voice.
 SUGGESTION_SLACK = 0.03
-# With fewer simulated missing voices a suggestion would rest on chance; that calibration had 7 unknown voices
-# besides the simulated ones.
+# With fewer simulated missing voices a suggestion would rest on chance; that calibration had 7 voices missing
+# from the library besides the simulated ones.
 MIN_MISSING_FOR_SUGGESTION = 10
 # Accept every candidate that passes the margin: outcomes at any threshold follow from these.
 _NO_THRESHOLD = -1.0
@@ -187,18 +187,18 @@ def report(
 
 
 def _library_clips(library_dir: Path, voiceprints: voices.Voiceprints) -> list[LibraryClip]:
-    from src.asr.enrollment import _build_enrollment_from_dir
+    from src.asr.voice_library import scan_voice_library
 
     origins = {
         path.resolve(): recording_key(origin["recording_file"], origin["recording_duration_sec"])
         for _, path, origin in library.clip_records(library_dir)
         if origin.get("recording_file") and origin.get("recording_duration_sec") is not None
     }
-    enrollment = _build_enrollment_from_dir(str(library_dir))
-    total = sum(len(clips) for pools in enrollment.values() for clips in pools.values())
+    voice_library = scan_voice_library(str(library_dir))
+    total = sum(len(clips) for pools in voice_library.values() for clips in pools.values())
     say(f"Calcolo le impronte delle {total} clip della libreria...")
     clips = []
-    for person, pools in enrollment.items():
+    for person, pools in voice_library.items():
         for pool, paths in pools.items():
             for path in paths:
                 try:
@@ -232,8 +232,8 @@ def _checked_recording(transcript: str, recording: str, voiceprints: voices.Voic
         raise CommandError(INVALID_ARGUMENTS, problem)
     checked = []
     for speaker in named:
-        embedded = [voiceprint for voiceprint in voiceprints.of_windows(audio, speaker["windows"]) if voiceprint is not None]
-        checked.append(CheckedSpeaker(label=speaker["label"], voiceprints=embedded))
+        computed = [voiceprint for voiceprint in voiceprints.of_windows(audio, speaker["windows"]) if voiceprint is not None]
+        checked.append(CheckedSpeaker(label=speaker["label"], voiceprints=computed))
     return CheckedRecording(
         name=payload["file"], key=recording_key(payload["file"], payload["duration_sec"]), speakers=checked
     )
@@ -278,7 +278,10 @@ def _report_lines(result: dict[str, Any], checked: int, skipped: list[dict[str, 
             f"Soglia suggerita: {suggested['threshold']:.3f} ({change}; nomi sbagliati "
             f"{suggested['wrong'] + suggested['wrong_when_missing']})."
         )
-        lines.append("Per applicarla cambia threshold nella sezione [matching] di meeting.ini: la verifica non la cambia da sola.")
+        lines.append(
+            f"Per applicarla scrivi threshold = {suggested['threshold']:.3f} sotto la riga [matching] di trascrittore.ini: "
+            "la verifica non la cambia da sola."
+        )
     else:
         lines.append(
             f"Nessuna soglia suggerita: servono almeno {MIN_MISSING_FOR_SUGGESTION} voci assenti simulate, "

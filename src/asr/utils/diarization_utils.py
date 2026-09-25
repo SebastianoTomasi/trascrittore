@@ -11,7 +11,7 @@ import whisperx
 from pyannote.core import Segment
 
 from src.asr.utils.config import get_matching_settings, get_speaker_settings
-from src.asr.embeddings import embed_audio_waveform, normalize_embed
+from src.asr.voiceprints import compute_voiceprint, normalize_voiceprint
 
 
 _matching_settings = get_matching_settings()
@@ -23,12 +23,12 @@ WINDOW_SEC_DEFAULT = _matching_settings.window_sec
 MIN_WINDOW_SEC_DEFAULT = _matching_settings.min_window_sec
 MIN_TOTAL_SPEECH_SEC_DEFAULT = _matching_settings.min_total_speech_sec
 MAX_WINDOWS_PER_SPK_DEFAULT = _matching_settings.max_windows_per_spk
-UNKNOWN_PREFIX_DEFAULT = _speaker_settings.unknown_prefix
+ANONYMOUS_PREFIX_DEFAULT = _speaker_settings.anonymous_prefix
 
 
 @dataclass(frozen=True)
-class SpeakerEmbeddingDiagnosticsResult:
-    embeddings: Dict[str, List[np.ndarray]]
+class SpeakerVoiceprintDiagnosticsResult:
+    voiceprints: Dict[str, List[np.ndarray]]
     diagnostics: Dict[str, Any]
 
 
@@ -110,7 +110,7 @@ def _exclusive_speaker_segments(diarize_df: pd.DataFrame) -> Dict[str, List[Segm
     """
     Return each speaker's segments without the stretches where another speaker also talks.
 
-    Overlapped speech mixes two voices, so embedding it would pull a speaker's voiceprint
+    Overlapped speech mixes two voices, so voiceprint it would pull a speaker's voiceprint
     toward whoever talks over them. Every speaker keeps a key, even with no speech left.
     """
     intervals_by_spk: Dict[str, List[tuple[float, float]]] = {}
@@ -153,7 +153,7 @@ def _sample_longest_per_bucket(windows: List[Segment], max_windows: int) -> List
 
     Time-ordered candidates are split into `max_windows` buckets of consecutive windows
     with near-equal counts, and the longest window of each bucket is kept, since longer
-    windows give more stable embeddings. Ties go to the window nearest the bucket center.
+    windows give more stable voiceprints. Ties go to the window nearest the bucket center.
     """
     if max_windows <= 0:
         return []
@@ -204,9 +204,9 @@ def _save_window_clip(
     return clip_path
 
 
-def speaker_embeddings_from_diarization_with_diagnostics(
-    emb_model,
-    audio_path: str,
+def speaker_voiceprints_from_diarization_with_diagnostics(
+    voiceprint_model,
+    recording_path: str,
     diarize_segments: Any,
     device: str,
     window_sec: float = WINDOW_SEC_DEFAULT,
@@ -215,20 +215,20 @@ def speaker_embeddings_from_diarization_with_diagnostics(
     max_windows_per_spk: int = MAX_WINDOWS_PER_SPK_DEFAULT,
     diagnostics_clip_path_factory: Callable[[int, str, float], str] | None = None,
     sample_rate: int = 16000,
-) -> SpeakerEmbeddingDiagnosticsResult:
+) -> SpeakerVoiceprintDiagnosticsResult:
     """
-    Build normalized fixed-window embeddings and diagnostics for each diarized speaker.
+    Build normalized fixed-window voiceprints and diagnostics for each diarized speaker.
 
     Windows cover only speech where no other speaker overlaps. When a speaker has more
     candidate windows than `max_windows_per_spk`, only the longest window of each bucket
-    of consecutive windows is embedded. Without `emb_model`, as when the voice library is
+    of consecutive windows gets a voiceprint. Without `voiceprint_model`, as when the voice library is
     empty, the windows are still recorded, because naming a speaker later cuts clips from them.
     """
     diarize_df = diarization_to_dataframe(diarize_segments)
     diagnostics: Dict[str, Any] = {"speakers": {}}
     if diarize_df.empty:
-        return SpeakerEmbeddingDiagnosticsResult({}, diagnostics)
-    full_audio = whisperx.load_audio(audio_path) if emb_model is not None else None
+        return SpeakerVoiceprintDiagnosticsResult({}, diagnostics)
+    full_audio = whisperx.load_audio(recording_path) if voiceprint_model is not None else None
 
     speech_sec_by_spk: Dict[str, float] = {}
     for _, row in diarize_df.iterrows():
@@ -245,10 +245,10 @@ def speaker_embeddings_from_diarization_with_diagnostics(
         for spk, segments in exclusive_by_spk.items()
     }
 
-    spk_embeddings: Dict[str, List[np.ndarray]] = {}
+    speaker_voiceprints: Dict[str, List[np.ndarray]] = {}
     clip_index = 1
     for spk, windows in by_spk.items():
-        embeds = []
+        voiceprints = []
         accepted_duration = 0.0
         attempted_windows = _sample_longest_per_bucket(windows, max_windows_per_spk)
         exclusive_sec = sum(seg.duration for seg in exclusive_by_spk[spk])
@@ -259,9 +259,9 @@ def speaker_embeddings_from_diarization_with_diagnostics(
             "sampling_strategy": "all" if len(windows) <= max_windows_per_spk else "longest_per_bucket",
             "windows": [],
             "accepted_duration_sec": 0.0,
-            "embedding_count": 0,
+            "voiceprint_count": 0,
             "eligible_for_matching": False,
-            "embedding_rejection_reason": None,
+            "voiceprint_rejection_reason": None,
         }
         for window_index, window in enumerate(attempted_windows, start=1):
             duration_sec = float(window.end - window.start)
@@ -269,10 +269,10 @@ def speaker_embeddings_from_diarization_with_diagnostics(
             window_diag["index"] = clip_index
             window_diag["clip_path"] = None
             window_diag["clip_error"] = None
-            window_diag["embedding_status"] = "pending"
+            window_diag["voiceprint_status"] = "pending"
 
-            if emb_model is None:
-                window_diag["embedding_status"] = "not_embedded"
+            if voiceprint_model is None:
+                window_diag["voiceprint_status"] = "not_computed"
                 speaker_diag["windows"].append(window_diag)
                 clip_index += 1
                 continue
@@ -293,10 +293,10 @@ def speaker_embeddings_from_diarization_with_diagnostics(
                 window_diag["clip_error"] = f"{type(exc).__name__}: {exc}"
 
             try:
-                embeds.append(
-                    normalize_embed(
-                        embed_audio_waveform(
-                            emb_model,
+                voiceprints.append(
+                    normalize_voiceprint(
+                        compute_voiceprint(
+                            voiceprint_model,
                             full_audio,
                             device=device,
                             crop=window,
@@ -305,35 +305,35 @@ def speaker_embeddings_from_diarization_with_diagnostics(
                     )
                 )
                 accepted_duration += window.end - window.start
-                window_diag["embedding_status"] = "embedded"
+                window_diag["voiceprint_status"] = "computed"
             except (RuntimeError, ValueError) as exc:
                 # Skip invalid or numerically unstable crops and continue with other windows.
-                window_diag["embedding_status"] = "skipped"
-                window_diag["embedding_error"] = f"{type(exc).__name__}: {exc}"
+                window_diag["voiceprint_status"] = "skipped"
+                window_diag["voiceprint_error"] = f"{type(exc).__name__}: {exc}"
 
             speaker_diag["windows"].append(window_diag)
             clip_index += 1
 
         speaker_diag["accepted_duration_sec"] = float(accepted_duration)
-        speaker_diag["embedding_count"] = len(embeds)
-        if embeds and accepted_duration >= min_total_speech_sec:
-            spk_embeddings[spk] = embeds
+        speaker_diag["voiceprint_count"] = len(voiceprints)
+        if voiceprints and accepted_duration >= min_total_speech_sec:
+            speaker_voiceprints[spk] = voiceprints
             speaker_diag["eligible_for_matching"] = True
-        elif emb_model is None and attempted_windows:
-            speaker_diag["embedding_rejection_reason"] = "enrollment_not_configured"
-        elif not embeds:
-            speaker_diag["embedding_rejection_reason"] = "no_embedding_windows"
+        elif voiceprint_model is None and attempted_windows:
+            speaker_diag["voiceprint_rejection_reason"] = "voice_library_empty"
+        elif not voiceprints:
+            speaker_diag["voiceprint_rejection_reason"] = "no_voiceprint_windows"
         else:
-            speaker_diag["embedding_rejection_reason"] = "min_total_speech_not_met"
+            speaker_diag["voiceprint_rejection_reason"] = "min_total_speech_not_met"
 
         diagnostics["speakers"][spk] = speaker_diag
 
-    return SpeakerEmbeddingDiagnosticsResult(spk_embeddings, diagnostics)
+    return SpeakerVoiceprintDiagnosticsResult(speaker_voiceprints, diagnostics)
 
 
-def speaker_embeddings_from_diarization(
-    emb_model,
-    audio_path: str,
+def speaker_voiceprints_from_diarization(
+    voiceprint_model,
+    recording_path: str,
     diarize_segments: Any,
     device: str,
     window_sec: float = WINDOW_SEC_DEFAULT,
@@ -342,82 +342,82 @@ def speaker_embeddings_from_diarization(
     max_windows_per_spk: int = MAX_WINDOWS_PER_SPK_DEFAULT,
 ) -> Dict[str, List[np.ndarray]]:
     """
-    Build normalized fixed-window embeddings for each diarized speaker.
+    Build normalized fixed-window voiceprints for each diarized speaker.
     """
-    return speaker_embeddings_from_diarization_with_diagnostics(
-        emb_model,
-        audio_path,
+    return speaker_voiceprints_from_diarization_with_diagnostics(
+        voiceprint_model,
+        recording_path,
         diarize_segments,
         device=device,
         window_sec=window_sec,
         min_window_sec=min_window_sec,
         min_total_speech_sec=min_total_speech_sec,
         max_windows_per_spk=max_windows_per_spk,
-    ).embeddings
+    ).voiceprints
 
 
-def _person_match_score(spk_embeds: List[np.ndarray], enroll_embeds: List[np.ndarray]) -> float:
+def _person_match_score(speaker_voiceprints: List[np.ndarray], person_voiceprints: List[np.ndarray]) -> float:
     scores = [
-        float(np.dot(spk_emb, enroll_emb))
-        for spk_emb in spk_embeds
-        for enroll_emb in enroll_embeds
+        float(np.dot(speaker_voiceprint, library_voiceprint))
+        for speaker_voiceprint in speaker_voiceprints
+        for library_voiceprint in person_voiceprints
     ]
     return max(scores, default=-1.0)
 
 
 def match_speakers_to_names(
-    spk_embeddings: Dict[str, List[np.ndarray]],
-    enroll_db: Dict[str, List[np.ndarray]],
+    speaker_voiceprints: Dict[str, List[np.ndarray]],
+    library_voiceprints: Dict[str, List[np.ndarray]],
     threshold: float = MATCHING_THRESHOLD_DEFAULT,
     margin: float = MATCHING_MARGIN_DEFAULT,
 ) -> Dict[str, str]:
     """
-    Map each diarized speaker id to the best known enrollment name or unknown label.
+    Map each diarized speaker id to the best matching name in the voice library, or to an anonymous label.
     """
     return match_speakers_to_names_with_diagnostics(
-        spk_embeddings,
-        enroll_db,
+        speaker_voiceprints,
+        library_voiceprints,
         threshold=threshold,
         margin=margin,
     ).mapping
 
 
 def match_speakers_to_names_with_diagnostics(
-    spk_embeddings: Dict[str, List[np.ndarray]],
-    enroll_db: Dict[str, List[np.ndarray]],
+    speaker_voiceprints: Dict[str, List[np.ndarray]],
+    library_voiceprints: Dict[str, List[np.ndarray]],
     threshold: float = MATCHING_THRESHOLD_DEFAULT,
     margin: float = MATCHING_MARGIN_DEFAULT,
     diarized_speakers: List[str] | None = None,
-    embedding_rejection_reasons: Dict[str, str] | None = None,
+    voiceprint_rejection_reasons: Dict[str, str] | None = None,
 ) -> SpeakerMatchDiagnosticsResult:
     """
-    Map diarized speaker ids to enrolled names and return score/rejection diagnostics.
+    Map diarized speaker ids to names in the voice library and return score/rejection diagnostics.
     """
     mapping: Dict[str, str] = {}
-    embedding_rejection_reasons = embedding_rejection_reasons or {}
-    speaker_order = list(diarized_speakers or spk_embeddings.keys())
-    for spk in spk_embeddings:
+    voiceprint_rejection_reasons = voiceprint_rejection_reasons or {}
+    speaker_order = list(diarized_speakers or speaker_voiceprints.keys())
+    for spk in speaker_voiceprints:
         if spk not in speaker_order:
             speaker_order.append(spk)
     diagnostics: Dict[str, Any] = {"speakers": {}}
     assignment_candidates: List[Dict[str, Any]] = []
 
     for speaker_index, spk in enumerate(speaker_order):
-        embeds = spk_embeddings.get(spk, [])
+        voiceprints = speaker_voiceprints.get(spk, [])
         best_name = None
         best_score = -1.0
         second_name = None
         second_score = -1.0
         scores_by_speaker: Dict[str, float] = {}
-        mapping[spk] = f"{UNKNOWN_PREFIX_DEFAULT}{spk}"
+        mapping[spk] = f"{ANONYMOUS_PREFIX_DEFAULT}{spk}"
 
-        if not embeds:
-            rejection_reason = embedding_rejection_reasons.get(spk, "no_embedding_windows")
+        if not voiceprints:
+            rejection_reason = voiceprint_rejection_reasons.get(spk, "no_voiceprint_windows")
         else:
-            for name, refs in enroll_db.items():
+            for name, refs in library_voiceprints.items():
                 if not refs:
                     continue
-                score = _person_match_score(embeds, refs)
+                score = _person_match_score(voiceprints, refs)
                 scores_by_speaker[name] = score
                 if score > best_score:
                     second_score = best_score
@@ -430,7 +430,7 @@ def match_speakers_to_names_with_diagnostics(
 
             score_margin = best_score - second_score
             if best_name is None:
-                rejection_reason = "no_enrollment_refs"
+                rejection_reason = "no_library_voiceprints"
             elif best_score < threshold:
                 rejection_reason = "below_threshold"
             elif score_margin < margin:

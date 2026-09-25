@@ -8,7 +8,7 @@ import time
 import warnings
 
 
-APP_LOGGER_NAME = "meeting"
+APP_LOGGER_NAME = "transcriber"
 _orig_showwarning = warnings.showwarning
 
 

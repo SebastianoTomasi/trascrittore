@@ -1,14 +1,15 @@
-# Whitelist: the image gets only what the meeting transcriber needs.
+# Whitelist: the image gets only what the transcriber needs.
 # Recordings and voice clips (data/), voiceprints (cache/), secrets (.env) and the
-# local meeting.ini must never reach an image shared with colleagues.
+# local trascrittore.ini must never reach an image handed to other people.
 *
 !pyproject.toml
 !poetry.lock
 !docker/
 !src/paths.py
+!src/settings.py
 !src/asr/
 !src/utils/
-!src/meeting/
+!src/transcriber/
 **/__pycache__
 **/*.py[cod]
 docker/*.tar

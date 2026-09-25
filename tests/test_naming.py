@@ -7,8 +7,8 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from src.meeting import library, naming, voices
-from src.meeting.transcript import render_payload_text
+from src.transcriber import library, naming, voices
+from src.transcriber.transcript import render_payload_text
 
 
 DURATION_SEC = 95.0
@@ -30,8 +30,8 @@ def _payload(*, windows: bool = True) -> dict[str, object]:
         for speaker in speakers:
             del speaker["windows"]
     return {
-        "file": "Riunione.m4a",
-        "recording": "C:\\Riunioni\\Riunione.m4a",
+        "file": "Registrazione.m4a",
+        "recording": "C:\\Registrazioni\\Registrazione.m4a",
         "duration_sec": DURATION_SEC,
         "device": "cuda",
         "compute_type": "float16",
@@ -59,13 +59,13 @@ class FakeVoiceprints:
 
 
 @pytest.fixture
-def meeting(tmp_path, monkeypatch):
-    folder = tmp_path / "Riunioni"
+def transcript_and_library(tmp_path, monkeypatch):
+    folder = tmp_path / "Registrazioni"
     folder.mkdir()
-    transcript = folder / "Riunione - trascrizione.json"
+    transcript = folder / "Registrazione - trascrizione.json"
     transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
-    (folder / "Riunione - trascrizione.txt").write_text(render_payload_text(_payload()), encoding="utf-8")
-    (folder / "Riunione.m4a").write_bytes(b"not decoded: load_recording is faked")
+    (folder / "Registrazione - trascrizione.txt").write_text(render_payload_text(_payload()), encoding="utf-8")
+    (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
     library_dir = tmp_path / "voci"
     library_dir.mkdir()
 
@@ -83,8 +83,8 @@ def _read(transcript: Path) -> tuple[dict[str, object], str]:
     )
 
 
-def test_naming_rewrites_both_files_and_adds_the_speakers_clips(meeting, capsys):
-    transcript, library_dir = meeting
+def test_naming_rewrites_both_files_and_adds_the_speakers_clips(transcript_and_library, capsys):
+    transcript, library_dir = transcript_and_library
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
@@ -98,13 +98,13 @@ def test_naming_rewrites_both_files_and_adds_the_speakers_clips(meeting, capsys)
 
     pool = library_dir / "Luca Bianchi" / "registrazioni"
     assert sorted(path.name for path in pool.glob("*.wav")) == [
-        "Riunione 00.00.03.wav",
-        "Riunione 00.00.13.wav",
-        "Riunione 00.00.23.wav",
+        "Registrazione 00.00.03.wav",
+        "Registrazione 00.00.13.wav",
+        "Registrazione 00.00.23.wav",
     ]
     record = json.loads((pool / "clip.json").read_text(encoding="utf-8"))
-    assert record["Riunione 00.00.03.wav"]["transcript"] == str(transcript)
-    assert record["Riunione 00.00.03.wav"]["label"] == "Persona 1"
+    assert record["Registrazione 00.00.03.wav"]["transcript"] == str(transcript)
+    assert record["Registrazione 00.00.03.wav"]["label"] == "Persona 1"
     assert summary["named"] == [
         {"label": "Persona 1", "name": "Luca Bianchi", "clips_added": 3, "folder": str(pool), "note": None}
     ]
@@ -112,8 +112,8 @@ def test_naming_rewrites_both_files_and_adds_the_speakers_clips(meeting, capsys)
     assert "Luca Bianchi" in capsys.readouterr().err
 
 
-def test_a_speaker_without_clips_is_named_with_an_explanation(meeting):
-    transcript, library_dir = meeting
+def test_a_speaker_without_clips_is_named_with_an_explanation(transcript_and_library):
+    transcript, library_dir = transcript_and_library
 
     summary = naming.name_speakers(str(transcript), ["Persona 2=Anna Neri"])
 
@@ -124,9 +124,9 @@ def test_a_speaker_without_clips_is_named_with_an_explanation(meeting):
     assert "Anna Neri" in _read(transcript)[1]
 
 
-def test_a_missing_recording_still_applies_the_name(meeting):
-    transcript, library_dir = meeting
-    (transcript.parent / "Riunione.m4a").unlink()
+def test_a_missing_recording_still_applies_the_name(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    (transcript.parent / "Registrazione.m4a").unlink()
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
@@ -137,19 +137,19 @@ def test_a_missing_recording_still_applies_the_name(meeting):
     assert not (library_dir / "Luca Bianchi").exists()
 
 
-def test_the_recording_can_be_given_when_it_moved(meeting, tmp_path):
-    transcript, library_dir = meeting
-    moved = tmp_path / "Archivio" / "Riunione.m4a"
+def test_the_recording_can_be_given_when_it_moved(transcript_and_library, tmp_path):
+    transcript, library_dir = transcript_and_library
+    moved = tmp_path / "Archivio" / "Registrazione.m4a"
     moved.parent.mkdir()
-    (transcript.parent / "Riunione.m4a").rename(moved)
+    (transcript.parent / "Registrazione.m4a").rename(moved)
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"], recording=str(moved))
 
     assert summary["named"][0]["clips_added"] == 3
 
 
-def test_a_recording_of_another_length_adds_no_clips(meeting, monkeypatch):
-    transcript, library_dir = meeting
+def test_a_recording_of_another_length_adds_no_clips(transcript_and_library, monkeypatch):
+    transcript, library_dir = transcript_and_library
     monkeypatch.setattr(voices, "load_recording", lambda _path: np.zeros(16000 * 30, dtype=np.float32))
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
@@ -158,18 +158,19 @@ def test_a_recording_of_another_length_adds_no_clips(meeting, monkeypatch):
     assert "non corrisponde" in summary["named"][0]["note"]
 
 
-def test_a_transcript_from_an_older_version_is_named_without_clips(meeting):
-    transcript, library_dir = meeting
+def test_a_transcript_from_an_older_version_is_named_without_clips(transcript_and_library):
+    transcript, library_dir = transcript_and_library
     transcript.write_text(json.dumps(_payload(windows=False)), encoding="utf-8")
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
     assert summary["named"][0]["clips_added"] == 0
     assert "versione precedente" in summary["named"][0]["note"]
+    assert "trascrivi di nuovo la registrazione" in summary["named"][0]["note"]
 
 
-def test_after_the_trial_only_the_selected_clips_are_saved(meeting):
-    transcript, library_dir = meeting
+def test_after_the_trial_only_the_selected_clips_are_saved(transcript_and_library):
+    transcript, library_dir = transcript_and_library
     FakeVoiceprints.outliers = {13.0}
     selection = naming.get_library_settings()
     (library_dir / library.TRIAL_RECORD).write_text(
@@ -190,12 +191,12 @@ def test_after_the_trial_only_the_selected_clips_are_saved(meeting):
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
     pool = library_dir / "Luca Bianchi" / "registrazioni"
-    assert sorted(path.name for path in pool.glob("*.wav")) == ["Riunione 00.00.03.wav", "Riunione 00.00.23.wav"]
+    assert sorted(path.name for path in pool.glob("*.wav")) == ["Registrazione 00.00.03.wav", "Registrazione 00.00.23.wav"]
     assert summary["trial"]["passed"] is True
 
 
-def test_a_name_already_in_the_library_uses_its_folder(meeting):
-    transcript, library_dir = meeting
+def test_a_name_already_in_the_library_uses_its_folder(transcript_and_library):
+    transcript, library_dir = transcript_and_library
     (library_dir / "Luca Bianchi").mkdir()
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=luca  bianchi"])
@@ -214,8 +215,8 @@ def test_a_name_already_in_the_library_uses_its_folder(meeting):
         ("Persona 1", "Persona 2=Nome Cognome"),
     ],
 )
-def test_a_refused_name_leaves_the_files_as_they_were(meeting, pair, expected):
-    transcript, library_dir = meeting
+def test_a_refused_name_leaves_the_files_as_they_were(transcript_and_library, pair, expected):
+    transcript, library_dir = transcript_and_library
     before = _read(transcript)
 
     summary = naming.name_speakers(str(transcript), [pair])
@@ -232,8 +233,8 @@ def test_naming_a_missing_transcript_is_refused(tmp_path):
     assert summary["status"] == "file_not_found"
 
 
-def test_listening_joins_the_best_two_clips_of_each_speaker_in_one_file(meeting, tmp_path):
-    transcript, _ = meeting
+def test_listening_joins_the_best_two_clips_of_each_speaker_in_one_file(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
     FakeVoiceprints.outliers = {3.0}
     out_dir = tmp_path / "ascolto"
     out_dir.mkdir()

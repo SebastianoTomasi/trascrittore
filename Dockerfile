@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-# Meeting transcriber: one audio file in, a named transcript out.
+# Transcriber: one recording in, a transcript with the speakers' names out.
 # Build with docker/build.ps1, which passes the Hugging Face token as a secret.
 FROM python:3.12-slim-bookworm
 
@@ -38,9 +38,10 @@ RUN --mount=type=secret,id=hf_token,required=true \
 
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
-    MEETING_CONFIG=/app/docker/meeting.ini
+    TRANSCRIBER_DEFAULTS=/app/docker/defaults.ini
 
-COPY docker/meeting.ini docker/
+# The model licenses travel with the image, as with every exported copy.
+COPY docker/defaults.ini docker/LICENZE.md docker/
 COPY src ./src
 
-ENTRYPOINT ["python", "-m", "src.meeting"]
+ENTRYPOINT ["python", "-m", "src.transcriber"]

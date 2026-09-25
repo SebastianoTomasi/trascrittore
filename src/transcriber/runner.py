@@ -18,21 +18,21 @@ import soundfile as sf
 
 from src.asr.utils.config import WhisperSettings, get_speaker_settings, get_whisper_settings
 from src.asr.utils.output_format import format_offset
-from src.meeting.summary import (
+from src.transcriber.summary import (
     FILE_NOT_FOUND,
     GPU_OUT_OF_MEMORY,
     OK,
-    UNREADABLE_AUDIO,
+    UNREADABLE_RECORDING,
     CommandError,
     guarded,
     host_path,
     say as _say,
 )
-from src.meeting.transcript import (
+from src.transcriber.transcript import (
     build_payload,
     display_labels,
     is_anonymous,
-    participant_names,
+    speaker_names,
     render_payload_text,
     speaker_summaries,
 )
@@ -40,7 +40,7 @@ from src.paths import safe_filename_part
 from src.utils.logging_setup import format_duration, get_logger
 
 
-logger = get_logger("meeting")
+logger = get_logger("transcriber")
 
 SAMPLE_RATE = 16000
 OUTPUT_SUFFIX = " - trascrizione"
@@ -49,8 +49,8 @@ _RULE = "=" * 70
 _ALERT = "!" * 70
 
 
-def output_paths(audio_path: str | os.PathLike[str], out_dir: str | None) -> tuple[Path, Path]:
-    source = Path(audio_path)
+def output_paths(recording_path: str | os.PathLike[str], out_dir: str | None) -> tuple[Path, Path]:
+    source = Path(recording_path)
     folder = Path(out_dir) if out_dir else source.resolve().parent
     return folder / f"{source.stem}{OUTPUT_SUFFIX}.txt", folder / f"{source.stem}{OUTPUT_SUFFIX}.json"
 
@@ -59,7 +59,7 @@ def _cpu_alert(settings: WhisperSettings) -> list[str]:
     return [
         _ALERT,
         f"ATTENZIONE: nessuna GPU disponibile, elaboro su CPU ({settings.compute_type}).",
-        "Sarà molto più lento: anche più della durata dell'audio.",
+        "Sarà molto più lento: anche più della durata della registrazione.",
         f"Motivo: {settings.fallback_reason}",
         _ALERT,
     ]
@@ -123,7 +123,7 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
     settings = get_whisper_settings()
 
     _say(_RULE)
-    _say("Trascrizione riunione")
+    _say("Trascrizione")
     _say(f"File: {source.name}")
     for line in _device_lines(settings):
         _say(line)
@@ -133,26 +133,26 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
     # Heavy ML imports happen here, after the banner is on screen.
     from src.asr import diarization
 
-    with tempfile.TemporaryDirectory(prefix="meeting-") as work_dir:
+    with tempfile.TemporaryDirectory(prefix="trascrittore-") as work_dir:
         # Decode once to 16 kHz mono WAV: every step rereads the audio, and WAV is cheap to reread.
-        work_audio = os.path.join(work_dir, f"{safe_filename_part(source.stem)}.wav")
+        work_copy = os.path.join(work_dir, f"{safe_filename_part(source.stem)}.wav")
         try:
             audio = diarization.load_audio(str(source))
         except RuntimeError as exc:
-            logger.debug("Audio decoding failed", exc_info=exc)
+            logger.debug("Decoding the recording failed", exc_info=exc)
             raise CommandError(
-                UNREADABLE_AUDIO, f"Non riesco a leggere l'audio di '{source.name}'. È un file audio o video?"
+                UNREADABLE_RECORDING, f"Non riesco a leggere la registrazione '{source.name}'. È un file audio o video?"
             ) from exc
         duration_sec = len(audio) / SAMPLE_RATE
-        sf.write(work_audio, audio, SAMPLE_RATE)
+        sf.write(work_copy, audio, SAMPLE_RATE)
         del audio
-        _say(f"Durata audio: {format_offset(duration_sec)}")
+        _say(f"Durata: {format_offset(duration_sec)}")
 
-        _step(1, "Trascrizione del parlato", diarization.transcribe_audio, work_audio)
-        _step(2, "Allineamento delle parole", diarization.align_transcript, work_audio)
-        _step(3, "Separazione delle voci", diarization.diarize_transcript, work_audio, num_speakers=speakers)
+        _step(1, "Trascrizione del parlato", diarization.transcribe_recording, work_copy)
+        _step(2, "Allineamento delle parole", diarization.align_transcript, work_copy)
+        _step(3, "Separazione delle voci", diarization.diarize_transcript, work_copy, num_speakers=speakers)
         _, transcript_path, diagnostics_path = _step(
-            4, "Riconoscimento delle voci", diarization.identify_speakers, work_audio
+            4, "Riconoscimento delle voci", diarization.recognize_speakers, work_copy
         )
         with open(transcript_path, encoding="utf-8") as f:
             turns = json.load(f)["turns"]
@@ -160,7 +160,7 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
             diagnostics = json.load(f)
 
     elapsed_sec = time.perf_counter() - started
-    labels = display_labels(turns, get_speaker_settings().unknown_prefix)
+    labels = display_labels(turns, get_speaker_settings().anonymous_prefix)
     txt_path, json_path = output_paths(source, out_dir)
     payload = build_payload(
         source_name=source.name,
@@ -180,9 +180,9 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
     _say(_RULE)
     _say(f"Fatto in {format_duration(elapsed_sec)}.")
     if not turns:
-        _say("Nell'audio non ho trovato parlato.")
-    _say(f"Partecipanti: {', '.join(participant_names(labels)) or 'nessuno'}")
-    _say(f"Accanto all'audio trovi '{txt_path.name}' e '{json_path.name}'.")
+        _say("Nella registrazione non ho trovato parlato.")
+    _say(f"Chi parla: {', '.join(speaker_names(labels)) or 'nessuno'}")
+    _say(f"Accanto alla registrazione trovi '{txt_path.name}' e '{json_path.name}'.")
     if settings.fallback_reason:
         for line in _cpu_alert(settings):
             _say(line)
@@ -201,17 +201,17 @@ def _transcribe_or_explain(source: Path, *, speakers: int | None, out_dir: str |
         logger.debug("GPU out of memory", exc_info=exc)
         raise CommandError(
             GPU_OUT_OF_MEMORY,
-            "Memoria della GPU esaurita. Nella sezione [whisper] di meeting.ini "
-            "abbassa batch_size (per esempio a 4, poi 2) e riprova.",
+            "Memoria della GPU esaurita. In trascrittore.ini, accanto a Trascrivi.bat, scrivi "
+            "batch_size = 4 sotto la riga [whisper] (poi 2, se non basta) e riprova.",
         ) from exc
 
 
-def run(audio_path: str, *, speakers: int | None = None, out_dir: str | None = None) -> dict[str, Any]:
+def run(recording_path: str, *, speakers: int | None = None, out_dir: str | None = None) -> dict[str, Any]:
     """
     Transcribe one recording end to end; return the result summary.
     """
     return guarded(
         COMMAND,
-        lambda: _transcribe_or_explain(Path(audio_path), speakers=speakers, out_dir=out_dir),
+        lambda: _transcribe_or_explain(Path(recording_path), speakers=speakers, out_dir=out_dir),
         failed="La trascrizione non è riuscita",
     )

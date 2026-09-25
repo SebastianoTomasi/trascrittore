@@ -1,9 +1,9 @@
 """
-Download every model the meeting transcriber needs into the image at build time.
+Download every model the transcriber needs into the image at build time.
 
 Runs on CPU with the same library calls the pipeline uses at runtime, so the
 caches under HF_HOME, TORCH_HOME and NLTK_DATA match what it looks up later
-with HF_HUB_OFFLINE=1. Model ids must match docker/meeting.ini.
+with HF_HUB_OFFLINE=1. Model ids must match docker/defaults.ini.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from whisperx.diarize import DiarizationPipeline
 
 WHISPER_MODEL_ID = "large-v3"
 ALIGN_LANGUAGE = "it"
-EMBEDDING_MODEL_ID = "pyannote/embedding"
+VOICEPRINT_MODEL_ID = "pyannote/embedding"
 
 
 def main() -> None:
@@ -35,8 +35,8 @@ def main() -> None:
     print("Downloading diarization pipeline", flush=True)
     DiarizationPipeline(token=token, device="cpu")
 
-    print(f"Downloading speaker embedding model {EMBEDDING_MODEL_ID}", flush=True)
-    Model.from_pretrained(EMBEDDING_MODEL_ID, token=token)
+    print(f"Downloading speaker voiceprint model {VOICEPRINT_MODEL_ID}", flush=True)
+    Model.from_pretrained(VOICEPRINT_MODEL_ID, token=token)
 
     print("Downloading NLTK punkt_tab", flush=True)
     if not nltk.download("punkt_tab", download_dir=os.environ["NLTK_DATA"], quiet=True):

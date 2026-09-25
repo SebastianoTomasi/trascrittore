@@ -25,9 +25,9 @@ import soundfile as sf
 
 from src.asr.utils.config import LibrarySettings, get_paths_settings
 from src.asr.utils.output_format import format_offset
-from src.meeting import voices
-from src.meeting.summary import INVALID_ARGUMENTS, OK, CommandError, guarded, say
-from src.meeting.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
+from src.transcriber import voices
+from src.transcriber.summary import INVALID_ARGUMENTS, OK, CommandError, guarded, say
+from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
 
 
 TRIAL_COMMAND = "trial"
@@ -61,23 +61,23 @@ def _unit(vector: np.ndarray) -> np.ndarray:
     return vector / (np.linalg.norm(vector) + 1e-9)
 
 
-def consistency_scores(embeddings: list[np.ndarray]) -> list[float | None]:
+def consistency_scores(voiceprints: list[np.ndarray]) -> list[float | None]:
     """
     Score each window by how much it resembles the mean of the same speaker's other windows.
 
     A window that does not resemble the rest usually holds another voice, laughter or noise.
     With a single window there is nothing to compare, so its score is unknown.
     """
-    if len(embeddings) < 2:
-        return [None] * len(embeddings)
-    units = [_unit(embedding) for embedding in embeddings]
+    if len(voiceprints) < 2:
+        return [None] * len(voiceprints)
+    units = [_unit(voiceprint) for voiceprint in voiceprints]
     total = np.sum(units, axis=0)
     return [float(np.dot(unit, _unit(total - unit))) for unit in units]
 
 
 def select_clips(
     windows: list[dict[str, float]],
-    embeddings: list[np.ndarray | None],
+    voiceprints: list[np.ndarray | None],
     *,
     window_sec: float,
     selection: LibrarySettings,
@@ -85,14 +85,14 @@ def select_clips(
     """
     Rank a speaker's full-length windows, best first, and vote to keep or discard each.
 
-    Every embedded window counts in the consistency score, but only full-length ones become clips.
+    Every window with a voiceprint counts in the consistency score, but only full-length ones become clips.
     The selection keeps at most `keep_clips` windows, and none below `min_consistency`.
     """
-    embedded = [(window, embedding) for window, embedding in zip(windows, embeddings) if embedding is not None]
-    scores = consistency_scores([embedding for _, embedding in embedded])
+    measured = [(window, voiceprint) for window, voiceprint in zip(windows, voiceprints) if voiceprint is not None]
+    scores = consistency_scores([voiceprint for _, voiceprint in measured])
     candidates = [
         Candidate(start=float(window["start"]), end=float(window["end"]), consistency=score)
-        for (window, _), score in zip(embedded, scores)
+        for (window, _), score in zip(measured, scores)
         if float(window["end"]) - float(window["start"]) >= window_sec - _FULL_LENGTH_TOLERANCE_SEC
     ]
     candidates.sort(key=lambda candidate: (-(candidate.consistency or 0.0), candidate.start))
@@ -143,9 +143,9 @@ def canonical_name(library_dir: str | os.PathLike[str], name: str) -> str:
 
 def library_dir() -> Path | None:
     """
-    Return this PC's voice library, or None when meeting.ini configures none.
+    Return this PC's voice library, or None when the settings configure none.
     """
-    configured = get_paths_settings().enrollment_dir
+    configured = get_paths_settings().voice_library_dir
     return Path(configured).resolve() if configured else None
 
 

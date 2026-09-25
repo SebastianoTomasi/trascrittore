@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 import soundfile as sf
 
-from src.meeting import library
+from src.transcriber import library
 from src.asr.utils.config import LibrarySettings
 
 
@@ -38,7 +38,7 @@ def test_consistency_is_unknown_with_a_single_window():
 
 def test_selection_keeps_the_most_consistent_full_windows_and_votes_on_the_rest():
     windows = _windows(0.0, 10.0, 20.0, 30.0) + [{"start": 40.0, "end": 44.0}]
-    embeddings = [
+    voiceprints = [
         _unit(1.0, 0.2, 0.0),
         _unit(1.0, 0.0, 0.0),
         _unit(0.0, 0.0, 1.0),
@@ -46,7 +46,7 @@ def test_selection_keeps_the_most_consistent_full_windows_and_votes_on_the_rest(
         _unit(1.0, 0.05, 0.0),
     ]
 
-    candidates = library.select_clips(windows, embeddings, window_sec=10.0, selection=SELECTION)
+    candidates = library.select_clips(windows, voiceprints, window_sec=10.0, selection=SELECTION)
 
     # The short window at 40 s counts in the others' mean but never becomes a clip.
     assert [(candidate.start, candidate.vote) for candidate in candidates] == [
@@ -60,16 +60,16 @@ def test_selection_keeps_the_most_consistent_full_windows_and_votes_on_the_rest(
 
 def test_selection_discards_inconsistent_windows_even_below_the_cap():
     windows = _windows(0.0, 10.0, 20.0)
-    embeddings = [_unit(1.0, 0.0, 0.0), _unit(1.0, 0.05, 0.0), _unit(-0.2, 0.0, 1.0)]
+    voiceprints = [_unit(1.0, 0.0, 0.0), _unit(1.0, 0.05, 0.0), _unit(-0.2, 0.0, 1.0)]
 
     candidates = library.select_clips(
-        windows, embeddings, window_sec=10.0, selection=LibrarySettings(keep_clips=8, min_consistency=0.6)
+        windows, voiceprints, window_sec=10.0, selection=LibrarySettings(keep_clips=8, min_consistency=0.6)
     )
 
     assert [candidate.vote for candidate in candidates] == ["keep", "keep", "discard"]
 
 
-def test_selection_skips_windows_that_could_not_be_embedded():
+def test_selection_skips_windows_without_a_voiceprint():
     candidates = library.select_clips(_windows(0.0, 10.0), [None, _unit(1.0, 0.0)], window_sec=10.0, selection=SELECTION)
 
     assert [(candidate.start, candidate.consistency, candidate.vote) for candidate in candidates] == [
@@ -98,10 +98,10 @@ def test_a_name_matching_a_library_folder_in_another_case_uses_the_folder(tmp_pa
 
 
 def test_clip_names_carry_the_recording_and_the_time():
-    assert library.clip_filename("Riunione budget.m4a", 754.6) == "Riunione budget 00.12.34.wav"
+    assert library.clip_filename("Registrazione budget.m4a", 754.6) == "Registrazione budget 00.12.34.wav"
 
 
-def _save(tmp_path, *, trial: bool, label: str = "Persona 2", recording: str = "Riunione.m4a") -> list[str]:
+def _save(tmp_path, *, trial: bool, label: str = "Persona 2", recording: str = "Registrazione.m4a") -> list[str]:
     audio = np.linspace(-0.5, 0.5, 16000 * 60, dtype=np.float32)
     candidates = [
         library.Candidate(start=10.0, end=20.0, consistency=0.9, vote="keep"),
@@ -115,10 +115,10 @@ def _save(tmp_path, *, trial: bool, label: str = "Persona 2", recording: str = "
         trial=trial,
         selection=SELECTION,
         origin={
-            "recording": f"C:\\Riunioni\\{recording}",
+            "recording": f"C:\\Registrazioni\\{recording}",
             "recording_file": recording,
             "recording_duration_sec": 60.0,
-            "transcript": f"C:\\Riunioni\\{recording} - trascrizione.json",
+            "transcript": f"C:\\Registrazioni\\{recording} - trascrizione.json",
             "label": label,
         },
     )
@@ -128,16 +128,16 @@ def test_during_the_trial_every_candidate_is_saved_with_its_vote(tmp_path):
     saved = _save(tmp_path, trial=True)
 
     folder = tmp_path / "Luca Bianchi" / "registrazioni"
-    assert saved == ["Riunione 00.00.10.wav", "Riunione 00.00.30.wav"]
-    info = sf.info(folder / "Riunione 00.00.10.wav")
+    assert saved == ["Registrazione 00.00.10.wav", "Registrazione 00.00.30.wav"]
+    info = sf.info(folder / "Registrazione 00.00.10.wav")
     assert (info.samplerate, round(info.duration, 3)) == (16000, 10.0)
     record = json.loads((folder / "clip.json").read_text(encoding="utf-8"))
-    assert record["Riunione 00.00.10.wav"]["vote"] == "keep"
-    assert record["Riunione 00.00.30.wav"] | {"saved": None} == {
-        "recording": "C:\\Riunioni\\Riunione.m4a",
-        "recording_file": "Riunione.m4a",
+    assert record["Registrazione 00.00.10.wav"]["vote"] == "keep"
+    assert record["Registrazione 00.00.30.wav"] | {"saved": None} == {
+        "recording": "C:\\Registrazioni\\Registrazione.m4a",
+        "recording_file": "Registrazione.m4a",
         "recording_duration_sec": 60.0,
-        "transcript": "C:\\Riunioni\\Riunione.m4a - trascrizione.json",
+        "transcript": "C:\\Registrazioni\\Registrazione.m4a - trascrizione.json",
         "label": "Persona 2",
         "start": 30.0,
         "end": 40.0,
@@ -150,12 +150,12 @@ def test_during_the_trial_every_candidate_is_saved_with_its_vote(tmp_path):
 
 
 def test_after_the_trial_only_the_kept_clips_are_saved(tmp_path):
-    assert _save(tmp_path, trial=False) == ["Riunione 00.00.10.wav"]
+    assert _save(tmp_path, trial=False) == ["Registrazione 00.00.10.wav"]
 
 
 def _name_speakers(tmp_path, count: int) -> None:
     for index in range(count):
-        _save(tmp_path, trial=True, recording=f"Riunione {index}.m4a")
+        _save(tmp_path, trial=True, recording=f"Registrazione {index}.m4a")
 
 
 def test_trial_counts_named_speakers_and_passes_after_ten_once_the_person_reviewed(tmp_path):
@@ -177,13 +177,13 @@ def test_trial_counts_named_speakers_and_passes_after_ten_once_the_person_review
 
 def test_a_kept_clip_the_person_deleted_stops_the_trial(tmp_path):
     _name_speakers(tmp_path, 10)
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Riunione 3 00.00.10.wav").unlink()
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Riunione 3 00.00.30.wav").unlink()
+    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").unlink()
+    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.30.wav").unlink()
 
     status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
 
     assert not status.passed
-    assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Riunione 3 00.00.10.wav", "consistency": 0.9}]
+    assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Registrazione 3 00.00.10.wav", "consistency": 0.9}]
     assert not library.trial_status(tmp_path, SELECTION).passed
 
 
@@ -223,10 +223,10 @@ def test_a_new_version_of_the_selection_starts_a_new_trial(tmp_path, monkeypatch
 def test_the_trial_report_lists_the_kept_clips_the_person_deleted(tmp_path, monkeypatch):
     monkeypatch.setattr(library, "library_dir", lambda: tmp_path)
     _name_speakers(tmp_path, 10)
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Riunione 3 00.00.10.wav").unlink()
+    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").unlink()
 
     summary = library.trial_report(SELECTION, reviewed=True)
 
     assert not summary["passed"]
     assert "va corretta" in summary["message"]
-    assert summary["disagreements"][0]["clip"] == "Riunione 3 00.00.10.wav"
+    assert summary["disagreements"][0]["clip"] == "Registrazione 3 00.00.10.wav"

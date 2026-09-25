@@ -12,7 +12,7 @@ def _parse_recording_start(input_path: str) -> datetime | None:
     """
     Parse the recording start datetime from the input filename using config format.
 
-    Returns None for free-form names such as meeting recordings.
+    Returns None for free-form names, which most recordings have.
     """
     fname = os.path.splitext(os.path.basename(input_path))[0]
     try:
@@ -56,7 +56,7 @@ def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str
     Yield normalized (word, speaker_label, word_start_sec, word_end_sec) tuples from WhisperX output.
     """
     for seg in result.get("segments", []):
-        segment_speaker = seg.get("speaker") or "UNKNOWN"
+        segment_speaker = seg.get("speaker") or "UNATTRIBUTED"
         segment_start = float(seg.get("start", 0.0))
         for w in seg.get("words", []):
             word = (w.get("word") or "").strip()

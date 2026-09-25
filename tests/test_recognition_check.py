@@ -5,8 +5,8 @@ import json
 import numpy as np
 import pytest
 
-from src.meeting import library, naming, recognition_check as check, voices
-from src.meeting.recognition_check import CheckedRecording, CheckedSpeaker, LibraryClip
+from src.transcriber import library, naming, recognition_check as check, voices
+from src.transcriber.recognition_check import CheckedRecording, CheckedSpeaker, LibraryClip
 
 
 def _voice(angle_deg: float) -> np.ndarray:
@@ -16,7 +16,7 @@ def _voice(angle_deg: float) -> np.ndarray:
 
 
 LUCA, ANNA = 0.0, 60.0
-MEETING = ("riunione.m4a", 600.0)
+RECORDING = ("registrazione.m4a", 600.0)
 
 
 def _clip(person: str, angle: float, recording: tuple[str, float] | None = None) -> LibraryClip:
@@ -24,10 +24,10 @@ def _clip(person: str, angle: float, recording: tuple[str, float] | None = None)
     return LibraryClip(person=person, pool=pool, voiceprint=_voice(angle), recording=recording)
 
 
-def _meeting(*speakers: tuple[str, float]) -> CheckedRecording:
+def _recording(*speakers: tuple[str, float]) -> CheckedRecording:
     return CheckedRecording(
-        name="Riunione.m4a",
-        key=MEETING,
+        name="Registrazione.m4a",
+        key=RECORDING,
         speakers=[CheckedSpeaker(label=label, voiceprints=[_voice(angle)]) for label, angle in speakers],
     )
 
@@ -35,7 +35,7 @@ def _meeting(*speakers: tuple[str, float]) -> CheckedRecording:
 def test_each_named_speaker_is_scored_against_the_rest_of_the_library():
     clips = [_clip("Luca", 20.0), _clip("Anna", 80.0), _clip("Marco", 170.0)]
 
-    outcomes = check.evaluate(clips, [_meeting(("Luca", 0.0), ("Anna", 90.0))], margin=0.10)
+    outcomes = check.evaluate(clips, [_recording(("Luca", 0.0), ("Anna", 90.0))], margin=0.10)
     report = check.report(outcomes, threshold=0.575, margin=0.10)
 
     assert report["current"] | {"threshold": None} == {
@@ -52,19 +52,19 @@ def test_each_named_speaker_is_scored_against_the_rest_of_the_library():
 
 
 def test_clips_cut_from_the_recording_being_checked_are_left_out():
-    own_clip = _clip("Luca", LUCA, recording=MEETING)
+    own_clip = _clip("Luca", LUCA, recording=RECORDING)
     other_clip = _clip("Luca", LUCA + 30, recording=("altra.m4a", 60.0))
 
-    outcomes = check.evaluate([own_clip, other_clip, _clip("Anna", ANNA)], [_meeting(("Luca", LUCA))], margin=0.10)
+    outcomes = check.evaluate([own_clip, other_clip, _clip("Anna", ANNA)], [_recording(("Luca", LUCA))], margin=0.10)
 
     library_outcome = next(outcome for outcome in outcomes if outcome.scenario == "library")
     assert library_outcome.true_score == pytest.approx(np.cos(np.radians(30)), abs=1e-3)
 
 
 def test_a_person_whose_only_clips_come_from_the_recording_counts_as_missing_from_the_library():
-    clips = [_clip("Luca", LUCA, recording=MEETING), _clip("Anna", ANNA)]
+    clips = [_clip("Luca", LUCA, recording=RECORDING), _clip("Anna", ANNA)]
 
-    outcomes = check.evaluate(clips, [_meeting(("Luca", LUCA))], margin=0.10)
+    outcomes = check.evaluate(clips, [_recording(("Luca", LUCA))], margin=0.10)
 
     assert [(outcome.scenario, outcome.truth, outcome.best_name) for outcome in outcomes] == [
         ("library", None, "Anna")
@@ -72,7 +72,7 @@ def test_a_person_whose_only_clips_come_from_the_recording_counts_as_missing_fro
 
 
 def test_speakers_nobody_named_are_not_checked():
-    outcomes = check.evaluate([_clip("Luca", LUCA)], [_meeting(("Persona 1", LUCA))], margin=0.10)
+    outcomes = check.evaluate([_clip("Luca", LUCA)], [_recording(("Persona 1", LUCA))], margin=0.10)
 
     assert outcomes == []
 
@@ -80,7 +80,7 @@ def test_speakers_nobody_named_are_not_checked():
 def test_the_suggested_threshold_keeps_missing_voices_out_and_counts_what_it_loses():
     # Luca and Marco are close: removing one, the other would get his name.
     clips = [_clip("Luca", 25.0), _clip("Marco", 45.0), _clip("Anna", 120.0)]
-    recordings = [_meeting(("Luca", 0.0), ("Anna", 120.0))]
+    recordings = [_recording(("Luca", 0.0), ("Anna", 120.0))]
 
     report = check.report(check.evaluate(clips, recordings, margin=0.0), threshold=0.575, margin=0.0, min_missing=2)
 
@@ -95,7 +95,7 @@ def test_the_suggested_threshold_keeps_missing_voices_out_and_counts_what_it_los
 def test_the_suggested_threshold_stays_above_people_of_the_library_taken_for_each_other():
     # Luca's voice at 0 degrees scores 0.906 against Marco's clips and 0.819 against his own.
     clips = [_clip("Luca", 35.0), _clip("Marco", 25.0), _clip("Anna", 150.0)]
-    recordings = [_meeting(("Luca", 0.0), ("Anna", 150.0))]
+    recordings = [_recording(("Luca", 0.0), ("Anna", 150.0))]
 
     report = check.report(check.evaluate(clips, recordings, margin=0.0), threshold=0.575, margin=0.0, min_missing=1)
 
@@ -106,7 +106,7 @@ def test_the_suggested_threshold_stays_above_people_of_the_library_taken_for_eac
 
 def test_no_suggestion_without_enough_voices_to_simulate_as_missing():
     clips = [_clip("Luca", 25.0), _clip("Marco", 45.0), _clip("Anna", 120.0)]
-    outcomes = check.evaluate(clips, [_meeting(("Luca", 0.0), ("Anna", 120.0))], margin=0.0)
+    outcomes = check.evaluate(clips, [_recording(("Luca", 0.0), ("Anna", 120.0))], margin=0.0)
 
     assert check.report(outcomes, threshold=0.575, margin=0.0)["suggested"] is None
     assert check.report([], threshold=0.575, margin=0.10)["known_voices"]["count"] == 0
@@ -117,13 +117,13 @@ def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path
     for person, pool, clip in [("Luca Bianchi", ".", "nota.wav"), ("Anna Neri", ".", "nota.wav")]:
         (library_dir / person).mkdir(parents=True)
         (library_dir / person / clip).write_bytes(b"x")
-    folder = tmp_path / "Riunioni"
+    folder = tmp_path / "Registrazioni"
     folder.mkdir()
-    transcript = folder / "Riunione - trascrizione.json"
+    transcript = folder / "Registrazione - trascrizione.json"
     transcript.write_text(
         json.dumps(
             {
-                "file": "Riunione.m4a",
+                "file": "Registrazione.m4a",
                 "duration_sec": 60.0,
                 "speakers": [
                     {"label": "Luca Bianchi", "named": True, "windows": [{"start": 0.0, "end": 10.0}]},
@@ -136,7 +136,7 @@ def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path
         ),
         encoding="utf-8",
     )
-    (folder / "Riunione.m4a").write_bytes(b"x")
+    (folder / "Registrazione.m4a").write_bytes(b"x")
 
     class FakeVoiceprints:
         def of_clip(self, path):
@@ -149,7 +149,7 @@ def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path
     monkeypatch.setattr(voices, "Voiceprints", FakeVoiceprints)
     monkeypatch.setattr(voices, "load_recording", lambda _path: np.zeros(16000 * 60, dtype=np.float32))
 
-    summary = check.run_check([(str(transcript), str(folder / "Riunione.m4a"))], missing=["C:\\Vecchia - trascrizione.json"])
+    summary = check.run_check([(str(transcript), str(folder / "Registrazione.m4a"))], missing=["C:\\Vecchia - trascrizione.json"])
 
     assert summary["status"] == "ok"
     assert summary["recordings_checked"] == 1

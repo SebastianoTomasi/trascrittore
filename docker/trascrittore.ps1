@@ -13,13 +13,13 @@ script without a byte order mark in the ANSI code page.
 # Agents run this without a console; there the encoding cannot be set, and every summary is ASCII anyway.
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding $false } catch { }
 
-$Image = 'meeting-transcriber:pilot'
+$Image = 'trascrittore:latest'
 # One transcription at a time: Docker refuses a second container with this name.
-$TranscriptionName = 'meeting-transcriber-trascrizione'
+$TranscriptionName = 'trascrittore-trascrizione'
 $Here = $PSScriptRoot
 $Voices = Join-Path $Here 'voci'
-$Config = Join-Path $Here 'meeting.ini'
-$DataDir = Join-Path $env:LOCALAPPDATA 'MeetingTranscriber'
+$Config = Join-Path $Here 'trascrittore.ini'
+$DataDir = Join-Path $env:LOCALAPPDATA 'Trascrittore'
 $Cache = Join-Path $DataDir 'cache'
 $ListenDir = Join-Path $DataDir 'ascolto'
 $SkillSource = Join-Path $Here 'skill-trascrittore.md'
@@ -47,7 +47,7 @@ Comandi:
   check [<trascrizione.json> ...]
       Verifica quanto bene la libreria riconosce le voci a cui una persona ha dato il nome, nelle
       trascrizioni da cui sono state aggiunte clip e in quelle indicate, e suggerisce una soglia.
-      Non cambia mai meeting.ini.
+      Non cambia mai trascrittore.ini.
   trial [--reviewed]
       Riporta il periodo di prova della selezione automatica delle clip. Quando "ready" e' vero,
       chiedi alla persona se ha ascoltato tutte le clip aggiunte e cancellato quelle brutte: solo se
@@ -56,7 +56,7 @@ Comandi:
       Mostra questo testo.
 
 Ogni comando scrive le righe per le persone su stderr e finisce con un riepilogo JSON su stdout:
-"status" (ok, invalid_arguments, file_not_found, unreadable_audio, gpu_out_of_memory, busy,
+"status" (ok, invalid_arguments, invalid_settings, file_not_found, unreadable_recording, gpu_out_of_memory, busy,
 docker_not_running, not_installed, interrupted, error) e "message" in italiano, piu' i campi del
 comando. Uscita: 0 riuscito, 2 argomenti non validi, 3 un'altra trascrizione in corso,
 130 interrotto, 1 ogni altro errore.
@@ -183,13 +183,14 @@ function Add-Mount($Plan, [string]$HostFolder, [string]$ContainerFolder, [switch
 
 function Get-DockerArguments($Plan, [bool]$Gpu, [bool]$CpuFallback) {
     # The trailing | keeps the value from ending with a backslash.
-    $arguments = @('run', '--rm', '-e', 'TZ=Europe/Rome', '-e', ('MEETING_HOST_PATHS=' + ($Plan.HostPaths -join '|') + '|'))
+    $arguments = @('run', '--rm', '-e', 'TZ=Europe/Rome', '-e', ('TRANSCRIBER_HOST_PATHS=' + ($Plan.HostPaths -join '|') + '|'))
     if ($Plan.Transcription) { $arguments += @('--name', $TranscriptionName) }
     if ($Gpu) { $arguments += @('--gpus', 'all') }
-    if ($CpuFallback) { $arguments += @('-e', 'MEETING_GPU_FALLBACK=docker') }
+    if ($CpuFallback) { $arguments += @('-e', 'TRANSCRIBER_GPU_FALLBACK=docker') }
     $arguments += @($Plan.Mounts)
     if (Test-Path -LiteralPath $Config -PathType Leaf) {
-        $arguments += @('-v', ($Config + ':/config/meeting.ini:ro'), '-e', 'MEETING_CONFIG=/config/meeting.ini')
+        # The person's file holds only what they changed; the image has the defaults for everything else.
+        $arguments += @('-v', ($Config + ':/config/trascrittore.ini:ro'), '-e', 'TRANSCRIBER_SETTINGS=/config/trascrittore.ini')
     }
     $arguments += $Image
     $arguments += @($Plan.Arguments)
@@ -282,9 +283,9 @@ function New-TranscribePlan([object[]]$Arguments) {
 
     $plan = New-Plan 'transcribe'
     $plan.Transcription = $true
-    Add-Mount $plan (Split-Path -Parent $recording) '/audio'
+    Add-Mount $plan (Split-Path -Parent $recording) '/recording'
     Add-Mount $plan $Voices '/voci' -ReadOnly
-    [void]$plan.Arguments.AddRange(@('transcribe', ('/audio/' + (Split-Path -Leaf $recording))))
+    [void]$plan.Arguments.AddRange(@('transcribe', ('/recording/' + (Split-Path -Leaf $recording))))
     if ($parsed.Options['--speakers']) { [void]$plan.Arguments.AddRange(@('--speakers', $parsed.Options['--speakers'])) }
     if ($parsed.Options['--out-dir']) {
         $outDir = [IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).ProviderPath, $parsed.Options['--out-dir']))
@@ -510,8 +511,24 @@ function Invoke-Verify([object[]]$Arguments) {
     exit (Get-ExitCode $trial.status)
 }
 
-function Install-Skill {
-    # Installa.bat calls this: the skill always comes with the image of the same version.
+$SettingsTemplate = @'
+; Impostazioni del trascrittore su questo PC.
+; Scrivi qui solo quello che vuoi cambiare, sotto la sua sezione. Per esempio:
+;
+; [whisper]
+; batch_size = 4
+;
+; Tutto il resto viene dal trascrittore, e ogni aggiornamento porta i valori nuovi.
+; Le righe che iniziano con ; sono solo note.
+'@
+
+function Install {
+    # Installa.bat calls this. The settings file is created once and never replaced: it holds the person's changes.
+    if (-not (Test-Path -LiteralPath $Config)) {
+        $lines = $SettingsTemplate.Replace("`r`n", "`n").Replace("`n", "`r`n") + "`r`n"
+        [IO.File]::WriteAllText($Config, $lines, (New-Object System.Text.UTF8Encoding $false))
+    }
+    # The skill always comes with the image of the same version, so it is installed every time.
     if (-not (Test-Path -LiteralPath $SkillSource -PathType Leaf)) {
         Write-Line "Non trovo skill-trascrittore.md accanto a trascrittore.ps1: la skill per gli agenti non e' installata."
         exit 1
@@ -537,7 +554,7 @@ switch ($command) {
     'trial' { Complete-Plan (New-TrialPlan $rest) }
     'interactive' { Invoke-Interactive $rest }
     'verify' { Invoke-Verify $rest }
-    'install-skill' { Install-Skill }
+    'install' { Install }
     { $_ -in @('help', '--help', '-h', '/?') } { [Console]::Out.WriteLine($Help); exit 0 }
     default { Exit-With $command 'invalid_arguments' "Comando sconosciuto: $command. Vedi: trascrittore.ps1 help" }
 }

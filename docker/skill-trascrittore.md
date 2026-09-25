@@ -45,10 +45,14 @@ When `status` is not `ok`, relay `message`. The statuses:
 | status | what to do |
 |---|---|
 | `busy` | Another transcription is running on this PC. Wait for it to end, then retry. Never start two. |
-| `file_not_found`, `unreadable_audio` | Check the path, and that the file is audio or video and on the PC. |
+| `file_not_found`, `unreadable_recording` | Check the path, and that the file is audio or video and on the PC. |
+| `invalid_settings` | A line of `{{CARTELLA}}\trascrittore.ini` is wrong, and the message names it. Help the person correct or delete that line. |
 | `docker_not_running` | Ask the person to open Docker Desktop and wait until it is ready. |
 | `not_installed` | The person runs `Installa.bat` in `{{CARTELLA}}`. |
-| `gpu_out_of_memory` | The message says how to lower `batch_size` in `{{CARTELLA}}\meeting.ini`. |
+| `gpu_out_of_memory` | The message says how to lower `batch_size` in `{{CARTELLA}}\trascrittore.ini`. |
+
+`{{CARTELLA}}\trascrittore.ini` holds only the settings the person changed, each under its section,
+for example `batch_size = 4` under `[whisper]`. Everything else comes from the transcriber.
 
 ## Name the voices left as "Persona N"
 
@@ -99,8 +103,9 @@ trascrittore trial
 Run them in this order, as `Verifica.bat` does, and suggest it after a few new names.
 
 - `check` measures how well the voice library recognizes the voices a person named in this PC's
-  transcripts, and suggests a threshold. It never changes `meeting.ini`: relay the suggestion, and
-  let the person decide whether to change `threshold` in `{{CARTELLA}}\meeting.ini`.
+  transcripts, and suggests a threshold. It never changes `trascrittore.ini`: relay the suggestion, and
+  let the person decide whether to write it as `threshold` under `[matching]` in
+  `{{CARTELLA}}\trascrittore.ini`.
 - `trial` reports the trial of the automatic clip selection. When its summary has `"ready": true`,
   ask the person whether they listened to every clip added to the library and deleted the bad ones.
   Only if they say yes, run `trascrittore trial --reviewed`: from then on the selection discards

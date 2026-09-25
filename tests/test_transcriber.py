@@ -7,9 +7,9 @@ import numpy as np
 import pytest
 
 import src.asr.diarization as diarization
-import src.meeting.runner as runner
+import src.transcriber.runner as runner
 from src.asr.utils.config import SpeakerSettings, WhisperSettings
-from src.meeting.transcript import (
+from src.transcriber.transcript import (
     build_payload,
     display_labels,
     render_payload_text,
@@ -26,9 +26,9 @@ def _turn(speaker: str, start: float, end: float, text: str) -> dict[str, object
 
 TURNS = [
     _turn("Mario Rossi", 3.0, 65.0, "buongiorno a tutti partiamo dal budget"),
-    _turn("UNKNOWN_SPEAKER_03", 66.0, 80.0, "io direi di rimandare"),
+    _turn("ANONYMOUS_SPEAKER_03", 66.0, 80.0, "io direi di rimandare"),
     _turn("Mario Rossi", 81.0, 90.0, "va bene"),
-    _turn("UNKNOWN_SPEAKER_01", 91.0, 95.0, "sono d'accordo con la proposta di rimandare tutto"),
+    _turn("ANONYMOUS_SPEAKER_01", 91.0, 95.0, "sono d'accordo con la proposta di rimandare tutto"),
 ]
 
 DIAGNOSTICS = {
@@ -42,46 +42,46 @@ DIAGNOSTICS = {
             "rejection_reason": "accepted",
         },
         "SPEAKER_03": {
-            "assigned_label": "UNKNOWN_SPEAKER_03",
+            "assigned_label": "ANONYMOUS_SPEAKER_03",
             "best_name": "Luca Bianchi",
             "best_score": 0.52,
             "second_best_name": "Mario Rossi",
             "score_margin": 0.2,
             "rejection_reason": "below_threshold",
             "windows": [
-                {"start": 66.0, "end": 76.0, "embedding_status": "embedded"},
-                {"start": 76.0, "end": 80.0, "embedding_status": "skipped"},
-                {"start": 76.12345, "end": 79.5, "embedding_status": "not_embedded"},
+                {"start": 66.0, "end": 76.0, "voiceprint_status": "computed"},
+                {"start": 76.0, "end": 80.0, "voiceprint_status": "skipped"},
+                {"start": 76.12345, "end": 79.5, "voiceprint_status": "not_computed"},
             ],
         },
         "SPEAKER_01": {
-            "assigned_label": "UNKNOWN_SPEAKER_01",
+            "assigned_label": "ANONYMOUS_SPEAKER_01",
             "best_name": None,
             "best_score": -1.0,
             "second_best_name": None,
             "score_margin": 0.0,
-            "rejection_reason": "no_embedding_windows",
+            "rejection_reason": "no_voiceprint_windows",
         },
     }
 }
 
 
-def test_display_labels_number_unknown_voices_by_first_appearance():
-    turns = TURNS + [_turn("UNKNOWN", 96.0, 97.0, "mh")]
+def test_display_labels_number_anonymous_voices_by_first_appearance():
+    turns = TURNS + [_turn("UNATTRIBUTED", 96.0, 97.0, "mh")]
 
-    assert display_labels(turns, "UNKNOWN_") == {
+    assert display_labels(turns, "ANONYMOUS_") == {
         "Mario Rossi": "Mario Rossi",
-        "UNKNOWN_SPEAKER_03": "Persona 1",
-        "UNKNOWN_SPEAKER_01": "Persona 2",
-        "UNKNOWN": "Voce non attribuita",
+        "ANONYMOUS_SPEAKER_03": "Persona 1",
+        "ANONYMOUS_SPEAKER_01": "Persona 2",
+        "UNATTRIBUTED": "Voce non attribuita",
     }
 
 
-def test_render_text_lists_participants_and_timestamped_turns():
-    labels = display_labels(TURNS, "UNKNOWN_")
+def test_render_text_lists_speakers_and_timestamped_turns():
+    labels = display_labels(TURNS, "ANONYMOUS_")
 
     text = render_text(
-        source_name="Riunione budget.m4a",
+        source_name="Registrazione budget.m4a",
         duration_sec=3725.0,
         device="cuda",
         fallback_reason=None,
@@ -90,9 +90,9 @@ def test_render_text_lists_participants_and_timestamped_turns():
     )
 
     assert text.splitlines() == [
-        "Trascrizione di: Riunione budget.m4a",
+        "Trascrizione di: Registrazione budget.m4a",
         "Durata: 01:02:05 · Elaborata su GPU",
-        "Partecipanti: Mario Rossi (1 min), Persona 1 (<1 min), Persona 2 (<1 min)",
+        "Chi parla: Mario Rossi (1 min), Persona 1 (<1 min), Persona 2 (<1 min)",
         "",
         "[00:00:03] Mario Rossi: buongiorno a tutti partiamo dal budget",
         "",
@@ -105,8 +105,8 @@ def test_render_text_lists_participants_and_timestamped_turns():
     assert text.endswith("tutto\n")
 
 
-def test_render_text_leaves_unattributed_words_out_of_the_participants():
-    turns = TURNS[:1] + [_turn("UNKNOWN", 66.0, 67.0, "ecco")]
+def test_render_text_leaves_unattributed_words_out_of_the_speakers():
+    turns = TURNS[:1] + [_turn("UNATTRIBUTED", 66.0, 67.0, "ecco")]
 
     text = render_text(
         source_name="a.wav",
@@ -114,10 +114,10 @@ def test_render_text_leaves_unattributed_words_out_of_the_participants():
         device="cuda",
         fallback_reason=None,
         turns=turns,
-        labels=display_labels(turns, "UNKNOWN_"),
+        labels=display_labels(turns, "ANONYMOUS_"),
     )
 
-    assert "Partecipanti: Mario Rossi (1 min)" in text.splitlines()
+    assert "Chi parla: Mario Rossi (1 min)" in text.splitlines()
     assert "[00:01:06] Voce non attribuita: ecco" in text.splitlines()
 
 
@@ -133,11 +133,11 @@ def test_render_text_warns_when_processed_on_cpu():
 
     assert "Elaborata su CPU" in text
     assert "ATTENZIONE: elaborata su CPU invece che su GPU. Nessuna GPU NVIDIA disponibile." in text.splitlines()
-    assert "(Nell'audio non è stato trovato parlato.)" in text.splitlines()
+    assert "(Nella registrazione non è stato trovato parlato.)" in text.splitlines()
 
 
 def test_speaker_summaries_expose_scores_for_calibration():
-    labels = display_labels(TURNS, "UNKNOWN_")
+    labels = display_labels(TURNS, "ANONYMOUS_")
 
     summaries = speaker_summaries(TURNS, labels, DIAGNOSTICS)
 
@@ -175,17 +175,17 @@ def test_speaker_summaries_expose_scores_for_calibration():
             "score": None,
             "second_match": None,
             "margin": None,
-            "reason": "no_embedding_windows",
+            "reason": "no_voiceprint_windows",
             "windows": [],
         },
     ]
 
 
 def _payload(labels: dict[str, str] | None = None) -> dict[str, object]:
-    labels = labels or display_labels(TURNS, "UNKNOWN_")
+    labels = labels or display_labels(TURNS, "ANONYMOUS_")
     return build_payload(
-        source_name="Riunione budget.m4a",
-        recording="C:\\Riunioni\\Riunione budget.m4a",
+        source_name="Registrazione budget.m4a",
+        recording="C:\\Registrazioni\\Registrazione budget.m4a",
         duration_sec=95.96,
         device="cpu",
         compute_type="int8",
@@ -198,11 +198,11 @@ def _payload(labels: dict[str, str] | None = None) -> dict[str, object]:
 
 
 def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
-    labels = {**display_labels(TURNS, "UNKNOWN_"), "UNKNOWN_SPEAKER_03": "Luca Bianchi"}
+    labels = {**display_labels(TURNS, "ANONYMOUS_"), "ANONYMOUS_SPEAKER_03": "Luca Bianchi"}
 
     payload = build_payload(
-        source_name="Riunione budget.m4a",
-        recording="C:\\Riunioni\\Riunione budget.m4a",
+        source_name="Registrazione budget.m4a",
+        recording="C:\\Registrazioni\\Registrazione budget.m4a",
         duration_sec=95.04,
         device="cpu",
         compute_type="int8",
@@ -213,7 +213,7 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         speakers=speaker_summaries(TURNS, labels, DIAGNOSTICS),
     )
 
-    assert payload["recording"] == "C:\\Riunioni\\Riunione budget.m4a"
+    assert payload["recording"] == "C:\\Registrazioni\\Registrazione budget.m4a"
     assert payload["device"] == "cpu"
     assert payload["compute_type"] == "int8"
     assert payload["warnings"] == ["Elaborata su CPU invece che su GPU. Nessuna GPU NVIDIA disponibile."]
@@ -244,7 +244,7 @@ def test_rename_speakers_changes_only_the_named_labels():
 
 def test_text_rendered_from_the_payload_matches_after_renaming():
     payload = _payload()
-    renamed_by_labels = _payload({**display_labels(TURNS, "UNKNOWN_"), "UNKNOWN_SPEAKER_03": "Luca Bianchi"})
+    renamed_by_labels = _payload({**display_labels(TURNS, "ANONYMOUS_"), "ANONYMOUS_SPEAKER_03": "Luca Bianchi"})
 
     text = render_payload_text(rename_speakers(payload, {"Persona 1": "Luca Bianchi"}))
 
@@ -255,10 +255,10 @@ def test_text_rendered_from_the_payload_matches_after_renaming():
 
 
 def test_output_paths_sit_next_to_the_audio(tmp_path):
-    txt_path, json_path = runner.output_paths(tmp_path / "Riunione budget.m4a", None)
+    txt_path, json_path = runner.output_paths(tmp_path / "Registrazione budget.m4a", None)
 
-    assert txt_path == tmp_path / "Riunione budget - trascrizione.txt"
-    assert json_path == tmp_path / "Riunione budget - trascrizione.json"
+    assert txt_path == tmp_path / "Registrazione budget - trascrizione.txt"
+    assert json_path == tmp_path / "Registrazione budget - trascrizione.json"
 
 
 def _cpu_settings() -> WhisperSettings:
@@ -283,7 +283,7 @@ def fake_pipeline(tmp_path, monkeypatch):
     """
     calls: list[object] = []
     monkeypatch.setattr(diarization, "load_audio", lambda _path: np.zeros(16000 * 95, dtype=np.float32))
-    monkeypatch.setattr(diarization, "transcribe_audio", lambda path: calls.append(("transcribe", Path(path).suffix)))
+    monkeypatch.setattr(diarization, "transcribe_recording", lambda path: calls.append(("transcribe", Path(path).suffix)))
     monkeypatch.setattr(diarization, "align_transcript", lambda _path: calls.append("align"))
     monkeypatch.setattr(
         diarization,
@@ -291,31 +291,31 @@ def fake_pipeline(tmp_path, monkeypatch):
         lambda _path, num_speakers=None: calls.append(("diarize", num_speakers)),
     )
 
-    def fake_identify(_path: str) -> tuple[str, str, str]:
-        calls.append("identify")
+    def fake_recognize(_path: str) -> tuple[str, str, str]:
+        calls.append("recognize")
         transcript_path = tmp_path / "artifacts" / "transcript.json"
         diagnostics_path = tmp_path / "artifacts" / "diagnostics.json"
         transcript_path.parent.mkdir(exist_ok=True)
         transcript_path.write_text(json.dumps({"date": None, "turns": TURNS}), encoding="utf-8")
         diagnostics_path.write_text(json.dumps(DIAGNOSTICS), encoding="utf-8")
-        return "identified.json", str(transcript_path), str(diagnostics_path)
+        return "recognized.json", str(transcript_path), str(diagnostics_path)
 
-    monkeypatch.setattr(diarization, "identify_speakers", fake_identify)
+    monkeypatch.setattr(diarization, "recognize_speakers", fake_recognize)
     monkeypatch.setattr(runner, "get_whisper_settings", _cpu_settings)
-    monkeypatch.setattr(runner, "get_speaker_settings", lambda: SpeakerSettings(unknown_prefix="UNKNOWN_"))
+    monkeypatch.setattr(runner, "get_speaker_settings", lambda: SpeakerSettings(anonymous_prefix="ANONYMOUS_"))
     return calls
 
 
 def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch, capsys, fake_pipeline):
-    audio = tmp_path / "Riunione di prova è.m4a"
+    audio = tmp_path / "Registrazione di prova è.m4a"
     audio.write_bytes(b"not decoded: load_audio is faked")
     monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("transcribing asks nothing"))
 
     summary = runner.run(str(audio), speakers=3)
 
-    assert fake_pipeline == [("transcribe", ".wav"), "align", ("diarize", 3), "identify"]
-    txt_path = tmp_path / "Riunione di prova è - trascrizione.txt"
-    json_path = tmp_path / "Riunione di prova è - trascrizione.json"
+    assert fake_pipeline == [("transcribe", ".wav"), "align", ("diarize", 3), "recognize"]
+    txt_path = tmp_path / "Registrazione di prova è - trascrizione.txt"
+    json_path = tmp_path / "Registrazione di prova è - trascrizione.json"
     text = txt_path.read_text(encoding="utf-8")
     assert "[00:01:06] Persona 1: io direi di rimandare" in text
     assert "ATTENZIONE: elaborata su CPU" in text
@@ -342,12 +342,12 @@ def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch
 def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
-    monkeypatch.setenv("MEETING_HOST_PATHS", f"{tmp_path.as_posix()}=C:\\Riunioni|")
+    monkeypatch.setenv("TRANSCRIBER_HOST_PATHS", f"{tmp_path.as_posix()}=C:\\Registrazioni|")
 
     summary = runner.run(str(audio))
 
-    assert summary["transcript_json"] == "C:\\Riunioni\\call - trascrizione.json"
-    assert summary["recording"] == "C:\\Riunioni\\call.mp4"
+    assert summary["transcript_json"] == "C:\\Registrazioni\\call - trascrizione.json"
+    assert summary["recording"] == "C:\\Registrazioni\\call.mp4"
 
 
 def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipeline):
@@ -357,7 +357,7 @@ def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipe
     def out_of_memory(_path: str) -> None:
         raise RuntimeError("CUDA failed with error out of memory")
 
-    monkeypatch.setattr(diarization, "transcribe_audio", out_of_memory)
+    monkeypatch.setattr(diarization, "transcribe_recording", out_of_memory)
 
     summary = runner.run(str(audio))
 
@@ -378,10 +378,10 @@ def test_run_explains_a_file_without_readable_audio(tmp_path, monkeypatch, capsy
 
     summary = runner.run(str(document))
 
-    assert summary["status"] == "unreadable_audio"
-    assert "Non riesco a leggere l'audio di 'Verbale.docx'" in summary["message"]
+    assert summary["status"] == "unreadable_recording"
+    assert "Non riesco a leggere la registrazione 'Verbale.docx'" in summary["message"]
     output = capsys.readouterr()
-    assert "Non riesco a leggere l'audio di 'Verbale.docx'" in output.err
+    assert "Non riesco a leggere la registrazione 'Verbale.docx'" in output.err
     assert "Traceback" not in output.out + output.err
     assert fake_pipeline == []
 

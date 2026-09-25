@@ -15,12 +15,12 @@ from src.asr.utils.config import (
     get_whisper_settings,
     get_paths_settings,
     get_matching_settings,
-    get_embedding_settings,
+    get_voiceprint_settings,
 )
-from src.asr.embeddings import load_embedding_model
+from src.asr.voiceprints import load_voiceprint_model
 from src.asr.utils.diarization_utils import (
     diarization_to_dataframe,
-    speaker_embeddings_from_diarization_with_diagnostics,
+    speaker_voiceprints_from_diarization_with_diagnostics,
     match_speakers_to_names_with_diagnostics,
     relabel_whisperx_segments,
 )
@@ -33,7 +33,7 @@ _whisper_settings = get_whisper_settings()
 _diarization_settings = get_diarization_settings()
 _paths_settings = get_paths_settings()
 _matching_settings = get_matching_settings()
-_embedding_settings = get_embedding_settings()
+_voiceprint_settings = get_voiceprint_settings()
 
 device = _whisper_settings.device
 compute_type = _whisper_settings.compute_type
@@ -47,7 +47,7 @@ vad_chunk_size = _whisper_settings.vad_chunk_size
 min_speakers = _diarization_settings.min_speakers
 max_speakers = _diarization_settings.max_speakers
 
-sample_rate_default = _embedding_settings.sample_rate
+sample_rate_default = _voiceprint_settings.sample_rate
 
 DIARIZED_TRANSCRIPTS_DIR = _paths_settings.diarized_transcripts_dir
 matching_threshold_default = _matching_settings.threshold
@@ -66,7 +66,7 @@ def _get_configured_input_path(input_path: str | None = None) -> str:
     return configured_input_path
 
 
-def _validate_audio_input(input_path: str) -> None:
+def _validate_recording(input_path: str) -> None:
     if not os.path.isfile(input_path):
         raise RuntimeError(f"Input audio file not found: {input_path}")
 
@@ -110,24 +110,24 @@ def _raw_diarization_records(diarize_df: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _merge_identification_diagnostics(
+def _merge_recognition_diagnostics(
     *,
     threshold: float,
-    enroll_db: dict[str, list[np.ndarray]] | None,
-    embedding_diagnostics: dict[str, Any],
+    library_voiceprints: dict[str, list[np.ndarray]] | None,
+    voiceprint_diagnostics: dict[str, Any],
     match_diagnostics: dict[str, Any],
 ) -> dict[str, Any]:
     speakers: dict[str, Any] = {}
-    embedding_speakers = embedding_diagnostics.get("speakers", {})
+    voiceprint_speakers = voiceprint_diagnostics.get("speakers", {})
     match_speakers = match_diagnostics.get("speakers", {})
-    for speaker in sorted(set(embedding_speakers) | set(match_speakers)):
+    for speaker in sorted(set(voiceprint_speakers) | set(match_speakers)):
         speakers[speaker] = {
-            **embedding_speakers.get(speaker, {}),
+            **voiceprint_speakers.get(speaker, {}),
             **match_speakers.get(speaker, {}),
         }
 
     return {
-        "enrolled_speakers": sorted(enroll_db.keys()) if enroll_db else [],
+        "library_people": sorted(library_voiceprints.keys()) if library_voiceprints else [],
         "settings": {
             "threshold": float(threshold),
             "margin": _matching_settings.margin,
@@ -142,18 +142,18 @@ def _merge_identification_diagnostics(
     }
 
 
-def save_speaker_identification_diagnostics(
+def save_speaker_recognition_diagnostics(
     diagnostics: dict[str, Any],
     input_path: str,
 ) -> str:
     project_paths = project_paths_from_settings(_paths_settings)
-    out_path = project_paths.speaker_identification_diagnostics_path(input_path)
+    out_path = project_paths.speaker_recognition_diagnostics_path(input_path)
     return save_json_artifact(diagnostics, out_path)
 
 
-def _clear_speaker_identification_window_clips(input_path: str) -> None:
+def _clear_speaker_recognition_window_clips(input_path: str) -> None:
     project_paths = project_paths_from_settings(_paths_settings)
-    windows_dir = Path(project_paths.speaker_identification_windows_dir)
+    windows_dir = Path(project_paths.speaker_recognition_windows_dir)
     if not windows_dir.exists():
         return
     stem = safe_filename_part(file_stem(input_path))
@@ -249,22 +249,22 @@ def load_diarized_words(input_path: str) -> dict[str, Any]:
     return load_json_artifact(project_paths.diarized_words_path(input_path), description="diarized words artifact")
 
 
-def save_identified_words(identified_result: dict[str, Any], input_path: str) -> str:
+def save_recognized_words(recognized_result: dict[str, Any], input_path: str) -> str:
     project_paths = project_paths_from_settings(_paths_settings)
-    return save_json_artifact(identified_result, project_paths.identified_words_path(input_path))
+    return save_json_artifact(recognized_result, project_paths.recognized_words_path(input_path))
 
 
-def load_identified_words(input_path: str) -> dict[str, Any]:
+def load_recognized_words(input_path: str) -> dict[str, Any]:
     project_paths = project_paths_from_settings(_paths_settings)
-    return load_json_artifact(project_paths.identified_words_path(input_path), description="identified words artifact")
+    return load_json_artifact(project_paths.recognized_words_path(input_path), description="recognized words artifact")
 
 
-def load_audio(audio_path: str) -> np.ndarray:
+def load_audio(recording_path: str) -> np.ndarray:
     """Load an audio file into a NumPy array via WhisperX."""
     try:
-        return whisperx.load_audio(audio_path)
+        return whisperx.load_audio(recording_path)
     except Exception as exc:  # pragma: no cover - depends on backend decoder errors
-        raise RuntimeError(f"Failed to load input audio '{audio_path}'.") from exc
+        raise RuntimeError(f"Failed to load input audio '{recording_path}'.") from exc
 
 
 def transcribe(audio: np.ndarray) -> dict:
@@ -360,10 +360,10 @@ def run_diarization(
     return result, diarize_df
 
 
-def transcribe_audio(input_path: str | None = None) -> str:
+def transcribe_recording(input_path: str | None = None) -> str:
     input_path = _get_configured_input_path(input_path)
     ensure_data_directories(_paths_settings)
-    _validate_audio_input(input_path)
+    _validate_recording(input_path)
     audio = load_audio(input_path)
     asr_result = transcribe(audio)
     return save_raw_asr_result(asr_result, input_path)
@@ -372,7 +372,7 @@ def transcribe_audio(input_path: str | None = None) -> str:
 def align_transcript(input_path: str | None = None) -> str:
     input_path = _get_configured_input_path(input_path)
     ensure_data_directories(_paths_settings)
-    _validate_audio_input(input_path)
+    _validate_recording(input_path)
     audio = load_audio(input_path)
     asr_result = load_raw_asr_result(input_path)
     aligned_result = align(audio, asr_result)
@@ -382,7 +382,7 @@ def align_transcript(input_path: str | None = None) -> str:
 def diarize_transcript(input_path: str | None = None, num_speakers: int | None = None) -> tuple[str, str]:
     input_path = _get_configured_input_path(input_path)
     ensure_data_directories(_paths_settings)
-    _validate_audio_input(input_path)
+    _validate_recording(input_path)
     audio = load_audio(input_path)
     aligned_result = load_aligned_transcript(input_path)
     diarized_result, diarize_df = run_diarization(audio, aligned_result, num_speakers=num_speakers)
@@ -391,58 +391,58 @@ def diarize_transcript(input_path: str | None = None, num_speakers: int | None =
     return segments_path, diarized_words_path
 
 
-def identify_speakers(
+def recognize_speakers(
     input_path: str | None = None,
     threshold: float | None = None,
 ) -> tuple[str, str, str]:
     input_path = _get_configured_input_path(input_path)
     ensure_data_directories(_paths_settings)
-    _validate_audio_input(input_path)
+    _validate_recording(input_path)
     threshold = matching_threshold_default if threshold is None else threshold
     diarization_segments = load_diarization_segments(input_path)
     diarize_df = diarization_to_dataframe(diarization_segments)
     diarized_result = load_diarized_words(input_path)
-    mapping, identified_result, diagnostics_path = _identify_speakers_in_diarized_result(
+    mapping, recognized_result, diagnostics_path = _recognize_speakers_in_diarized_result(
         input_path,
         diarize_df,
         diarized_result,
         threshold=threshold,
     )
-    identified_words_path = save_identified_words(identified_result, input_path)
-    transcript_path = save_diarized_transcript({}, identified_result, input_path)
+    recognized_words_path = save_recognized_words(recognized_result, input_path)
+    transcript_path = save_diarized_transcript({}, recognized_result, input_path)
     log_event(
         logger,
-        "speaker identification artifacts saved",
+        "speaker recognition artifacts saved",
         level=logging.DEBUG,
         speaker_count=len(mapping),
-        identified_words_path=identified_words_path,
+        recognized_words_path=recognized_words_path,
         transcript_path=transcript_path,
         diagnostics_path=diagnostics_path,
     )
-    return identified_words_path, transcript_path, diagnostics_path
+    return recognized_words_path, transcript_path, diagnostics_path
 
 
-def _identify_speakers_in_diarized_result(
-    audio_path: str,
+def _recognize_speakers_in_diarized_result(
+    recording_path: str,
     diarize_df: Any,
     result: dict,
     threshold: float = matching_threshold_default,
 ) -> tuple[dict[str, str], dict, str]:
-    """Match diarized speakers against enrolled identities and relabel segments."""
-    from src.asr.enrollment import load_enrollment_embeddings
+    """Match diarized speakers against the people in the voice library and relabel segments."""
+    from src.asr.voice_library import load_library_voiceprints
 
     mapping: dict[str, str] = {}
     project_paths = project_paths_from_settings(_paths_settings)
-    diagnostics_path = project_paths.speaker_identification_diagnostics_path(audio_path)
-    _clear_speaker_identification_window_clips(audio_path)
-    enroll_db = load_enrollment_embeddings(device)
-    if enroll_db is None:
+    diagnostics_path = project_paths.speaker_recognition_diagnostics_path(recording_path)
+    _clear_speaker_recognition_window_clips(recording_path)
+    library_voiceprints = load_library_voiceprints(device)
+    if library_voiceprints is None:
         raw_diarization = _raw_diarization_records(diarize_df)
         diarized_speakers = list(dict.fromkeys(record["speaker"] for record in raw_diarization))
         # Nobody to recognize, but the windows are still recorded: naming a speaker later cuts clips from them.
-        window_result = speaker_embeddings_from_diarization_with_diagnostics(
+        window_result = speaker_voiceprints_from_diarization_with_diagnostics(
             None,
-            audio_path,
+            recording_path,
             diarize_df,
             device=device,
             window_sec=_matching_settings.window_sec,
@@ -456,31 +456,31 @@ def _identify_speakers_in_diarized_result(
             threshold=threshold,
             margin=_matching_settings.margin,
             diarized_speakers=diarized_speakers,
-            embedding_rejection_reasons={speaker: "enrollment_not_configured" for speaker in diarized_speakers},
+            voiceprint_rejection_reasons={speaker: "voice_library_empty" for speaker in diarized_speakers},
         )
         mapping = match_result.mapping
         result = relabel_whisperx_segments(result, mapping)
-        diagnostics = _merge_identification_diagnostics(
+        diagnostics = _merge_recognition_diagnostics(
             threshold=threshold,
-            enroll_db=None,
-            embedding_diagnostics=window_result.diagnostics,
+            library_voiceprints=None,
+            voiceprint_diagnostics=window_result.diagnostics,
             match_diagnostics=match_result.diagnostics,
         )
-        diagnostics_path = save_speaker_identification_diagnostics(diagnostics, audio_path)
+        diagnostics_path = save_speaker_recognition_diagnostics(diagnostics, recording_path)
     else:
-        emb_model = None
+        voiceprint_model = None
         try:
             log_event(
                 logger,
-                "speaker identification started",
+                "speaker recognition started",
                 level=logging.DEBUG,
-                enrolled_speaker_count=len(enroll_db),
+                library_person_count=len(library_voiceprints),
             )
-            emb_model = load_embedding_model(device)
+            voiceprint_model = load_voiceprint_model(device)
 
-            embedding_result = speaker_embeddings_from_diarization_with_diagnostics(
-                emb_model,
-                audio_path,
+            voiceprint_result = speaker_voiceprints_from_diarization_with_diagnostics(
+                voiceprint_model,
+                recording_path,
                 diarize_df,
                 device=device,
                 window_sec=_matching_settings.window_sec,
@@ -488,8 +488,8 @@ def _identify_speakers_in_diarized_result(
                 min_total_speech_sec=_matching_settings.min_total_speech_sec,
                 max_windows_per_spk=_matching_settings.max_windows_per_spk,
                 diagnostics_clip_path_factory=(
-                    lambda clip_index, speaker, duration_sec: project_paths.speaker_identification_window_clip_path(
-                        audio_path,
+                    lambda clip_index, speaker, duration_sec: project_paths.speaker_recognition_window_clip_path(
+                        recording_path,
                         clip_index,
                         speaker,
                         duration_sec,
@@ -499,41 +499,41 @@ def _identify_speakers_in_diarized_result(
                 ),
                 sample_rate=sample_rate_default,
             )
-            spk_embeddings = embedding_result.embeddings
-            embedding_rejection_reasons = {
-                speaker: str(speaker_diag["embedding_rejection_reason"])
-                for speaker, speaker_diag in embedding_result.diagnostics.get("speakers", {}).items()
-                if speaker_diag.get("embedding_rejection_reason")
+            speaker_voiceprints = voiceprint_result.voiceprints
+            voiceprint_rejection_reasons = {
+                speaker: str(speaker_diag["voiceprint_rejection_reason"])
+                for speaker, speaker_diag in voiceprint_result.diagnostics.get("speakers", {}).items()
+                if speaker_diag.get("voiceprint_rejection_reason")
             }
 
             match_result = match_speakers_to_names_with_diagnostics(
-                spk_embeddings,
-                enroll_db,
+                speaker_voiceprints,
+                library_voiceprints,
                 threshold=threshold,
                 margin=_matching_settings.margin,
-                diarized_speakers=list(embedding_result.diagnostics.get("speakers", {}).keys()),
-                embedding_rejection_reasons=embedding_rejection_reasons,
+                diarized_speakers=list(voiceprint_result.diagnostics.get("speakers", {}).keys()),
+                voiceprint_rejection_reasons=voiceprint_rejection_reasons,
             )
             mapping = match_result.mapping
             result = relabel_whisperx_segments(result, mapping)
-            diagnostics = _merge_identification_diagnostics(
+            diagnostics = _merge_recognition_diagnostics(
                 threshold=threshold,
-                enroll_db=enroll_db,
-                embedding_diagnostics=embedding_result.diagnostics,
+                library_voiceprints=library_voiceprints,
+                voiceprint_diagnostics=voiceprint_result.diagnostics,
                 match_diagnostics=match_result.diagnostics,
             )
-            diagnostics_path = save_speaker_identification_diagnostics(diagnostics, audio_path)
+            diagnostics_path = save_speaker_recognition_diagnostics(diagnostics, recording_path)
             log_event(
                 logger,
-                "speaker identification completed",
+                "speaker recognition completed",
                 level=logging.DEBUG,
-                diarized_speaker_count=len(spk_embeddings),
+                diarized_speaker_count=len(speaker_voiceprints),
                 matched_speaker_count=len(mapping),
                 diagnostics_path=diagnostics_path,
             )
         finally:
-            if emb_model is not None:
-                del emb_model
+            if voiceprint_model is not None:
+                del voiceprint_model
             _clear_cuda_cache_if_needed()
 
     return mapping, result, diagnostics_path

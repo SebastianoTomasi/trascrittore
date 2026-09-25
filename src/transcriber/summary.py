@@ -15,15 +15,16 @@ from typing import Any, Callable
 from src.utils.logging_setup import get_logger
 
 
-logger = get_logger("meeting.summary")
+logger = get_logger("transcriber.summary")
 
-# Set by the launcher: "/audio=C:\\Users\\...|/voci=C:\\...|", one container folder per mount.
-HOST_PATHS_ENV = "MEETING_HOST_PATHS"
+# Set by the launcher: "/recording=C:\\Users\\...|/voci=C:\\...|", one container folder per mount.
+HOST_PATHS_ENV = "TRANSCRIBER_HOST_PATHS"
 
 OK = "ok"
 INVALID_ARGUMENTS = "invalid_arguments"
+INVALID_SETTINGS = "invalid_settings"
 FILE_NOT_FOUND = "file_not_found"
-UNREADABLE_AUDIO = "unreadable_audio"
+UNREADABLE_RECORDING = "unreadable_recording"
 GPU_OUT_OF_MEMORY = "gpu_out_of_memory"
 INTERRUPTED = "interrupted"
 FAILED = "error"

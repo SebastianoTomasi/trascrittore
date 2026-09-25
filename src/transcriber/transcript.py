@@ -9,15 +9,15 @@ from typing import Any
 from src.asr.utils.output_format import format_offset
 
 
-UNKNOWN_DISPLAY_PREFIX = "Persona"
-UNATTRIBUTED_LABEL = "UNKNOWN"
+ANONYMOUS_DISPLAY_PREFIX = "Persona"
+UNATTRIBUTED_LABEL = "UNATTRIBUTED"
 UNATTRIBUTED_DISPLAY = "Voce non attribuita"
 CPU_WARNING_PREFIX = "Elaborata su CPU invece che su GPU. "
-# Windows that were, or could have been, embedded to recognize a speaker; "skipped" ones failed.
-_USABLE_WINDOW_STATUSES = {"embedded", "not_embedded"}
+# Windows whose voiceprint was, or could have been, computed to recognize a speaker; "skipped" ones failed.
+_USABLE_WINDOW_STATUSES = {"computed", "not_computed"}
 
 
-def display_labels(turns: list[dict[str, Any]], unknown_prefix: str) -> dict[str, str]:
+def display_labels(turns: list[dict[str, Any]], anonymous_prefix: str) -> dict[str, str]:
     """
     Map raw speaker labels to what the reader sees.
 
@@ -25,30 +25,30 @@ def display_labels(turns: list[dict[str, Any]], unknown_prefix: str) -> dict[str
     in order of first appearance.
     """
     labels: dict[str, str] = {}
-    unknown_count = 0
+    anonymous_count = 0
     for turn in turns:
         speaker = turn["speaker"]
         if speaker in labels:
             continue
         if speaker == UNATTRIBUTED_LABEL:
             labels[speaker] = UNATTRIBUTED_DISPLAY
-        elif unknown_prefix and speaker.startswith(unknown_prefix):
-            unknown_count += 1
-            labels[speaker] = f"{UNKNOWN_DISPLAY_PREFIX} {unknown_count}"
+        elif anonymous_prefix and speaker.startswith(anonymous_prefix):
+            anonymous_count += 1
+            labels[speaker] = f"{ANONYMOUS_DISPLAY_PREFIX} {anonymous_count}"
         else:
             labels[speaker] = speaker
     return labels
 
 
 def is_anonymous(display_label: str) -> bool:
-    return display_label.startswith(f"{UNKNOWN_DISPLAY_PREFIX} ")
+    return display_label.startswith(f"{ANONYMOUS_DISPLAY_PREFIX} ")
 
 
-def participant_names(labels: dict[str, str]) -> list[str]:
+def speaker_names(labels: dict[str, str]) -> list[str]:
     """
-    Return the people in the meeting, in order of first appearance.
+    Return the speakers of the recording, in order of first appearance.
 
-    Words the diarization gave to nobody are not a participant.
+    Words the diarization gave to nobody are not a speaker.
     """
     return [name for name in dict.fromkeys(labels.values()) if name != UNATTRIBUTED_DISPLAY]
 
@@ -65,7 +65,7 @@ def _windows(speaker_diag: dict[str, Any]) -> list[dict[str, float]]:
     return [
         {"start": round(float(window["start"]), 3), "end": round(float(window["end"]), 3)}
         for window in speaker_diag.get("windows", [])
-        if window.get("embedding_status") in _USABLE_WINDOW_STATUSES
+        if window.get("voiceprint_status") in _USABLE_WINDOW_STATUSES
     ]
 
 
@@ -128,20 +128,20 @@ def render_text(
     for turn in turns:
         display = labels[turn["speaker"]]
         speech_by_display[display] = speech_by_display.get(display, 0.0) + _speech_sec([turn])
-    participants = ", ".join(
-        f"{name} ({_format_minutes(speech_by_display[name])})" for name in participant_names(labels)
+    speakers = ", ".join(
+        f"{name} ({_format_minutes(speech_by_display[name])})" for name in speaker_names(labels)
     )
 
     lines = [
         f"Trascrizione di: {source_name}",
         f"Durata: {format_offset(duration_sec)} · Elaborata su {'GPU' if device.startswith('cuda') else 'CPU'}",
-        f"Partecipanti: {participants or 'nessuno'}",
+        f"Chi parla: {speakers or 'nessuno'}",
     ]
     if fallback_reason:
         lines.append(f"ATTENZIONE: elaborata su CPU invece che su GPU. {fallback_reason}")
     lines.append("")
     if not turns:
-        lines.append("(Nell'audio non è stato trovato parlato.)")
+        lines.append("(Nella registrazione non è stato trovato parlato.)")
     for turn in turns:
         lines.append(f"[{format_offset(turn['start_sec'])}] {labels[turn['speaker']]}: {turn['text']}")
         lines.append("")

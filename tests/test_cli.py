@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.meeting import cli, library, naming, recognition_check, runner
+from src.transcriber import cli, library, naming, recognition_check, runner
 
 
 def _last_json(stdout: str) -> dict[str, object]:
@@ -22,18 +22,18 @@ def test_transcribe_passes_its_arguments_and_prints_the_summary(monkeypatch, cap
 
     monkeypatch.setattr(runner, "run", fake_run)
 
-    assert cli.main(["transcribe", "Riunione.m4a", "--speakers", "3", "--out-dir", "/out"]) == 0
-    assert calls == [("Riunione.m4a", 3, "/out")]
+    assert cli.main(["transcribe", "Registrazione.m4a", "--speakers", "3", "--out-dir", "/out"]) == 0
+    assert calls == [("Registrazione.m4a", 3, "/out")]
     assert _last_json(capsys.readouterr().out)["status"] == "ok"
 
 
 @pytest.mark.parametrize(
     "argv",
     [
-        ["transcribe", "Riunione.m4a", "--speakers", "0"],
-        ["transcribe", "Riunione.m4a", "--ask-names"],
+        ["transcribe", "Registrazione.m4a", "--speakers", "0"],
+        ["transcribe", "Registrazione.m4a", "--ask-names"],
         ["transcribe"],
-        ["name", "Riunione - trascrizione.json"],
+        ["name", "Registrazione - trascrizione.json"],
         ["rinomina"],
         [],
     ],

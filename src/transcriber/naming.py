@@ -17,9 +17,9 @@ import numpy as np
 import soundfile as sf
 
 from src.asr.utils.config import get_library_settings, get_matching_settings
-from src.meeting import library, voices
-from src.meeting.summary import FILE_NOT_FOUND, INVALID_ARGUMENTS, OK, CommandError, guarded, host_path, say
-from src.meeting.transcript import is_anonymous, rename_speakers, render_payload_text, speaker_labels
+from src.transcriber import library, voices
+from src.transcriber.summary import FILE_NOT_FOUND, INVALID_ARGUMENTS, OK, CommandError, guarded, host_path, say
+from src.transcriber.transcript import is_anonymous, rename_speakers, render_payload_text, speaker_labels
 
 
 NAME_COMMAND = "name"
@@ -120,7 +120,10 @@ def _candidates(
     """
     windows = _speaker_windows(payload, label)
     if windows is None:
-        return [], "La trascrizione è di una versione precedente, che non salvava i tratti di ogni voce."
+        return [], (
+            "La trascrizione è di una versione precedente, che non salvava i tratti di ogni voce: "
+            "per aggiungere la voce alla libreria, trascrivi di nuovo la registrazione e dalle il nome lì."
+        )
     if not windows:
         return [], "Questa voce parla troppo poco da sola per ricavarne clip."
     window_sec = get_matching_settings().window_sec

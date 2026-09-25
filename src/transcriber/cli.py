@@ -11,7 +11,8 @@ import argparse
 import sys
 from typing import Any
 
-from src.meeting.summary import INVALID_ARGUMENTS, emit, failure, say
+from src.settings import SettingsError
+from src.transcriber.summary import INVALID_ARGUMENTS, INVALID_SETTINGS, emit, failure, say
 
 
 class _UsageError(Exception):
@@ -37,7 +38,7 @@ def _positive_int(value: str) -> int:
 
 def _parser() -> _Parser:
     parser = _Parser(
-        prog="python -m src.meeting",
+        prog="python -m src.transcriber",
         description=(
             "Trascrive registrazioni in italiano con i nomi di chi parla. Nessun comando fa domande: "
             "le righe per le persone vanno su stderr, e ogni comando finisce con un riepilogo JSON su stdout. "
@@ -47,7 +48,7 @@ def _parser() -> _Parser:
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMANDO", parser_class=_Parser)
 
     transcribe = commands.add_parser("transcribe", help="trascrive una registrazione")
-    transcribe.add_argument("audio", help="file audio o video (wav, mp3, m4a, mp4, ...)")
+    transcribe.add_argument("recording", help="file audio o video (wav, mp3, m4a, mp4, ...)")
     transcribe.add_argument("--speakers", type=_positive_int, default=None, help="numero esatto di persone che parlano")
     transcribe.add_argument("--out-dir", default=None, help="cartella dei file di uscita (default: quella della registrazione)")
 
@@ -75,7 +76,7 @@ def _parser() -> _Parser:
         help="verifica quanto bene la libreria delle voci riconosce le persone, e suggerisce una soglia",
         description=(
             "Usa le voci a cui una persona ha dato il nome nelle trascrizioni del PC: senza --pair né --missing, "
-            "le trascrizioni da cui sono state aggiunte clip alla libreria. Non cambia mai meeting.ini."
+            "le trascrizioni da cui sono state aggiunte clip alla libreria. Non cambia mai trascrittore.ini."
         ),
     )
     check.add_argument(
@@ -104,25 +105,25 @@ def _parser() -> _Parser:
 
 
 def _transcribe(args: argparse.Namespace) -> dict[str, Any]:
-    from src.meeting import runner
+    from src.transcriber import runner
 
-    return runner.run(args.audio, speakers=args.speakers, out_dir=args.out_dir)
+    return runner.run(args.recording, speakers=args.speakers, out_dir=args.out_dir)
 
 
 def _name(args: argparse.Namespace) -> dict[str, Any]:
-    from src.meeting import naming
+    from src.transcriber import naming
 
     return naming.name_speakers(args.transcript, args.names, recording=args.recording)
 
 
 def _listen(args: argparse.Namespace) -> dict[str, Any]:
-    from src.meeting import naming
+    from src.transcriber import naming
 
     return naming.prepare_listening(args.transcript, args.labels, recording=args.recording, out_dir=args.out_dir)
 
 
 def _check(args: argparse.Namespace) -> dict[str, Any]:
-    from src.meeting import recognition_check
+    from src.transcriber import recognition_check
 
     # Only a run with nothing given looks for transcripts itself: the launcher always says what it found.
     given = bool(args.pair or args.missing)
@@ -132,8 +133,8 @@ def _check(args: argparse.Namespace) -> dict[str, Any]:
 
 def _trial(args: argparse.Namespace) -> dict[str, Any]:
     from src.asr.utils.config import get_library_settings
-    from src.meeting import library
-    from src.meeting.summary import guarded
+    from src.transcriber import library
+    from src.transcriber.summary import guarded
 
     return guarded(
         "trial",
@@ -160,4 +161,9 @@ def main(argv: list[str] | None = None) -> int:
 
     init_logging()
     load_dotenv()
+    try:
+        import src.asr.utils.config  # noqa: F401 - reads the settings once, before the command runs
+    except SettingsError as exc:
+        say(f"Errore: {exc}")
+        return emit(failure(args.command, INVALID_SETTINGS, str(exc)))
     return emit(_COMMANDS[args.command](args))

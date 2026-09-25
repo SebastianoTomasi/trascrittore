@@ -12,17 +12,15 @@ from src.paths import (
     DEFAULT_DIARIZATION_SEGMENTS_DIR,
     DEFAULT_DIARIZED_TRANSCRIPTS_DIR,
     DEFAULT_DIARIZED_WORDS_DIR,
-    DEFAULT_ENROLLMENT_DIR,
-    DEFAULT_IDENTIFIED_WORDS_DIR,
+    DEFAULT_VOICE_LIBRARY_DIR,
+    DEFAULT_RECOGNIZED_WORDS_DIR,
     DEFAULT_RAW_ASR_DIR,
-    DEFAULT_SPEAKER_IDENTIFICATION_DIAGNOSTICS_DIR,
-    DEFAULT_SPEAKER_IDENTIFICATION_WINDOWS_DIR,
+    DEFAULT_SPEAKER_RECOGNITION_DIAGNOSTICS_DIR,
+    DEFAULT_SPEAKER_RECOGNITION_WINDOWS_DIR,
     normalize_path,
     project_paths_from_settings,
 )
-
-
-CONFIG_PATH = os.getenv("MEETING_CONFIG", "meeting.ini")
+from src.settings import load_settings
 
 
 def _normalize_path(value: str) -> str:
@@ -32,21 +30,8 @@ def _normalize_path(value: str) -> str:
     return normalize_path(value)
 
 
-def _load_config() -> configparser.ConfigParser:
-    """
-    Load the INI configuration once and return a shared ConfigParser.
-    """
-    parser = configparser.ConfigParser(interpolation=None)
-    read_files = parser.read(CONFIG_PATH, encoding="utf-8")
-    if not read_files:
-        raise RuntimeError(
-            f"Config file not found: {CONFIG_PATH}. Copy docker/meeting.ini to meeting.ini and adapt its paths, "
-            "or point MEETING_CONFIG at another file."
-        )
-    return parser
-
-
-config: configparser.ConfigParser = _load_config()
+# Read once per process: the defaults inside the transcriber, with the person's trascrittore.ini on top.
+config: configparser.ConfigParser = load_settings()
 
 
 def _parse_bool(raw_value: str, *, field_name: str) -> bool:
@@ -79,7 +64,7 @@ class DiarizationSettings:
 
 
 @dataclass(frozen=True)
-class EmbeddingSettings:
+class VoiceprintSettings:
     model_id: str
     sample_rate: int
 
@@ -92,15 +77,15 @@ class VadSettings:
 @dataclass(frozen=True)
 class PathsSettings:
     input_path: str
-    enrollment_dir: str = DEFAULT_ENROLLMENT_DIR
+    voice_library_dir: str = DEFAULT_VOICE_LIBRARY_DIR
     raw_asr_dir: str = DEFAULT_RAW_ASR_DIR
     aligned_transcripts_dir: str = DEFAULT_ALIGNED_TRANSCRIPTS_DIR
     diarization_segments_dir: str = DEFAULT_DIARIZATION_SEGMENTS_DIR
     diarized_words_dir: str = DEFAULT_DIARIZED_WORDS_DIR
-    identified_words_dir: str = DEFAULT_IDENTIFIED_WORDS_DIR
+    recognized_words_dir: str = DEFAULT_RECOGNIZED_WORDS_DIR
     diarized_transcripts_dir: str = DEFAULT_DIARIZED_TRANSCRIPTS_DIR
-    speaker_identification_diagnostics_dir: str = DEFAULT_SPEAKER_IDENTIFICATION_DIAGNOSTICS_DIR
-    speaker_identification_windows_dir: str = DEFAULT_SPEAKER_IDENTIFICATION_WINDOWS_DIR
+    speaker_recognition_diagnostics_dir: str = DEFAULT_SPEAKER_RECOGNITION_DIAGNOSTICS_DIR
+    speaker_recognition_windows_dir: str = DEFAULT_SPEAKER_RECOGNITION_WINDOWS_DIR
     cache_dir: str = DEFAULT_CACHE_DIR
 
 
@@ -117,7 +102,7 @@ class MatchingSettings:
 
 @dataclass(frozen=True)
 class SpeakerSettings:
-    unknown_prefix: str
+    anonymous_prefix: str
 
 
 @dataclass(frozen=True)
@@ -186,19 +171,19 @@ def get_diarization_settings() -> DiarizationSettings:
     )
 
 
-def get_embedding_settings() -> EmbeddingSettings:
+def get_voiceprint_settings() -> VoiceprintSettings:
     """
-    Return embedding-model configuration used for speaker identification.
+    Return voiceprint-model configuration used for speaker recognition.
     """
-    return EmbeddingSettings(
-        model_id=config["embedding"]["model_id"],
-        sample_rate=int(config["embedding"]["sample_rate"]),
+    return VoiceprintSettings(
+        model_id=config["voiceprint"]["model_id"],
+        sample_rate=int(config["voiceprint"]["sample_rate"]),
     )
 
 
 def get_vad_settings() -> VadSettings:
     """
-    Return the minimum audio duration worth embedding.
+    Return the minimum audio duration worth voiceprint.
     """
     return VadSettings(min_duration_sec=float(config["vad"]["min_duration_sec"]))
 
@@ -210,29 +195,29 @@ def get_paths_settings() -> PathsSettings:
     output = config["paths_output"]
     return PathsSettings(
         input_path=_normalize_path(config["paths"].get("input_path", "")),
-        enrollment_dir=_normalize_path(config["paths"].get("enrollment_dir", DEFAULT_ENROLLMENT_DIR)),
+        voice_library_dir=_normalize_path(config["paths"].get("voice_library_dir", DEFAULT_VOICE_LIBRARY_DIR)),
         raw_asr_dir=_normalize_path(output.get("raw_asr_dir", DEFAULT_RAW_ASR_DIR)),
         aligned_transcripts_dir=_normalize_path(output.get("aligned_transcripts_dir", DEFAULT_ALIGNED_TRANSCRIPTS_DIR)),
         diarization_segments_dir=_normalize_path(
             output.get("diarization_segments_dir", DEFAULT_DIARIZATION_SEGMENTS_DIR)
         ),
         diarized_words_dir=_normalize_path(output.get("diarized_words_dir", DEFAULT_DIARIZED_WORDS_DIR)),
-        identified_words_dir=_normalize_path(output.get("identified_words_dir", DEFAULT_IDENTIFIED_WORDS_DIR)),
+        recognized_words_dir=_normalize_path(output.get("recognized_words_dir", DEFAULT_RECOGNIZED_WORDS_DIR)),
         diarized_transcripts_dir=_normalize_path(
             output.get("diarized_transcripts_dir", DEFAULT_DIARIZED_TRANSCRIPTS_DIR)
         ),
-        speaker_identification_diagnostics_dir=_normalize_path(
-            output.get("speaker_identification_diagnostics_dir", DEFAULT_SPEAKER_IDENTIFICATION_DIAGNOSTICS_DIR)
+        speaker_recognition_diagnostics_dir=_normalize_path(
+            output.get("speaker_recognition_diagnostics_dir", DEFAULT_SPEAKER_RECOGNITION_DIAGNOSTICS_DIR)
         ),
-        speaker_identification_windows_dir=_normalize_path(
-            output.get("speaker_identification_windows_dir", DEFAULT_SPEAKER_IDENTIFICATION_WINDOWS_DIR)
+        speaker_recognition_windows_dir=_normalize_path(
+            output.get("speaker_recognition_windows_dir", DEFAULT_SPEAKER_RECOGNITION_WINDOWS_DIR)
         ),
         cache_dir=_normalize_path(output.get("cache_dir", DEFAULT_CACHE_DIR)),
     )
 
 
-def get_enrollment_cache_path(paths: PathsSettings | None = None) -> str:
-    return project_paths_from_settings(paths or get_paths_settings()).enrollment_cache_path
+def get_voiceprint_cache_path(paths: PathsSettings | None = None) -> str:
+    return project_paths_from_settings(paths or get_paths_settings()).voiceprint_cache_path
 
 
 def get_data_directories(paths: PathsSettings | None = None) -> tuple[str, ...]:
@@ -255,13 +240,13 @@ def get_matching_settings() -> MatchingSettings:
     """
     section = config["matching"]
     settings = MatchingSettings(
-        threshold=float(section.get("threshold", "0.68")),
-        margin=float(section.get("margin", "0.05")),
-        window_sec=float(section.get("window_sec", "10.0")),
-        min_window_sec=float(section.get("min_window_sec", "2.0")),
-        min_total_speech_sec=float(section.get("min_total_speech_sec", "4.0")),
-        max_windows_per_spk=int(section.get("max_windows_per_spk", "12")),
-        save_window_clips=_parse_bool(section.get("save_window_clips", "false"), field_name="matching.save_window_clips"),
+        threshold=float(section["threshold"]),
+        margin=float(section["margin"]),
+        window_sec=float(section["window_sec"]),
+        min_window_sec=float(section["min_window_sec"]),
+        min_total_speech_sec=float(section["min_total_speech_sec"]),
+        max_windows_per_spk=int(section["max_windows_per_spk"]),
+        save_window_clips=_parse_bool(section["save_window_clips"], field_name="matching.save_window_clips"),
     )
     if settings.window_sec <= 0:
         raise RuntimeError("matching.window_sec must be greater than zero.")
@@ -278,24 +263,22 @@ def get_matching_settings() -> MatchingSettings:
 
 def get_speaker_settings() -> SpeakerSettings:
     """
-    Return speaker-label formatting settings for unknown speakers.
+    Return speaker-label formatting settings for anonymous speakers.
     """
-    # unknown_prefix may legitimately be empty; default to empty string if missing.
+    # anonymous_prefix may legitimately be empty; default to empty string if missing.
     section = config["speaker"] if "speaker" in config else {}
-    unknown_prefix = section.get("unknown_prefix", "").strip()
-    return SpeakerSettings(unknown_prefix=unknown_prefix)
+    anonymous_prefix = section.get("anonymous_prefix", "").strip()
+    return SpeakerSettings(anonymous_prefix=anonymous_prefix)
 
 
 def get_library_settings() -> LibrarySettings:
     """
     Return the clip selection used when naming a speaker adds clips to the voice library.
-
-    A meeting.ini written before this section existed gets the defaults.
     """
-    section = config["library"] if "library" in config else {}
+    section = config["library"]
     settings = LibrarySettings(
-        keep_clips=int(section.get("keep_clips", "8")),
-        min_consistency=float(section.get("min_consistency", "0.60")),
+        keep_clips=int(section["keep_clips"]),
+        min_consistency=float(section["min_consistency"]),
     )
     if settings.keep_clips <= 0:
         raise RuntimeError("library.keep_clips must be greater than zero.")

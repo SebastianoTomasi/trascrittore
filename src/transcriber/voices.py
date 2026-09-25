@@ -33,7 +33,7 @@ def load_recording(path: str | os.PathLike[str]) -> np.ndarray:
 
 class Voiceprints:
     """
-    Embed windows and clips with the model recognition uses, loading it on first use.
+    Compute voiceprints of windows and clips with the model recognition uses, loading it on first use.
     """
 
     def __init__(self) -> None:
@@ -41,18 +41,18 @@ class Voiceprints:
 
     def _loaded_model(self) -> Any:
         if self._model is None:
-            from src.asr.embeddings import load_embedding_model
+            from src.asr.voiceprints import load_voiceprint_model
 
-            self._model = load_embedding_model(DEVICE)
+            self._model = load_voiceprint_model(DEVICE)
         return self._model
 
     def of_windows(self, audio: np.ndarray, windows: list[dict[str, float]]) -> list[np.ndarray | None]:
         """
-        Return one normalized voiceprint per window, or None where the window cannot be embedded.
+        Return one normalized voiceprint per window, or None where none can be computed.
         """
         from pyannote.core import Segment
 
-        from src.asr.embeddings import embed_audio_waveform, normalize_embed
+        from src.asr.voiceprints import compute_voiceprint, normalize_voiceprint
 
         model = self._loaded_model()
         min_window_sec = get_matching_settings().min_window_sec
@@ -60,8 +60,8 @@ class Voiceprints:
         for window in windows:
             try:
                 voiceprints.append(
-                    normalize_embed(
-                        embed_audio_waveform(
+                    normalize_voiceprint(
+                        compute_voiceprint(
                             model,
                             audio,
                             device=DEVICE,
@@ -75,9 +75,9 @@ class Voiceprints:
         return voiceprints
 
     def of_clip(self, path: str | os.PathLike[str]) -> np.ndarray:
-        from src.asr.embeddings import embed_audio_waveform, normalize_embed
+        from src.asr.voiceprints import compute_voiceprint, normalize_voiceprint
 
-        return normalize_embed(embed_audio_waveform(self._loaded_model(), load_recording(path), device=DEVICE))
+        return normalize_voiceprint(compute_voiceprint(self._loaded_model(), load_recording(path), device=DEVICE))
 
 
 def cut(audio: np.ndarray, start: float, end: float) -> np.ndarray:

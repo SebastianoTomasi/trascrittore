@@ -8,22 +8,22 @@ from src.asr.utils.config import (
     PathsSettings,
     ensure_data_directories,
     get_data_directories,
-    get_enrollment_cache_path,
+    get_voiceprint_cache_path,
 )
 
 
 def _paths() -> PathsSettings:
     return PathsSettings(
-        input_path="riunioni/input.m4a",
-        enrollment_dir="data/voci",
+        input_path="registrazioni/input.m4a",
+        voice_library_dir="data/voci",
         raw_asr_dir="data/work/raw/asr",
         aligned_transcripts_dir="data/work/raw/aligned",
         diarization_segments_dir="data/work/raw/diarization_segments",
         diarized_words_dir="data/work/raw/diarized_words",
-        identified_words_dir="data/work/raw/identified_words",
+        recognized_words_dir="data/work/raw/recognized_words",
         diarized_transcripts_dir="data/work/transcripts",
-        speaker_identification_diagnostics_dir="data/work/raw/speaker_identification",
-        speaker_identification_windows_dir="data/work/raw/speaker_identification_windows",
+        speaker_recognition_diagnostics_dir="data/work/raw/speaker_recognition",
+        speaker_recognition_windows_dir="data/work/raw/speaker_recognition_windows",
         cache_dir="cache",
     )
 
@@ -37,10 +37,10 @@ def test_data_directories_include_complete_runtime_structure():
         os.path.normpath("data/work/raw/aligned"),
         os.path.normpath("data/work/raw/diarization_segments"),
         os.path.normpath("data/work/raw/diarized_words"),
-        os.path.normpath("data/work/raw/identified_words"),
+        os.path.normpath("data/work/raw/recognized_words"),
         os.path.normpath("data/work/transcripts"),
-        os.path.normpath("data/work/raw/speaker_identification"),
-        os.path.normpath("data/work/raw/speaker_identification_windows"),
+        os.path.normpath("data/work/raw/speaker_recognition"),
+        os.path.normpath("data/work/raw/speaker_recognition_windows"),
     }
 
 
@@ -65,7 +65,7 @@ def test_ensure_data_directories_creates_missing_structure(monkeypatch):
             shutil.rmtree(scratch_dir)
 
 
-def test_enrollment_cache_path_is_derived_from_paths_settings():
-    assert os.path.normpath(get_enrollment_cache_path(_paths())) == os.path.normpath(
-        "cache/embeddings/enrollment_cache.json"
+def test_voiceprint_cache_path_is_derived_from_paths_settings():
+    assert os.path.normpath(get_voiceprint_cache_path(_paths())) == os.path.normpath(
+        "cache/voiceprints/voiceprint_cache.json"
     )
