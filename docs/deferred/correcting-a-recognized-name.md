@@ -34,3 +34,8 @@ Options discussed:
   right person;
 - in both cases, consider whether the wrongly matched person's pool needs a
   look, since it scored above the threshold for someone else's voice.
+
+[Adding clips from a recognized speaker](clips-from-recognized-speakers.md)
+uses the same command on the same labels, and
+[listening to recognized speakers](listening-to-more-clips.md) is the first
+step of both; design them together.
