@@ -1,6 +1,6 @@
 # Clip selection and recognition check
 
-**Status:** proposed
+**Status:** accepted
 
 ## Scope
 
@@ -14,9 +14,10 @@ mechanics satisfy are in
 
 - [Rules](../product/naming-grows-the-library.md#rules) — the trial's
   criterion, the number of clips kept, and what the recognition check reports.
-- [Where added clips go](../architecture/library-growth-architecture.md#where-added-clips-go)
-  and [Recognition check](../architecture/library-growth-architecture.md#recognition-check)
-  — the pool layout and the check's inputs.
+- [Where added clips go](../architecture/library-growth-architecture.md#where-added-clips-go),
+  [Clip record](../architecture/library-growth-architecture.md#clip-record) and
+  [Recognition check](../architecture/library-growth-architecture.md#recognition-check)
+  — the pool layout, how a recorded clip is identified, and the check's inputs.
 
 ## How recognition scores today
 
@@ -63,8 +64,11 @@ numbers.
 
 ## Trial bookkeeping
 
-Each saved clip's vote is stored beside the pool when the clip is saved. A clip
-the person deleted is simply missing from the pool.
+Each saved clip's vote is written to the clip record, `clip.json` in the
+person's `registrazioni` folder, when the clip is saved. To find a recorded
+clip, the trial looks for its file name anywhere in that person's folder. A
+clip the person deleted is simply missing from the whole folder. A
+named speaker counts once for each person, recording and label.
 
 After 10 named speakers, a command reports where the votes and the person's
 deletions disagree. The only disagreement that matters is a clip the selection
@@ -76,12 +80,16 @@ the code, which starts a new trial.
 ## Recognition check
 
 The check repeats the 2026-09-24 calibration as the `check` command
-(`src/transcriber/recognition_check.py`). It works on the named transcripts found
-on the PC:
+(`src/transcriber/recognition_check.py`). It works on the named transcripts
+listed in the clip records, together with any given to it; the launcher finds
+them by reading every `clip.json` in the library.
 
 1. **Each recording in turn.** For each named transcript, the check removes from
    the library the clips cut from that same recording, so no speaker matches
-   their own clips. It then scores the transcript's speakers and counts:
+   their own clips. A clip's recording is the part of its file name before the
+   window's time, so moving a clip or losing its record changes nothing. Two
+   recordings with the same name lose each other's clips too, which only makes
+   the check stricter. It then scores the transcript's speakers and counts:
    - right names;
    - wrong names;
    - people in the library who stayed "Persona N".
@@ -107,4 +115,6 @@ clips to hear, the 0.03 slack and the 10 missing voices) and postponed:
 
 - [the cap on clips per person](../../../deferred/clip-cap-per-person.md), and
   which clips to drop when it is reached;
-- [how many additions trigger a new run of the check](../../../deferred/recognition-check-cadence.md).
+- [how many additions trigger a new run of the check](../../../deferred/recognition-check-cadence.md);
+- [score normalization](../../../deferred/recognition-score-normalization.md),
+  which would change the score scale and require a new calibration.

@@ -49,6 +49,11 @@ A short audio file in which only one person speaks, kept in a voice library so
 that the transcriber can recognize that person.  
 _Avoid_: enrollment clip
 
+**Pool**  
+A group of one person's voice clips that recognition compares as one, through
+their average: the clips directly in the person's folder, or those in one of
+its subfolders, such as a folder for one recording condition.
+
 **Voiceprint**  
 What the transcriber derives from a person's voice clips to recognize their
 voice.  
@@ -58,6 +63,15 @@ _Avoid_: embedding
 A test of recognition on one PC: it replays that PC's named recordings against
 its own voice library and reports which speakers the current settings would
 name wrongly or leave anonymous.
+
+**Listening check**  
+The step of naming in which the person hears the best voice clips of a speaker
+and confirms whose voice it is, before any clip joins the voice library.
+
+**Trial period**  
+The time during which every clip cut from a named speaker is kept, until the
+person's deletions show that the transcriber's own choice of clips can be
+trusted.
 
 **Agent**  
 An AI coding assistant, such as Claude Code or Codex, that uses the transcriber

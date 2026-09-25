@@ -1,6 +1,6 @@
 # Naming a speaker grows the voice library
 
-**Status:** proposed
+**Status:** accepted
 
 ## Scope
 
@@ -37,9 +37,10 @@ Other concerns live elsewhere:
   — the clips come from the speaker windows that the transcript records.
 - [Parity between people and agents](../../agent-cli/product/transcribing-through-an-agent.md#parity-between-people-and-agents)
   — every step below exists both for a person and as a command for an agent.
-
-These inputs are accepted. This artifact stays proposed while its
-[security screening](#security-screening) is open.
+- [Data classes](../../../product/personal-data-and-obligations.md#data-classes)
+  — the voice clips, clip records, listening files and trial result this
+  feature produces are declared there, with where they live and how long they
+  stay.
 
 ## Capability
 
@@ -75,7 +76,10 @@ recognize that person.
 - **Trial period.**
   - Every candidate clip is saved together with the selection's vote (keep or
     discard). Nothing is discarded automatically.
-  - The person deletes the clips they judge bad.
+  - The person deletes the clips they judge bad. They do not see the votes
+    while judging: deletions that followed the votes would prove nothing.
+  - Moving a clip elsewhere in the same person's folder, such as into a
+    condition folder, does not count as deleting it.
   - After 10 named speakers, if the selection never kept a clip the person
     deleted, the person is asked whether they listened to the added clips and
     deleted the bad ones. Only when they confirm does the selection start
@@ -101,7 +105,7 @@ recognize that person.
 
 - **A person** names speakers, listens, confirms, deletes bad clips and applies
   the threshold.
-- **An agent** proposes names, runs the commands, reports the selection's votes,
+- **An agent** proposes names, runs the commands, reports the trial's results,
   and opens clips in the player on the person's PC. It cannot judge a voice by
   ear.
 - **The maintainer** may help a person run the recognition check, as the
@@ -110,8 +114,10 @@ recognize that person.
 ## Data
 
 The feature handles voice clips cut from the person's own recordings. Voice
-clips are an existing term in `CONTEXT.md`. The recognition check reads named
-transcripts and their recordings. Nothing leaves the PC.
+clips are an existing term in `CONTEXT.md`. It also keeps a record of where
+each added clip came from, prepares listening files, and records the trial's
+result. The recognition check reads named transcripts and their recordings.
+Nothing leaves the PC.
 
 ## Preconditions
 
@@ -133,7 +139,8 @@ transcripts and their recordings. Nothing leaves the PC.
 - **No automatic naming.**
 - **No shared library.**
 - **No consent step,** per ADR 0002.
-- **No score normalization for now.** It was considered and postponed: the
+- **No score normalization for now.** It was considered and
+  [postponed](../../../deferred/recognition-score-normalization.md): the
   recognition check comes first, and normalization would be judged with it.
 - **No clips from speakers recognized automatically.**
 
@@ -151,20 +158,15 @@ describes, and postponed:
 
 ## Security screening
 
-`security-new-subject-or-data`: voice clips are a declared term, but this
-feature changes how they enter the library, from placement by hand to automatic
-on naming. [Data classes](../../../product/personal-data-and-obligations.md#data-classes)
-now covers the clips themselves: they stay in the voice library until someone
-removes them.
+`security-new-subject-or-data`: this feature adds no actor, but it adds data.
+Voice clips now also enter the library by naming, and the feature adds clip
+records, listening files and the trial result. The project-wide
+[Data classes](../../../product/personal-data-and-obligations.md#data-classes)
+were amended on 2026-09-25 to declare them, with where each lives and how long
+it stays.
 
-Two things the feature adds are not in that table yet, so this screening stays
-open:
-
-- **The listening files.** `ascolta Persona N.wav` holds a speaker's voice in
-  the transcriber's data folder on the PC (`%LOCALAPPDATA%\Trascrittore\ascolto`)
-  until the naming ends or the next listening.
-- **Each clip's record.** `clip.json` beside the clips keeps the paths of the
-  recording and the transcript each clip came from.
-
-Adding them changes an accepted Product artifact, so it goes through a change to
-that artifact.
+No Security control is added. Every new class stays on the PC, as
+[Processing stays on the PC](../../../product/transcriber-promise.md#processing-stays-on-the-pc)
+requires, and each class's lifetime is set in that table, as it is for
+voiceprints and working files. Where the person's own files go afterwards is
+theirs to decide, by [No use policy](../../../product/transcriber-promise.md#no-use-policy).

@@ -18,7 +18,8 @@ The clips added by naming, however, all go into one pool,
 states. The transcriber does not know a recording's condition, and one pool per
 recording would inflate scores.
 
-A measurement on the YIAN library on 2026-09-25, recorded in that section, found
+A measurement on the YIAN library on 2026-09-25, recorded in
+[ADR 0004](../adr/0004-added-clips-form-one-pool-per-person.md#evidence), found
 that grouping by condition moved scores by about 0.01. The difference between a
 condition present in the library and a new condition was about 0.09. On
 2026-09-25 the user chose the single pool, with condition folders made by hand.
