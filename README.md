@@ -111,6 +111,39 @@ powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\ex
   (`%USERPROFILE%\.claude\skills`) and Codex (`%USERPROFILE%\.agents\skills`),
   with the transcriber's folder written in.
 
+## Sharing with a new person
+
+1. Export into a folder of its own, not the folder you use the transcriber
+   from, which holds your settings and your voice library:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "$env:USERPROFILE\Desktop\Trascrittore da condividere"
+   ```
+
+2. Drag these eight files, from the browser, into the `trascrittore` shared
+   drive on Claror's Google Drive, and give the person access to it:
+   `trascrittore.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`,
+   `trascrittore.ps1`, `skill-trascrittore.md`, `LEGGIMI.md` and `LICENZE.md`.
+   `LICENZE.md` is required: the models' licenses ask for their credits in every
+   distribution. The `.tar` is about 7 GB, too big for an agent's Drive
+   connector, which passes file contents through the conversation.
+3. Leave out:
+   - `trascrittore.ini`: `Installa.bat` creates one on their PC;
+   - `voci`: each PC has its own library, and the launcher creates an empty one.
+     Yours holds other people's voices, which are biometric data, and each
+     `registrazioni/clip.json` holds paths of your recordings. As a starting
+     point, send separately only the clips of people who agree, such as your
+     own; they go into `voci\<Nome Cognome>` on the other PC.
+4. The person follows [docker/LEGGIMI.md](docker/LEGGIMI.md): install Docker
+   Desktop, download the files one by one (Drive splits a whole folder into
+   several zips), and run `Installa.bat`. They need Windows 10 or 11, about
+   30 GB free and, for speed, an NVIDIA GPU.
+
+For an update, export again and replace on Drive the files that changed, usually
+only `trascrittore.tar`, and tell the person which ones. They put them in the
+same folder and run `Installa.bat` again; their `voci` and `trascrittore.ini`
+stay as they are.
+
 ## Calibration
 
 `[matching]` uses threshold 0.575 and margin 0.10, calibrated on 2026-09-24 by
