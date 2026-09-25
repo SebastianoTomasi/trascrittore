@@ -99,6 +99,12 @@ def test_a_name_matching_a_library_folder_in_another_case_uses_the_folder(tmp_pa
 
 def test_clip_names_carry_the_recording_and_the_time():
     assert library.clip_filename("Registrazione budget.m4a", 754.6) == "Registrazione budget 00.12.34.wav"
+    assert library.clip_recording("Registrazione budget 00.12.34.wav") == "Registrazione budget"
+    assert library.clip_recording("Registrazione budget 00.12.34 - Copia.wav") == "Registrazione budget"
+    assert library.clip_recording(library.clip_filename("Registrazione 10.30.00.mp4", 5.0)) == "Registrazione 10.30.00"
+    # A clip placed by hand names no recording, even with a date in its name.
+    assert library.clip_recording("nota vocale.m4a") is None
+    assert library.clip_recording("nota vocale 24.09.2026.m4a") is None
 
 
 def _save(tmp_path, *, trial: bool, label: str = "Persona 2", recording: str = "Registrazione.m4a") -> list[str]:
@@ -185,6 +191,33 @@ def test_a_kept_clip_the_person_deleted_stops_the_trial(tmp_path):
     assert not status.passed
     assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Registrazione 3 00.00.10.wav", "consistency": 0.9}]
     assert not library.trial_status(tmp_path, SELECTION).passed
+
+
+def test_a_clip_moved_elsewhere_in_its_persons_folder_is_not_deleted(tmp_path):
+    _name_speakers(tmp_path, 10)
+    person = tmp_path / "Luca Bianchi"
+    (person / "macchina").mkdir()
+    (person / "registrazioni" / "Registrazione 3 00.00.10.wav").rename(person / "macchina" / "Registrazione 3 00.00.10.wav")
+    (person / "registrazioni" / "Registrazione 4 00.00.30.wav").rename(person / "Registrazione 4 00.00.30.wav")
+
+    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
+
+    assert status.disagreements == []
+    assert status.votes == {"keep": 10, "discard": 10, "discarded_but_kept_by_person": 10}
+    assert status.passed
+
+
+def test_a_clip_moved_into_another_persons_folder_counts_as_deleted(tmp_path):
+    _name_speakers(tmp_path, 10)
+    (tmp_path / "Anna Neri").mkdir()
+    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").rename(
+        tmp_path / "Anna Neri" / "Registrazione 3 00.00.10.wav"
+    )
+
+    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
+
+    assert not status.passed
+    assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Registrazione 3 00.00.10.wav", "consistency": 0.9}]
 
 
 def test_speakers_named_under_another_selection_start_a_new_trial(tmp_path):

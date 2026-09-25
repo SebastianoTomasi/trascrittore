@@ -4,8 +4,8 @@ The recognition check: how well this PC's voice library recognizes the people in
 It repeats the 2026-09-24 calibration as a command, with three precautions against fooling itself:
 
 1. only the voices a person named count as known: a name the transcriber gave by itself may be wrong;
-2. each recording is scored against the library without the clips cut from that recording, so no
-   speaker is matched against their own clips;
+2. each recording is scored against the library without the clips cut from that recording, known by
+   the recording's name at the start of their file names, so no speaker is matched against their own clips;
 3. voices missing from the library are simulated by removing one named person at a time.
 
 It suggests a threshold above every wrong name, with some slack, but never writes trascrittore.ini:
@@ -39,7 +39,7 @@ MIN_MISSING_FOR_SUGGESTION = 10
 # Accept every candidate that passes the margin: outcomes at any threshold follow from these.
 _NO_THRESHOLD = -1.0
 
-RecordingKey = tuple[str, float]
+RecordingKey = str
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class LibraryClip:
     person: str
     pool: str
     voiceprint: np.ndarray
-    # The recording the clip was cut from, when it came from naming a speaker.
+    # The recording the clip was cut from, read from its file name; None for a clip placed by hand.
     recording: RecordingKey | None = None
 
 
@@ -78,8 +78,10 @@ class Outcome:
     true_score: float | None
 
 
-def recording_key(file_name: str, duration_sec: float) -> RecordingKey:
-    return (file_name.casefold(), round(float(duration_sec), 1))
+def recording_key(recording_name: str) -> RecordingKey:
+    # Windows file names ignore case. Two recordings with the same name lose each other's clips too,
+    # which only makes the check stricter.
+    return recording_name.casefold()
 
 
 def library_pools(clips: list[LibraryClip], *, without_recording: RecordingKey | None = None) -> dict[str, list[np.ndarray]]:
@@ -189,11 +191,6 @@ def report(
 def _library_clips(library_dir: Path, voiceprints: voices.Voiceprints) -> list[LibraryClip]:
     from src.asr.voice_library import scan_voice_library
 
-    origins = {
-        path.resolve(): recording_key(origin["recording_file"], origin["recording_duration_sec"])
-        for _, path, origin in library.clip_records(library_dir)
-        if origin.get("recording_file") and origin.get("recording_duration_sec") is not None
-    }
     voice_library = scan_voice_library(str(library_dir))
     total = sum(len(clips) for pools in voice_library.values() for clips in pools.values())
     say(f"Calcolo le impronte delle {total} clip della libreria...")
@@ -206,7 +203,8 @@ def _library_clips(library_dir: Path, voiceprints: voices.Voiceprints) -> list[L
                 except (RuntimeError, ValueError):
                     say(f"  salto una clip illeggibile: {host_path(path)}")
                     continue
-                clips.append(LibraryClip(person, pool, voiceprint, origins.get(Path(path).resolve())))
+                recording = library.clip_recording(path)
+                clips.append(LibraryClip(person, pool, voiceprint, recording_key(recording) if recording else None))
     return clips
 
 
@@ -235,7 +233,7 @@ def _checked_recording(transcript: str, recording: str, voiceprints: voices.Voic
         computed = [voiceprint for voiceprint in voiceprints.of_windows(audio, speaker["windows"]) if voiceprint is not None]
         checked.append(CheckedSpeaker(label=speaker["label"], voiceprints=computed))
     return CheckedRecording(
-        name=payload["file"], key=recording_key(payload["file"], payload["duration_sec"]), speakers=checked
+        name=payload["file"], key=recording_key(library.recording_name(payload["file"])), speakers=checked
     )
 
 

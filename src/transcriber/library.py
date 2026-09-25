@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -46,6 +47,8 @@ _FULL_LENGTH_TOLERANCE_SEC = 0.01
 _MAX_NAME_LENGTH = 80
 _FOLDER_FORBIDDEN_CHARS = set('<>:"/\\|?*')
 _WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{device}{n}" for device in ("COM", "LPT") for n in range(1, 10)}
+# The recording's name and the window's time that start a clip's file name, as clip_filename writes them.
+_CLIP_NAME_RE = re.compile(r"(?P<recording>.+) \d{2,}\.\d{2}\.\d{2}(?!\d)")
 
 
 @dataclass
@@ -149,9 +152,27 @@ def library_dir() -> Path | None:
     return Path(configured).resolve() if configured else None
 
 
+def recording_name(recording_file: str) -> str:
+    """
+    Return the name that starts the file names of the clips cut from a recording.
+    """
+    return Path(recording_file).stem
+
+
 def clip_filename(recording_file: str, start: float) -> str:
     # A speaker's windows never overlap and last at least matching.min_window_sec, so seconds are enough.
-    return f"{Path(recording_file).stem} {format_offset(start).replace(':', '.')}.wav"
+    return f"{recording_name(recording_file)} {format_offset(start).replace(':', '.')}.wav"
+
+
+def clip_recording(clip_file: str | os.PathLike[str]) -> str | None:
+    """
+    Return the name of the recording a clip was cut from: the part of its file name before the window's time.
+
+    The name stays when the clip is moved, loses its record, or is copied with a suffix such as " - Copia".
+    A clip placed by hand has none.
+    """
+    match = _CLIP_NAME_RE.match(Path(clip_file).stem)
+    return match["recording"] if match else None
 
 
 def clips_folder(library_dir: str | os.PathLike[str], person: str) -> Path:
@@ -218,9 +239,17 @@ def save_clips(
     return saved
 
 
+def _files_by_name(folder: Path) -> dict[str, Path]:
+    # Windows file names ignore case.
+    return {name.casefold(): Path(root) / name for root, _, names in os.walk(folder) for name in names}
+
+
 def clip_records(library_dir: str | os.PathLike[str]) -> list[tuple[str, Path, dict[str, Any]]]:
     """
     Return (person, clip path, origin) for every clip ever saved from a recording, deleted or not.
+
+    A clip is found by its file name anywhere in its person's folder, since the person may move it into a
+    condition folder. The path of a clip the person deleted, or moved to another person, does not exist.
     """
     folder = Path(library_dir)
     if not folder.is_dir():
@@ -228,8 +257,10 @@ def clip_records(library_dir: str | os.PathLike[str]) -> list[tuple[str, Path, d
     records = []
     for person_dir in sorted(entry for entry in folder.iterdir() if entry.is_dir()):
         pool = person_dir / CLIPS_FOLDER
-        for filename, origin in _read_json(pool / CLIPS_RECORD, {}).items():
-            records.append((person_dir.name, pool / filename, origin))
+        origins = _read_json(pool / CLIPS_RECORD, {})
+        found = _files_by_name(person_dir) if origins else {}
+        for filename, origin in origins.items():
+            records.append((person_dir.name, found.get(filename.casefold(), pool / filename), origin))
     return records
 
 

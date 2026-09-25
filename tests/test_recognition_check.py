@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,10 +17,10 @@ def _voice(angle_deg: float) -> np.ndarray:
 
 
 LUCA, ANNA = 0.0, 60.0
-RECORDING = ("registrazione.m4a", 600.0)
+RECORDING = "registrazione"
 
 
-def _clip(person: str, angle: float, recording: tuple[str, float] | None = None) -> LibraryClip:
+def _clip(person: str, angle: float, recording: str | None = None) -> LibraryClip:
     pool = "registrazioni" if recording else "."
     return LibraryClip(person=person, pool=pool, voiceprint=_voice(angle), recording=recording)
 
@@ -53,7 +54,7 @@ def test_each_named_speaker_is_scored_against_the_rest_of_the_library():
 
 def test_clips_cut_from_the_recording_being_checked_are_left_out():
     own_clip = _clip("Luca", LUCA, recording=RECORDING)
-    other_clip = _clip("Luca", LUCA + 30, recording=("altra.m4a", 60.0))
+    other_clip = _clip("Luca", LUCA + 30, recording="altra")
 
     outcomes = check.evaluate([own_clip, other_clip, _clip("Anna", ANNA)], [_recording(("Luca", LUCA))], margin=0.10)
 
@@ -112,35 +113,29 @@ def test_no_suggestion_without_enough_voices_to_simulate_as_missing():
     assert check.report([], threshold=0.575, margin=0.10)["known_voices"]["count"] == 0
 
 
-def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path, monkeypatch):
+def _prepare_check(tmp_path, monkeypatch, *, clips: dict[str, float], speakers: list[dict[str, object]]) -> tuple[str, str]:
+    """
+    Fill the library with `clips`, each a voice at the given angle, and write a transcript of Registrazione.m4a
+    with `speakers`. In the recording, the window starting at 0 s holds Luca's voice and every other one Anna's.
+
+    Returns the transcript and the recording, as the launcher passes them to the check.
+    """
     library_dir = tmp_path / "voci"
-    for person, pool, clip in [("Luca Bianchi", ".", "nota.wav"), ("Anna Neri", ".", "nota.wav")]:
-        (library_dir / person).mkdir(parents=True)
-        (library_dir / person / clip).write_bytes(b"x")
+    for clip in clips:
+        (library_dir / clip).parent.mkdir(parents=True, exist_ok=True)
+        (library_dir / clip).write_bytes(b"x")
     folder = tmp_path / "Registrazioni"
     folder.mkdir()
     transcript = folder / "Registrazione - trascrizione.json"
     transcript.write_text(
-        json.dumps(
-            {
-                "file": "Registrazione.m4a",
-                "duration_sec": 60.0,
-                "speakers": [
-                    {"label": "Luca Bianchi", "named": True, "windows": [{"start": 0.0, "end": 10.0}]},
-                    {"label": "Anna Neri", "named": True, "windows": [{"start": 10.0, "end": 20.0}]},
-                    # Recognized by the transcriber, never confirmed by a person: not trusted.
-                    {"label": "Marco Verdi", "windows": [{"start": 20.0, "end": 30.0}]},
-                ],
-                "turns": [],
-            }
-        ),
+        json.dumps({"file": "Registrazione.m4a", "duration_sec": 60.0, "speakers": speakers, "turns": []}),
         encoding="utf-8",
     )
     (folder / "Registrazione.m4a").write_bytes(b"x")
 
     class FakeVoiceprints:
         def of_clip(self, path):
-            return _voice(LUCA if "Luca" in str(path) else ANNA)
+            return _voice(clips[Path(path).relative_to(library_dir).as_posix()])
 
         def of_windows(self, _audio, windows):
             return [_voice(LUCA if window["start"] == 0.0 else ANNA) for window in windows]
@@ -148,11 +143,49 @@ def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path
     monkeypatch.setattr(library, "library_dir", lambda: library_dir)
     monkeypatch.setattr(voices, "Voiceprints", FakeVoiceprints)
     monkeypatch.setattr(voices, "load_recording", lambda _path: np.zeros(16000 * 60, dtype=np.float32))
+    return str(transcript), str(folder / "Registrazione.m4a")
 
-    summary = check.run_check([(str(transcript), str(folder / "Registrazione.m4a"))], missing=["C:\\Vecchia - trascrizione.json"])
+
+def test_the_check_command_reads_named_transcripts_and_their_recordings(tmp_path, monkeypatch):
+    pair = _prepare_check(
+        tmp_path,
+        monkeypatch,
+        clips={"Luca Bianchi/nota.wav": LUCA, "Anna Neri/nota.wav": ANNA},
+        speakers=[
+            {"label": "Luca Bianchi", "named": True, "windows": [{"start": 0.0, "end": 10.0}]},
+            {"label": "Anna Neri", "named": True, "windows": [{"start": 10.0, "end": 20.0}]},
+            # Recognized by the transcriber, never confirmed by a person: not trusted.
+            {"label": "Marco Verdi", "windows": [{"start": 20.0, "end": 30.0}]},
+        ],
+    )
+
+    summary = check.run_check([pair], missing=["C:\\Vecchia - trascrizione.json"])
 
     assert summary["status"] == "ok"
     assert summary["recordings_checked"] == 1
     assert summary["skipped"] == [{"transcript": "C:\\Vecchia - trascrizione.json", "reason": "file non trovato"}]
     assert summary["current"]["right"] == 2
     assert summary["current"]["wrong"] == 0
+
+
+def test_clips_cut_from_the_checked_recording_are_left_out_even_when_moved_and_without_a_record(tmp_path, monkeypatch):
+    pair = _prepare_check(
+        tmp_path,
+        monkeypatch,
+        clips={
+            # Cut from this recording, moved into a condition folder, and no clip.json left: the name tells.
+            "Luca Bianchi/macchina/Registrazione 00.00.00.wav": LUCA,
+            "Luca Bianchi/nota.wav": LUCA + 30,
+            "Anna Neri/nota.wav": ANNA,
+        },
+        speakers=[
+            {"label": "Luca Bianchi", "named": True, "windows": [{"start": 0.0, "end": 10.0}]},
+            {"label": "Anna Neri", "named": True, "windows": [{"start": 10.0, "end": 20.0}]},
+        ],
+    )
+
+    summary = check.run_check([pair])
+
+    # Luca's voice meets only the clip placed by hand, 30 degrees away: his own clip would score 1.
+    assert summary["current"]["right"] == 2
+    assert summary["known_voices"]["min"] == pytest.approx(np.cos(np.radians(30)), abs=1e-3)
