@@ -44,11 +44,21 @@ def _turn_time(recording_start: datetime | None, seconds_from_start: float) -> s
     return _format_turn_timestamp(recording_start, seconds_from_start)
 
 
+class Word(NamedTuple):
+    text: str
+    start: float
+    end: float
+
+
 class SpeakerTurn(NamedTuple):
     speaker: str
     start: float
     end: float
-    words: list[str]
+    words: list[Word]
+
+
+def _turn(speaker: str, words: list[Word]) -> SpeakerTurn:
+    return SpeakerTurn(speaker, words[0].start, max(word.end for word in words), words)
 
 
 def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str, float, float]]:
@@ -121,6 +131,78 @@ def _smooth_short_turns(
     return smoothed
 
 
+_SENTENCE_ENDS = (".", "?", "!", "…")
+_CLOSING_MARKS = "\"'»”)]"
+# A diarization boundary a few hundred milliseconds off moves one to three words across it.
+_MAX_EDGE_WORDS = 3
+
+
+def _ends_sentence(word: Word) -> bool:
+    return word.text.rstrip(_CLOSING_MARKS).endswith(_SENTENCE_ENDS)
+
+
+def _first_letter(word: Word) -> str:
+    return next((char for char in word.text if char.isalpha()), "")
+
+
+def _starts_lowercase(word: Word) -> bool:
+    return _first_letter(word).islower()
+
+
+def _sentence_end_at_start(earlier: SpeakerTurn, later: SpeakerTurn) -> int:
+    """
+    Count the words that open `later` and close the sentence `earlier` left unfinished, or 0.
+    """
+    if _ends_sentence(earlier.words[-1]) or not _starts_lowercase(later.words[0]):
+        return 0
+    for count, word in enumerate(later.words[:_MAX_EDGE_WORDS], start=1):
+        if _ends_sentence(word):
+            return count
+    return 0
+
+
+def _sentence_start_at_end(earlier: SpeakerTurn, later: SpeakerTurn) -> int:
+    """
+    Count the words that close `earlier` and open the sentence `later` goes on with, or 0.
+    """
+    if not _starts_lowercase(later.words[0]):
+        return 0
+    last_end = max((i for i, word in enumerate(earlier.words) if _ends_sentence(word)), default=-1)
+    count = len(earlier.words) - last_end - 1
+    if not 0 < count <= _MAX_EDGE_WORDS or not _first_letter(earlier.words[-count]).isupper():
+        return 0
+    return count
+
+
+def _move_sentence_edges(turns: list[SpeakerTurn]) -> list[SpeakerTurn]:
+    """
+    Move to the neighbouring turn the edge of a sentence that the diarization put on the wrong side.
+
+    Punctuation on both sides of a change of speaker must agree; see
+    docs/implementation/speaker-turn-boundaries.md.
+    """
+    moved: list[SpeakerTurn] = []
+    for turn in turns:
+        if moved:
+            earlier = moved[-1]
+            back = _sentence_end_at_start(earlier, turn)
+            forward = _sentence_start_at_end(earlier, turn)
+            # When both apply, either speaker could have said the sentence: leave it where it is.
+            if back and not forward:
+                moved[-1] = _turn(earlier.speaker, earlier.words + turn.words[:back])
+                if back == len(turn.words):
+                    continue
+                turn = _turn(turn.speaker, turn.words[back:])
+            elif forward and not back:
+                turn = _turn(turn.speaker, earlier.words[-forward:] + turn.words)
+                if forward == len(earlier.words):
+                    moved.pop()
+                else:
+                    moved[-1] = _turn(earlier.speaker, earlier.words[:-forward])
+        moved.append(turn)
+    return _merge_adjacent_turns(moved)
+
+
 def _speaker_turns(mapping: Dict[str, str], result: Dict[str, Any]) -> list[SpeakerTurn]:
     turns: list[SpeakerTurn] = []
     current: SpeakerTurn | None = None
@@ -131,15 +213,15 @@ def _speaker_turns(mapping: Dict[str, str], result: Dict[str, Any]) -> list[Spea
         if current is None or speaker != current.speaker:
             if current is not None:
                 turns.append(current)
-            current = SpeakerTurn(speaker, start, end, [word])
+            current = SpeakerTurn(speaker, start, end, [Word(word, start, end)])
         else:
-            current.words.append(word)
+            current.words.append(Word(word, start, end))
             current = current._replace(end=max(current.end, end))
 
     if current is not None:
         turns.append(current)
 
-    return _smooth_short_turns(turns)
+    return _move_sentence_edges(_smooth_short_turns(turns))
 
 
 def build_transcript_turns(
@@ -160,7 +242,7 @@ def build_transcript_turns(
             "time": _turn_time(recording_start, turn.start),
             "start_sec": round(turn.start, 3),
             "end_sec": round(turn.end, 3),
-            "text": " ".join(turn.words).strip(),
+            "text": " ".join(word.text for word in turn.words).strip(),
         }
         for turn in _speaker_turns(mapping or {}, result)
     ]

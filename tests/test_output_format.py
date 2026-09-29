@@ -61,6 +61,93 @@ def test_build_transcript_turns_extends_end_when_smoothing_short_flips():
     ]
 
 
+def _turns(*words: tuple[str, str]) -> list[dict[str, object]]:
+    """
+    Build turns from (word, speaker) pairs, one second per word.
+    """
+    result = {
+        "segments": [
+            {"start": 0.0, "words": [_word(word, i, i + 0.8, speaker) for i, (word, speaker) in enumerate(words)]}
+        ]
+    }
+    return build_transcript_turns(result, "call.m4a")
+
+
+def test_the_end_of_a_sentence_moves_back_to_the_speaker_who_began_it():
+    turns = _turns(
+        ("allora", "Alice"),
+        ("ci", "Alice"),
+        ("vediamo", "Alice"),
+        ("la", "Alice"),
+        ("prossima", "Alice"),
+        ("settimana.", "Bob"),
+        ("Intanto", "Bob"),
+        ("partiamo", "Bob"),
+        ("dal", "Bob"),
+        ("budget.", "Bob"),
+    )
+
+    assert [(turn["speaker"], turn["text"], turn["start_sec"], turn["end_sec"]) for turn in turns] == [
+        ("Alice", "allora ci vediamo la prossima settimana.", 0.0, 5.8),
+        ("Bob", "Intanto partiamo dal budget.", 6.0, 9.8),
+    ]
+
+
+def test_the_start_of_a_sentence_moves_forward_to_the_speaker_who_says_it():
+    turns = _turns(
+        ("Ci", "Alice"),
+        ("vediamo", "Alice"),
+        ("domani.", "Alice"),
+        ("Intanto", "Alice"),
+        ("partiamo", "Alice"),
+        ("dal", "Bob"),
+        ("budget", "Bob"),
+        ("di", "Bob"),
+        ("marzo.", "Bob"),
+    )
+
+    assert [(turn["speaker"], turn["text"], turn["start_sec"], turn["end_sec"]) for turn in turns] == [
+        ("Alice", "Ci vediamo domani.", 0.0, 2.8),
+        ("Bob", "Intanto partiamo dal budget di marzo.", 3.0, 8.8),
+    ]
+
+
+def test_a_sentence_split_so_either_speaker_could_have_said_it_stays_where_it_is():
+    turns = _turns(
+        ("Ci", "Alice"),
+        ("vediamo", "Alice"),
+        ("domani.", "Alice"),
+        ("Intanto", "Alice"),
+        ("partiamo", "Alice"),
+        ("dal", "Bob"),
+        ("budget.", "Bob"),
+    )
+
+    assert [(turn["speaker"], turn["text"]) for turn in turns] == [
+        ("Alice", "Ci vediamo domani. Intanto partiamo"),
+        ("Bob", "dal budget."),
+    ]
+
+
+def test_words_stay_when_punctuation_on_both_sides_does_not_agree():
+    turns = _turns(
+        ("Vieni", "Alice"),
+        ("anche", "Alice"),
+        ("tu", "Alice"),
+        ("Sì.", "Bob"),
+        ("Arrivo", "Bob"),
+        ("subito.", "Bob"),
+        ("va", "Carla"),
+        ("bene.", "Carla"),
+    )
+
+    assert [(turn["speaker"], turn["text"]) for turn in turns] == [
+        ("Alice", "Vieni anche tu"),
+        ("Bob", "Sì. Arrivo subito."),
+        ("Carla", "va bene."),
+    ]
+
+
 def test_build_transcript_turns_drops_asr_boilerplate():
     result = {
         "segments": [

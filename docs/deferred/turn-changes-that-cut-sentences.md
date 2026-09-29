@@ -1,6 +1,6 @@
 # Turn changes that cut sentences
 
-**State:** open
+**State:** closed
 **Scope:** project
 **Destination:** implementation
 **Revisit when:** the grouping of words into turns in
@@ -47,3 +47,10 @@ The same smoothing absorbs short interjections by other speakers, such as a
 "Sì, sì" said over someone else, into the surrounding turn. That is intended,
 since it removes false flips, and a fix for boundaries must not bring those
 flips back.
+
+## Resolution
+
+On 2026-09-25 the user chose to move a fragment of at most three words only
+when the punctuation of both turns agrees, without using pauses, and to rely on
+unit tests rather than a measurement on real recordings. The rule is in
+[Where one speaker's turn ends and the next begins](../implementation/speaker-turn-boundaries.md#the-rule).
