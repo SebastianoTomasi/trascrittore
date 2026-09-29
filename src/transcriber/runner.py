@@ -182,7 +182,8 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
     if not turns:
         _say("Nella registrazione non ho trovato parlato.")
     _say(f"Chi parla: {', '.join(speaker_names(labels)) or 'nessuno'}")
-    _say(f"Accanto alla registrazione trovi '{txt_path.name}' e '{json_path.name}'.")
+    where = f"Nella cartella {host_path(txt_path.parent)}" if out_dir else "Accanto alla registrazione"
+    _say(f"{where} trovi '{txt_path.name}' e '{json_path.name}'.")
     if settings.fallback_reason:
         for line in _cpu_alert(settings):
             _say(line)

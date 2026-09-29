@@ -350,6 +350,20 @@ def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_p
     assert summary["recording"] == "C:\\Registrazioni\\call.mp4"
 
 
+def test_run_names_the_output_folder_when_one_is_given(tmp_path, monkeypatch, capsys, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    out_dir = tmp_path / "uscita"
+    out_dir.mkdir()
+    monkeypatch.setenv("TRANSCRIBER_HOST_PATHS", f"{out_dir.as_posix()}=C:\\Trascrizioni|")
+
+    runner.run(str(audio), out_dir=str(out_dir))
+
+    err = capsys.readouterr().err
+    assert "Nella cartella C:\\Trascrizioni trovi 'call - trascrizione.txt' e 'call - trascrizione.json'." in err
+    assert "Accanto alla registrazione" not in err
+
+
 def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipeline):
     audio = tmp_path / "call.wav"
     audio.write_bytes(b"x")
