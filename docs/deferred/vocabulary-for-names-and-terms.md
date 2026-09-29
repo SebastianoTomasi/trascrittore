@@ -1,6 +1,6 @@
 # Vocabulary for names and terms
 
-**State:** open
+**State:** closed
 **Scope:** project
 **Destination:** product
 **Revisit when:** before anyone is told to write names in `initial_prompt`, or
@@ -43,3 +43,13 @@ Questions to settle:
 A possible outcome: the names in the voice library, plus an optional list in
 `trascrittore.ini`, given to Whisper with an echo removal that keeps real
 occurrences, and the list documented in `LEGGIMI.md`.
+
+## Resolution
+
+Dropped on 2026-09-25. The user chose not to give Whisper names or terms:
+a misspelt name is accepted, since the context of the transcript makes it
+clear. `initial_prompt` stays "Registrazione in italiano.".
+The prompt cleaning described above has since changed: it removes only the
+whole prompt, as
+[Removing what Whisper invents from the transcript](../implementation/transcript-cleaning.md#what-is-removed)
+states.

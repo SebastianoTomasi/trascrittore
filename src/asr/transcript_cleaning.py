@@ -6,7 +6,8 @@ from typing import Any
 
 _PUNCTUATION_RE = re.compile(r"[^\w\s]", re.UNICODE)
 _WHITESPACE_RE = re.compile(r"\s+")
-_PROMPT_PATTERN_CACHE: dict[str, list[re.Pattern[str]]] = {}
+_PROMPT_PATTERN_CACHE: dict[str, re.Pattern[str] | None] = {}
+_FILLERS = {"eh", "ehm", "mh", "mmh", "uh", "ah"}
 
 _BOILERPLATE_SNIPPET_RES = (
     re.compile(r"\bgrazie\s+per\s+la\s+visione\b", re.IGNORECASE),
@@ -18,30 +19,6 @@ _BOILERPLATE_SNIPPET_RES = (
     ),
     re.compile(r"\bqtss\b", re.IGNORECASE),
 )
-
-_PROMPT_STOPWORDS = {
-    "a",
-    "ad",
-    "al",
-    "alla",
-    "con",
-    "dei",
-    "del",
-    "della",
-    "di",
-    "e",
-    "gli",
-    "i",
-    "il",
-    "in",
-    "la",
-    "le",
-    "lo",
-    "per",
-    "un",
-    "una",
-    "uno",
-}
 
 
 def _normalize_text(text: str) -> str:
@@ -57,51 +34,18 @@ def _configured_initial_prompt() -> str:
     return section.get("initial_prompt", "").strip()
 
 
-def _prompt_tokens() -> list[str]:
-    return _normalize_text(_configured_initial_prompt()).split()
-
-
-def _prompt_phrase_patterns() -> list[re.Pattern[str]]:
+def _prompt_pattern() -> re.Pattern[str] | None:
+    """
+    Match the whole configured prompt, whatever its case and punctuation.
+    """
     normalized_prompt = _normalize_text(_configured_initial_prompt())
-    if normalized_prompt in _PROMPT_PATTERN_CACHE:
-        return _PROMPT_PATTERN_CACHE[normalized_prompt]
-
-    tokens = normalized_prompt.split()
-    patterns: list[re.Pattern[str]] = []
-    for start in range(len(tokens)):
-        for end in range(len(tokens), start + 1, -1):
-            phrase_tokens = tokens[start:end]
-            if not any(token not in _PROMPT_STOPWORDS for token in phrase_tokens):
-                continue
-            if len(phrase_tokens) == 2 and any(token in _PROMPT_STOPWORDS for token in phrase_tokens):
-                continue
-            phrase = r"[\s,.;:!?]+".join(re.escape(token) for token in phrase_tokens)
-            patterns.append(re.compile(rf"\b{phrase}\b[.!?]?", re.IGNORECASE))
-    _PROMPT_PATTERN_CACHE[normalized_prompt] = patterns
-    return patterns
-
-
-def _is_prompt_fragment(normalized_text: str) -> bool:
-    if not normalized_text:
-        return False
-
-    tokens = normalized_text.split()
-    prompt_tokens = set(_prompt_tokens())
-    if not prompt_tokens:
-        return False
-
-    if len(tokens) == 1:
-        return (
-            tokens[0] in prompt_tokens
-            and tokens[0] not in _PROMPT_STOPWORDS
-            and len(tokens[0]) > 2
+    if normalized_prompt not in _PROMPT_PATTERN_CACHE:
+        tokens = normalized_prompt.split()
+        phrase = r"[\W_]+".join(re.escape(token) for token in tokens)
+        _PROMPT_PATTERN_CACHE[normalized_prompt] = (
+            re.compile(rf"\b{phrase}\b[.!?…]?", re.IGNORECASE) if tokens else None
         )
-
-    if all(token in prompt_tokens for token in tokens):
-        return True
-
-    prompt_text = " ".join(_prompt_tokens())
-    return len(tokens) >= 3 and normalized_text in prompt_text
+    return _PROMPT_PATTERN_CACHE[normalized_prompt]
 
 
 def clean_transcript_text(text: str) -> str:
@@ -111,8 +55,9 @@ def clean_transcript_text(text: str) -> str:
     cleaned = text.strip()
     for pattern in _BOILERPLATE_SNIPPET_RES:
         cleaned = pattern.sub(" ", cleaned)
-    for pattern in _prompt_phrase_patterns():
-        cleaned = pattern.sub(" ", cleaned)
+    prompt_pattern = _prompt_pattern()
+    if prompt_pattern is not None:
+        cleaned = prompt_pattern.sub(" ", cleaned)
     return _WHITESPACE_RE.sub(" ", cleaned).strip(" ,;:-")
 
 
@@ -128,18 +73,8 @@ def is_obvious_transcript_noise(text: str) -> bool:
     if not normalized:
         return True
 
-    tokens = normalized.split()
-    if not tokens:
-        return True
-
-    unique = set(tokens)
-    if len(unique) == 1 and len(tokens) >= 3:
-        return True
-
-    if len(tokens) == 1 and len(tokens[0]) <= 2:
-        return True
-
-    return _is_prompt_fragment(normalized)
+    # A short answer such as "No." changes what a transcript says; only sounds without meaning go.
+    return all(token in _FILLERS for token in normalized.split())
 
 
 def clean_transcript_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
