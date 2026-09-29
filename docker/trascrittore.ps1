@@ -37,13 +37,25 @@ Comandi:
       Trascrive un file audio o video. Scrive "<nome> - trascrizione.txt" e ".json" accanto alla
       registrazione, o nella cartella indicata. Una trascrizione alla volta per PC. Dura minuti:
       avvialo in background e aspetta che finisca.
-  listen <trascrizione.json> "Persona 2" [...] [--recording <file>] [--open]
-      Prepara, per ogni voce, un file con le sue 1-2 clip migliori. Con --open lo apre nel lettore
-      predefinito del PC, perche' la persona senta di chi e' la voce prima di darle un nome.
+  listen <trascrizione.json> "Persona 2" [...] [--clip N] [--recording <file>] [--open]
+      Prepara, per ogni voce, una clip da ascoltare: la migliore, o con --clip N la N-esima. Con
+      --open la apre nel lettore predefinito del PC, perche' la persona senta di chi e' la voce
+      prima di darle un nome. Vale anche per le voci riconosciute. Una voce senza clip intere si
+      ascolta dal suo tratto piu' lungo.
   name <trascrizione.json> "Persona 2=Nome Cognome" [...] [--recording <file>]
       Da' i nomi alle voci "Persona N": riscrive i due file della trascrizione senza trascrivere di
-      nuovo, e aggiunge le clip di ogni voce nominata alla libreria "voci". Usa solo nomi che la
-      persona ha confermato o scritto, dopo aver ascoltato le clip di "listen".
+      nuovo, aggiunge le clip di ogni voce nominata alla libreria "voci" e apre la cartella delle
+      clip aggiunte. Usa solo nomi che la persona ha confermato o scritto, dopo "listen".
+      Solo se la persona lo chiede, per una voce riconosciuta:
+        --confirm "Nome Cognome"   conferma la voce e aggiunge altre sue clip (ripetibile);
+        "Nome Cognome=Altro Nome" --correct   corregge il nome e da' le clip alla persona giusta.
+      Stato "similar_name": un nome somiglia a una persona della libreria e non e' stato salvato
+      niente. Chiedi chi intendeva e ripeti con il nome esatto della cartella, oppure aggiungi
+      --new-person "Nome Cognome" se e' davvero una persona nuova.
+      Stato "over_cap": i nomi sono applicati, e "over_cap" propone clip da togliere a chi ha
+      superato il limite. Toglile con remove-clips solo se la persona conferma.
+  remove-clips "Nome Cognome" "<clip.wav>" [...]
+      Toglie dalla libreria le clip proposte in "over_cap", dopo la conferma della persona.
   check [<trascrizione.json> ...]
       Verifica quanto bene la libreria riconosce le voci a cui una persona ha dato il nome, nelle
       trascrizioni da cui sono state aggiunte clip e in quelle indicate, e suggerisce una soglia.
@@ -56,10 +68,10 @@ Comandi:
       Mostra questo testo.
 
 Ogni comando scrive le righe per le persone su stderr e finisce con un riepilogo JSON su stdout:
-"status" (ok, invalid_arguments, invalid_settings, file_not_found, unreadable_recording, gpu_out_of_memory, busy,
-docker_not_running, not_installed, interrupted, error) e "message" in italiano, piu' i campi del
-comando. Uscita: 0 riuscito, 2 argomenti non validi, 3 un'altra trascrizione in corso,
-130 interrotto, 1 ogni altro errore.
+"status" (ok, over_cap, similar_name, invalid_arguments, invalid_settings, file_not_found,
+unreadable_recording, gpu_out_of_memory, busy, docker_not_running, not_installed, interrupted, error)
+e "message" in italiano, piu' i campi del comando. Uscita: 0 riuscito (anche over_cap), 2 argomenti
+non validi, 3 un'altra trascrizione in corso, 130 interrotto, 1 ogni altro caso.
 "@
 
 
@@ -70,6 +82,7 @@ function Write-Line([string]$Text = '') {
 function Get-ExitCode([string]$Status) {
     switch ($Status) {
         'ok' { return 0 }
+        'over_cap' { return 0 }
         'invalid_arguments' { return 2 }
         'busy' { return 3 }
         'interrupted' { return 130 }
@@ -91,19 +104,21 @@ function Exit-With([string]$Command, [string]$Status, [string]$Message) {
     exit (Get-ExitCode $Status)
 }
 
-function Split-Arguments([string]$Command, [object[]]$Arguments, [string[]]$ValueOptions, [string[]]$SwitchOptions) {
+function Split-Arguments([string]$Command, [object[]]$Arguments, [string[]]$ValueOptions, [string[]]$SwitchOptions, [string[]]$RepeatOptions = @()) {
     $positional = New-Object System.Collections.ArrayList
     $options = @{}
+    foreach ($option in $RepeatOptions) { $options[$option] = New-Object System.Collections.ArrayList }
     for ($i = 0; $i -lt $Arguments.Count; $i++) {
         $argument = [string]$Arguments[$i]
         # Windows PowerShell 5.1 passes these to docker incorrectly, and no valid input needs them.
         if ($argument.Contains('"') -or ($argument.EndsWith('\') -and -not (Test-Path -LiteralPath $argument))) {
             Exit-With $Command 'invalid_arguments' "Argomento non valido: $argument"
         }
-        if ($ValueOptions -contains $argument) {
+        if ($ValueOptions -contains $argument -or $RepeatOptions -contains $argument) {
             if ($i + 1 -ge $Arguments.Count) { Exit-With $Command 'invalid_arguments' "Manca il valore di $argument." }
             $i++
-            $options[$argument] = [string]$Arguments[$i]
+            if ($RepeatOptions -contains $argument) { [void]$options[$argument].Add([string]$Arguments[$i]) }
+            else { $options[$argument] = [string]$Arguments[$i] }
         }
         elseif ($SwitchOptions -contains $argument) { $options[$argument] = $true }
         elseif ($argument.StartsWith('--')) { Exit-With $Command 'invalid_arguments' "Opzione sconosciuta: $argument. Vedi: trascrittore.ps1 help" }
@@ -250,8 +265,22 @@ function Complete-Plan($Plan) {
     $summary = Invoke-Summary $Plan
     foreach ($line in $script:RunLines) { [Console]::Out.WriteLine($line) }
     if ($Plan.Open -and $summary.status -eq 'ok') { Open-ListeningFiles $summary }
-    if ($Plan.Command -eq 'name') { Clear-ListeningFiles }
+    if ($Plan.Command -eq 'name') {
+        Open-ClipFolders $summary
+        Clear-ListeningFiles
+    }
     exit $script:RunCode
+}
+
+function Open-ClipFolders($Summary) {
+    # After a naming saves clips, the person reviews them there and deletes the bad ones.
+    if ($Summary.status -notin @('ok', 'over_cap')) { return }
+    $folders = @($Summary.named | Where-Object { $_.clips_added -and $_.folder } | ForEach-Object { $_.folder } | Select-Object -Unique)
+    foreach ($folder in $folders) {
+        if (Test-Path -LiteralPath $folder -PathType Container) {
+            try { Invoke-Item -LiteralPath $folder } catch { Write-Line "Le clip aggiunte sono in $folder" }
+        }
+    }
 }
 
 function ConvertFrom-Summary([object[]]$Lines) {
@@ -296,10 +325,13 @@ function New-TranscribePlan([object[]]$Arguments) {
     return $plan
 }
 
-function New-TranscriptPlan([string]$Command, [object[]]$Arguments, [string[]]$SwitchOptions) {
+function New-TranscriptPlan([string]$Command, [object[]]$Arguments) {
     # name and listen: a transcript, its labels, and the recording the clips are cut from.
-    $parsed = Split-Arguments $Command $Arguments @('--recording') $SwitchOptions
-    if ($parsed.Positional.Count -lt 2) {
+    if ($Command -eq 'name') { $parsed = Split-Arguments $Command $Arguments @('--recording') @('--correct') @('--confirm', '--new-person') }
+    else { $parsed = Split-Arguments $Command $Arguments @('--recording', '--clip') @('--open') }
+    $labelCount = $parsed.Positional.Count - 1
+    if ($Command -eq 'name') { $labelCount += $parsed.Options['--confirm'].Count }
+    if ($parsed.Positional.Count -lt 1 -or $labelCount -lt 1) {
         $example = if ($Command -eq 'name') { '"Persona 2=Nome Cognome"' } else { '"Persona 2"' }
         Exit-With $Command 'invalid_arguments' "Indica la trascrizione .json e almeno una voce: $Command <trascrizione.json> $example"
     }
@@ -318,14 +350,34 @@ function New-TranscriptPlan([string]$Command, [object[]]$Arguments, [string[]]$S
     Add-TranscriptMounts $plan $transcript $recording -ReadOnly:($Command -ne 'name')
     [void]$plan.Arguments.AddRange(@($parsed.Positional | Select-Object -Skip 1))
     if ($plan.RecordingArgument) { [void]$plan.Arguments.AddRange(@('--recording', $plan.RecordingArgument)) }
-    if ($Command -eq 'name') { Add-Mount $plan $Voices '/voci' }
+    if ($Command -eq 'name') {
+        Add-Mount $plan $Voices '/voci'
+        foreach ($option in @('--confirm', '--new-person')) {
+            foreach ($value in $parsed.Options[$option]) { [void]$plan.Arguments.AddRange(@($option, $value)) }
+        }
+        if ($parsed.Options['--correct']) { [void]$plan.Arguments.Add('--correct') }
+    }
     else { Add-Mount $plan $Voices '/voci' -ReadOnly }
     $plan.Open = [bool]$parsed.Options['--open']
     if ($Command -eq 'listen') {
         New-Item -ItemType Directory -Force -Path $ListenDir | Out-Null
         Add-Mount $plan $ListenDir '/ascolto'
         [void]$plan.Arguments.AddRange(@('--out-dir', '/ascolto'))
+        if ($parsed.Options['--clip']) { [void]$plan.Arguments.AddRange(@('--clip', $parsed.Options['--clip'])) }
     }
+    return $plan
+}
+
+function New-RemovePlan([object[]]$Arguments) {
+    $parsed = Split-Arguments 'remove-clips' $Arguments @() @()
+    if ($parsed.Positional.Count -lt 2) {
+        Exit-With 'remove-clips' 'invalid_arguments' 'Indica la persona e almeno una clip: remove-clips "Nome Cognome" "<clip.wav>" [...]'
+    }
+    Assert-Docker 'remove-clips'
+    $plan = New-Plan 'remove-clips'
+    Add-Mount $plan $Voices '/voci'
+    [void]$plan.Arguments.Add('remove-clips')
+    [void]$plan.Arguments.AddRange(@($parsed.Positional))
     return $plan
 }
 
@@ -407,12 +459,143 @@ function Read-YesNo([string]$Question) {
     }
 }
 
-function Invoke-NamingQuestions([string]$Transcript) {
+function Read-Choice([string]$Question, [string[]]$Answers) {
+    while ($true) {
+        $answer = (Read-Host $Question).Trim().ToLowerInvariant()
+        if ($answer -eq 'si') { $answer = 's' }
+        if ($Answers -contains $answer) { return $answer }
+        Write-Line ('Rispondi ' + ($Answers -join ', ') + '.')
+    }
+}
+
+function Read-Number([string]$Question, [int]$Max) {
+    # Returns 0 for an empty answer.
+    while ($true) {
+        $answer = (Read-Host $Question).Trim()
+        if (-not $answer) { return 0 }
+        if ($answer -match '^[0-9]+$' -and [int]$answer -ge 1 -and [int]$answer -le $Max) { return [int]$answer }
+        Write-Line "Scrivi un numero da 1 a $Max, oppure premi solo Invio."
+    }
+}
+
+function Test-VoiceByEar([string]$Transcript, $Item, [object[]]$RecordingOption) {
+    # The listening check: one clip at a time, the best first, until the person answers.
+    # Returns $true to go on with the name, $false when the person rejects the voice, $null on an error.
+    $clip = 1
+    while ($true) {
+        $plan = New-TranscriptPlan 'listen' (@($Transcript, $Item.Label, '--clip', [string]$clip) + $RecordingOption)
+        $listening = Invoke-Summary $plan
+        if ($listening.status -ne 'ok') { return $null }
+        $speaker = @($listening.speakers)[0]
+        if ($speaker.file) {
+            Write-Line ''
+            Write-Line "Si apre il lettore con la voce di $($Item.Label): ascoltala."
+            Invoke-Item -LiteralPath $speaker.file
+        }
+        elseif ($clip -eq 1) {
+            Write-Line ''
+            Write-Line "$($Item.Label): niente da ascoltare. $($speaker.note)"
+            return $true
+        }
+        else { Write-Line "Non ci sono altre clip di $($Item.Label)." }
+        $more = $speaker.clips -gt $clip
+        $question = "E' la voce di $($Item.Name)? (s = si', n = no" + $(if ($more) { ', a = ascolta un''altra clip)' } else { ')' })
+        $answer = Read-Choice $question $(if ($more) { @('s', 'n', 'a') } else { @('s', 'n') })
+        if ($answer -eq 's') { return $true }
+        if ($answer -eq 'n') { return $false }
+        $clip++
+    }
+}
+
+function Invoke-Naming([string]$Transcript, [object[]]$Items, [object[]]$RecordingOption) {
+    # Call name as an agent would, and ask the person what name stops on: similar names and clips over the cap.
+    $newPeople = @()
+    while ($true) {
+        $arguments = @($Transcript)
+        foreach ($item in $Items) {
+            if ($item.Kind -eq 'confirm') { $arguments += @('--confirm', $item.Label) }
+            else { $arguments += ($item.Label + '=' + $item.Name) }
+        }
+        if (@($Items | Where-Object { $_.Kind -eq 'correct' }).Count) { $arguments += '--correct' }
+        foreach ($person in $newPeople) { $arguments += @('--new-person', $person) }
+        Write-Line ''
+        $named = Invoke-Summary (New-TranscriptPlan 'name' ($arguments + $RecordingOption))
+        if ($named.status -ne 'similar_name') { break }
+        foreach ($entry in @($named.similar | Where-Object { $_ })) {
+            $people = @($entry.people)
+            Write-Line ''
+            Write-Line "'$($entry.name)' somiglia a chi e' gia' nella libreria:"
+            for ($i = 0; $i -lt $people.Count; $i++) { Write-Line ('  {0}. {1}' -f ($i + 1), $people[$i]) }
+            $choice = Read-Number "Numero della persona che intendevi (Invio = e' una persona nuova, $($entry.name))" $people.Count
+            $item = $Items | Where-Object { $_.Label -eq $entry.label } | Select-Object -First 1
+            if ($choice) { $item.Name = $people[$choice - 1] }
+            else { $newPeople += $entry.name }
+        }
+    }
+    Clear-ListeningFiles
+    Open-ClipFolders $named
+    foreach ($entry in @($named.over_cap | Where-Object { $_ })) {
+        $files = @($entry.remove)
+        Write-Line ''
+        Write-Line "$($entry.person) ha piu' di $($entry.cap) clip aggiunte. Propongo di togliere queste $($files.Count), delle registrazioni con piu' clip:"
+        foreach ($file in $files) { Write-Line "  $file" }
+        if (Read-YesNo "Le tolgo dalla libreria? (s/n)") {
+            [void](Invoke-Summary (New-RemovePlan (@($entry.person) + $files)))
+        }
+    }
+    return (Get-ExitCode $named.status)
+}
+
+function Invoke-NamingQuestions([string]$Transcript, [bool]$AllowRecognized) {
     # The person's path to naming: ask, let them listen, then call the same listen and name commands an agent uses.
+    # A recognized speaker is confirmed or corrected only when the person drops a transcript to name it later.
     try { $payload = [IO.File]::ReadAllText($Transcript, [Text.Encoding]::UTF8) | ConvertFrom-Json }
     catch { Write-Line "Non riesco a leggere $Transcript come trascrizione."; return 1 }
     $anonymous = @($payload.speakers | Where-Object { $_.label -like 'Persona *' })
-    if (-not $anonymous) { return 0 }
+    $recognized = @($payload.speakers | Where-Object { $_.recognized -and $_.label -notlike 'Persona *' })
+    $items = @()
+
+    if ($anonymous) {
+        Write-Line ''
+        Write-Line 'Alcune voci non sono state riconosciute. Scrivi il nome e premi Invio, oppure premi solo Invio per lasciare "Persona N".'
+        Write-Line 'Un nome aggiunge la voce alla libreria "voci", cosi le prossime volte viene riconosciuta.'
+        foreach ($speaker in $anonymous) {
+            $turns = @($payload.turns | Where-Object { $_.speaker -eq $speaker.label })
+            Write-Line ''
+            Write-Line ('{0}: {1} interventi, {2} di parlato' -f $speaker.label, $turns.Count, (Format-Minutes $speaker.speech_sec))
+            $examples = $turns |
+                Sort-Object -Property @{ Expression = { ($_.text -split '\s+').Count }; Descending = $true } |
+                Select-Object -First 2 |
+                Sort-Object -Property @{ Expression = { [double]$_.start_sec } }
+            foreach ($turn in $examples) {
+                $text = [string]$turn.text
+                if ($text.Length -gt 160) { $text = $text.Substring(0, 157).TrimEnd() + '...' }
+                Write-Line ('  [{0}] "{1}"' -f $turn.start, $text)
+            }
+            $name = (Read-Host ('Nome per ' + $speaker.label)).Trim()
+            if ($name) { $items += [pscustomobject]@{ Label = $speaker.label; Name = $name; Kind = 'name' } }
+        }
+    }
+
+    if ($AllowRecognized -and $recognized) {
+        Write-Line ''
+        if (Read-YesNo 'Vuoi confermare o correggere una voce riconosciuta? (s/n)') {
+            while ($recognized) {
+                Write-Line ''
+                for ($i = 0; $i -lt $recognized.Count; $i++) {
+                    Write-Line ('  {0}. {1} ({2} di parlato)' -f ($i + 1), $recognized[$i].label, (Format-Minutes $recognized[$i].speech_sec))
+                }
+                $choice = Read-Number 'Numero della voce (Invio = basta cosi)' $recognized.Count
+                if (-not $choice) { break }
+                $label = $recognized[$choice - 1].label
+                $recognized = @($recognized | Where-Object { $_.label -ne $label })
+                $name = (Read-Host "Nome giusto per $label (Invio = e' davvero $label, aggiungi altre sue clip)").Trim()
+                if ($name -and $name -ne $label) { $items += [pscustomobject]@{ Label = $label; Name = $name; Kind = 'correct' } }
+                else { $items += [pscustomobject]@{ Label = $label; Name = $label; Kind = 'confirm' } }
+            }
+        }
+    }
+    if (-not $items) { return 0 }
 
     # Like --recording for an agent: a recording that moved can be given here.
     $recordingOption = @()
@@ -426,59 +609,23 @@ function Invoke-NamingQuestions([string]$Transcript) {
     }
 
     Write-Line ''
-    Write-Line 'Alcune voci non sono state riconosciute. Scrivi il nome e premi Invio, oppure premi solo Invio per lasciare "Persona N".'
-    Write-Line 'Un nome aggiunge la voce alla libreria "voci", cosi le prossime volte viene riconosciuta.'
-    $names = [ordered]@{}
-    foreach ($speaker in $anonymous) {
-        $turns = @($payload.turns | Where-Object { $_.speaker -eq $speaker.label })
-        Write-Line ''
-        Write-Line ('{0}: {1} interventi, {2} di parlato' -f $speaker.label, $turns.Count, (Format-Minutes $speaker.speech_sec))
-        $examples = $turns |
-            Sort-Object -Property @{ Expression = { ($_.text -split '\s+').Count }; Descending = $true } |
-            Select-Object -First 2 |
-            Sort-Object -Property @{ Expression = { [double]$_.start_sec } }
-        foreach ($turn in $examples) {
-            $text = [string]$turn.text
-            if ($text.Length -gt 160) { $text = $text.Substring(0, 157).TrimEnd() + '...' }
-            Write-Line ('  [{0}] "{1}"' -f $turn.start, $text)
-        }
-        $name = (Read-Host ('Nome per ' + $speaker.label)).Trim()
-        if ($name) { $names[$speaker.label] = $name }
-    }
-    if (-not $names.Count) { return 0 }
-
-    Write-Line ''
     Write-Line 'Preparo le voci da ascoltare...'
-    $listening = Invoke-Summary (New-TranscriptPlan 'listen' (@($Transcript) + @($names.Keys) + $recordingOption) @())
-    if ($listening.status -ne 'ok') { return (Get-ExitCode $listening.status) }
-
-    $pairs = @()
-    foreach ($speaker in @($listening.speakers)) {
-        $name = $names[$speaker.label]
-        if ($speaker.file) {
-            Write-Line ''
-            Write-Line "Si apre il lettore con la voce di $($speaker.label): ascoltala."
-            Invoke-Item -LiteralPath $speaker.file
-            if (-not (Read-YesNo "E' la voce di $name? (s/n)")) {
-                Write-Line "Va bene: $($speaker.label) resta senza nome e non aggiungo niente alla libreria."
-                continue
-            }
-        }
-        $pairs += ($speaker.label + '=' + $name)
+    $confirmed = @()
+    foreach ($item in $items) {
+        $heard = Test-VoiceByEar $Transcript $item $recordingOption
+        if ($null -eq $heard) { Clear-ListeningFiles; return 1 }
+        if ($heard) { $confirmed += $item }
+        else { Write-Line "Va bene: $($item.Label) resta com'e' e non aggiungo niente alla libreria." }
     }
-    if (-not $pairs) { Clear-ListeningFiles; return 0 }
-
-    Write-Line ''
-    $named = Invoke-Summary (New-TranscriptPlan 'name' (@($Transcript) + $pairs + $recordingOption) @())
-    Clear-ListeningFiles
-    return (Get-ExitCode $named.status)
+    if (-not $confirmed) { Clear-ListeningFiles; return 0 }
+    return (Invoke-Naming $Transcript $confirmed $recordingOption)
 }
 
 function Invoke-Interactive([object[]]$Arguments) {
     $script:Interactive = $true
     $file = Resolve-HostFile ([string]$Arguments[0])
     if (-not $file) { Write-Line ('File non trovato: ' + $Arguments[0]); exit 1 }
-    if ($file.ToLowerInvariant().EndsWith('.json')) { exit (Invoke-NamingQuestions $file) }
+    if ($file.ToLowerInvariant().EndsWith('.json')) { exit (Invoke-NamingQuestions $file $true) }
 
     $speakers = $null
     while ($true) {
@@ -491,7 +638,7 @@ function Invoke-Interactive([object[]]$Arguments) {
     if ($speakers) { $arguments += @('--speakers', $speakers) }
     $summary = Invoke-Summary (New-TranscribePlan $arguments)
     if ($summary.status -ne 'ok') { exit (Get-ExitCode $summary.status) }
-    exit (Invoke-NamingQuestions $summary.transcript_json)
+    exit (Invoke-NamingQuestions $summary.transcript_json $false)
 }
 
 function Invoke-Verify([object[]]$Arguments) {
@@ -548,8 +695,9 @@ $command = if ($args.Count) { [string]$args[0] } else { 'help' }
 $rest = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
 switch ($command) {
     'transcribe' { Complete-Plan (New-TranscribePlan $rest) }
-    'name' { Complete-Plan (New-TranscriptPlan 'name' $rest @()) }
-    'listen' { Complete-Plan (New-TranscriptPlan 'listen' $rest @('--open')) }
+    'name' { Complete-Plan (New-TranscriptPlan 'name' $rest) }
+    'listen' { Complete-Plan (New-TranscriptPlan 'listen' $rest) }
+    'remove-clips' { Complete-Plan (New-RemovePlan $rest) }
     'check' { Complete-Plan (New-CheckPlan $rest) }
     'trial' { Complete-Plan (New-TrialPlan $rest) }
     'interactive' { Invoke-Interactive $rest }

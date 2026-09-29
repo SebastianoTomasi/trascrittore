@@ -1,6 +1,6 @@
 ---
 name: trascrittore
-description: Transcribe audio or video recordings (meetings, calls, OBS recordings) in Italian on this PC, with the names of who spoke, and give names to the voices left as "Persona N". Use when the user asks to transcribe a recording ("trascrivi questa registrazione"), who spoke in it, or to name the speakers of a transcript.
+description: Transcribe audio or video recordings (meetings, calls, OBS recordings) in Italian on this PC, with the names of who spoke, give names to the voices left as "Persona N", and, when the user asks, confirm or correct a voice the transcriber recognized. Use when the user asks to transcribe a recording ("trascrivi questa registrazione"), who spoke in it, to name the speakers of a transcript, or to add clips of a person or fix a wrong name ("vorrei aggiungere delle clip di Sebastiano").
 ---
 
 # Trascrittore
@@ -68,30 +68,56 @@ would teach the transcriber the wrong voice.
    trascrittore listen "<transcript.json>" "Persona 2" [...] --open
    ```
 
-   It opens, in the person's default player, a short file with that speaker's best one or two
-   clips. You cannot judge a voice by ear: ask the person whether it is really that person.
+   It opens, in the person's default player, one 10-second clip of that speaker: the best one.
+   You cannot judge a voice by ear: ask the person whether it is really that person. If they are
+   unsure, play the next one with `--clip 2`, then `--clip 3`, one at a time; the summary's
+   `clips` says how many there are. A speaker without any full clip is played from their longest
+   stretch (`seconds`), which serves only to recognize the voice.
 3. Only for the voices the person confirmed:
 
    ```
    trascrittore name "<transcript.json>" "Persona 2=Nome Cognome" ["Persona 3=Nome Cognome" ...]
    ```
 
-   It rewrites both transcript files with the names, without transcribing again, and adds the
-   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`.
+   It rewrites both transcript files with the names, without transcribing again, adds the
+   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`, and opens that folder so
+   the person can listen to the clips and delete bad ones.
 
 - If the person says the voice is not that person, do not name it.
-- If `listen` found no clip for a speaker, its `note` says why. The name can still be given; it
-  only adds no clips.
+- If `listen` found nothing to play for a speaker, its `note` says why. The name can still be
+  given; it only adds no clips.
 - When the person is already in the library, use exactly the name of their folder in
-  `{{CARTELLA}}\voci`, so one person never ends up in two folders. A name that differs from a
-  folder only in case or spaces is changed to the folder's; the `note` of that speaker says so.
-- Only "Persona N" voices can be named.
+  `{{CARTELLA}}\voci`. A name that differs from a folder only in case or spaces is changed to the
+  folder's; the `note` of that speaker says so.
 - If the recording has moved since the transcription, add `--recording "<new path>"` to `listen`
   and `name`.
+
+`name` can end with two statuses that need the person's decision. Ask, then act:
+
+| status | what happened | what to do |
+|---|---|---|
+| `similar_name` | A name looks like a person already in the library (listed in `similar`). Nothing was saved. | Ask whether they meant that person. Run `name` again with the folder's exact name, or, if it really is a new person, add `--new-person "Nome Cognome"`. |
+| `over_cap` | The names are applied and the clips saved, but a person now has more added clips than the cap. `over_cap` lists, for each person, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
 
 During the trial period of the automatic clip selection, the summary of `name` asks the person to
 listen to the added clips and delete the bad ones, those with other voices, laughter or noise.
 Pass that request on.
+
+## Confirm or correct a recognized voice, only when asked
+
+A voice the transcriber recognized keeps its name. Never propose to confirm or correct it: do it
+only when the person asks, for example "vorrei aggiungere delle clip di Sebastiano" or "quella non
+era Antonio, era Sebastiano".
+
+1. Let the person hear it, as above: `trascrittore listen "<transcript.json>" "Sebastiano Tomasi" --open`.
+2. Only after they confirm the voice:
+   - **the name is right, add clips**: `trascrittore name "<transcript.json>" --confirm "Sebastiano Tomasi"`.
+     The speaker's `note` says whether new clips help much (recognition was close to the
+     threshold) or little; relay it.
+   - **the name is wrong**: `trascrittore name "<transcript.json>" "Antonio Gassner=Sebastiano Tomasi" --correct`.
+     The transcript takes the right name and the clips go to the right person. The `note` tells
+     the person to listen to the wrong person's clips and delete those that are not theirs, then
+     run the check below; relay it.
 
 ## Check recognition and the trial
 

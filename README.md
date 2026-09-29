@@ -6,8 +6,9 @@ spoke, when, and what they said. A person drags the recording onto
 CPU, with a clear warning), recognizes the voices in the `voci` library next to
 the script, and writes `<name> - trascrizione.txt` and `.json` next to the
 recording. An agent such as Claude Code or Codex runs the same commands through
-the skill that `Installa.bat` installs. Naming a voice that was not recognized
-adds its clips to the library. Everything runs on the PC and works offline.
+the skill that `Installa.bat` installs. Naming a voice that was not recognized,
+or confirming or correcting a recognized one on request, adds its clips to the
+library. Everything runs on the PC and works offline.
 
 It is a personal tool for people close to the maintainer, on Windows only. The
 user guide, in Italian, is [docker/LEGGIMI.md](docker/LEGGIMI.md). Product
@@ -38,9 +39,17 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 - `name <transcript.json> "Persona 2=Nome Cognome" ...` rewrites both transcript
   files from the JSON, and cuts clips of each named speaker from the recording
   into `voci/<Nome>/registrazioni`, with their origin and the clip selection's
-  vote in `clip.json`;
-- `listen <transcript.json> "Persona 2" ...` joins a speaker's best one or two
-  clips in one file, for the person to hear before naming;
+  vote in `clip.json`. Only on the person's request, `--confirm "<Nome>"` adds
+  clips of a recognized speaker and `--correct` lets a pair replace a recognized
+  name. A name similar to a person in the library saves nothing and ends with
+  status `similar_name` until it is repeated with the folder's name or with
+  `--new-person`. After the trial, a person past `[library] max_clips` added
+  clips gets status `over_cap` (exit 0) with a proposal of clips to remove;
+- `remove-clips "<Nome>" <clip.wav> ...` removes the proposed clips once the
+  person confirms, and only clips recorded in that person's `clip.json`;
+- `listen <transcript.json> "Persona 2" ... [--clip N]` cuts one clip of each
+  speaker, the best or the N-th, for the person to hear before naming; a speaker
+  without a full window is heard from their longest one;
 - `check` scores the voices a person named (marked `named` in the JSON) against
   the library without the clips cut from the same recording, simulates missing
   voices by removing one person at a time, and suggests a threshold above every
@@ -55,8 +64,8 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 transcription. `docker/trascrittore.ps1` is the host launcher that
 `Trascrivi.bat`, `Verifica.bat` and agents all call: it mounts the folders,
 falls back to the CPU when Docker has no GPU, refuses a second transcription
-with status `busy` (exit 3), and asks the person's questions for
-`Trascrivi.bat`. It stays ASCII, because Windows PowerShell 5.1 reads a script
+with status `busy` (exit 3), opens the folder of added clips after `name`, and
+asks the person's questions for `Trascrivi.bat`. It stays ASCII, because Windows PowerShell 5.1 reads a script
 without a byte order mark in the ANSI code page. The design is in
 [docs/features/agent-cli](docs/features/agent-cli/) and
 [docs/features/voice-library-growth](docs/features/voice-library-growth/).

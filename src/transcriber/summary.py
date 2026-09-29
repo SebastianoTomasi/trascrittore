@@ -28,9 +28,13 @@ UNREADABLE_RECORDING = "unreadable_recording"
 GPU_OUT_OF_MEMORY = "gpu_out_of_memory"
 INTERRUPTED = "interrupted"
 FAILED = "error"
+# Naming stopped before saving anything: the person must say whether they meant someone already in the library.
+SIMILAR_NAME = "similar_name"
+# Naming succeeded, and proposes added clips to remove; they go only when the person confirms.
+OVER_CAP = "over_cap"
 
 # Every other status, such as the launcher's docker_not_running, exits with 1.
-_EXIT_CODES = {OK: 0, INVALID_ARGUMENTS: 2, "busy": 3, INTERRUPTED: 130}
+_EXIT_CODES = {OK: 0, OVER_CAP: 0, INVALID_ARGUMENTS: 2, "busy": 3, INTERRUPTED: 130}
 
 
 class CommandError(Exception):

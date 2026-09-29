@@ -1,9 +1,12 @@
 """
 Naming speakers after the transcript exists, and preparing the clips a person listens to first.
 
-Only a person gives a name: an agent calls these commands with names the person confirmed or
-wrote. Naming never transcribes again. It rewrites both transcript files from the JSON file,
-and cuts clips of each named speaker from the recording into the PC's voice library.
+Only a person gives a name: an agent calls these commands with names the person confirmed or wrote.
+Naming never transcribes again. It rewrites both transcript files from the JSON file, and cuts clips
+of each named speaker from the recording into the PC's voice library.
+
+A speaker the transcriber recognized changes only when the person asks: `confirm` keeps the name and
+adds clips, `correct` allows a pair that replaces the name. Neither is ever offered by the transcriber.
 """
 
 from __future__ import annotations
@@ -11,24 +14,39 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import numpy as np
 import soundfile as sf
 
 from src.asr.utils.config import get_library_settings, get_matching_settings
 from src.transcriber import library, voices
-from src.transcriber.summary import FILE_NOT_FOUND, INVALID_ARGUMENTS, OK, CommandError, guarded, host_path, say
-from src.transcriber.transcript import is_anonymous, rename_speakers, render_payload_text, speaker_labels
+from src.transcriber.summary import (
+    FILE_NOT_FOUND,
+    INVALID_ARGUMENTS,
+    OK,
+    OVER_CAP,
+    SIMILAR_NAME,
+    CommandError,
+    guarded,
+    host_path,
+    say,
+)
+from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous, rename_speakers, render_payload_text, speaker_labels
 
 
 NAME_COMMAND = "name"
 LISTEN_COMMAND = "listen"
 LISTEN_PREFIX = "ascolta "
-# Silence between the clips joined in one listening file.
-_LISTEN_GAP_SEC = 0.7
+NAMED, CONFIRMED, CORRECTED = "named", "confirmed", "corrected"
 # The transcript stores the duration rounded to a tenth of a second.
 _DURATION_TOLERANCE_SEC = 1.0
+# A confirmed speaker scoring less than this above the threshold gains much from new clips.
+_CLOSE_TO_THRESHOLD = 0.05
+
+
+def _clean(text: str) -> str:
+    return " ".join(text.split())
 
 
 def parse_pairs(pairs: list[str]) -> dict[str, str]:
@@ -38,14 +56,12 @@ def parse_pairs(pairs: list[str]) -> dict[str, str]:
     names: dict[str, str] = {}
     for pair in pairs:
         label, separator, name = pair.partition("=")
-        label, name = " ".join(label.split()), " ".join(name.split())
+        label, name = _clean(label), _clean(name)
         if not separator or not label or not name:
             raise CommandError(INVALID_ARGUMENTS, f"'{pair}' non è nella forma \"Persona 2=Nome Cognome\".")
         if label in names:
             raise CommandError(INVALID_ARGUMENTS, f"'{label}' compare due volte.")
         names[label] = name
-    if not names:
-        raise CommandError(INVALID_ARGUMENTS, "Indica almeno una voce da nominare, per esempio \"Persona 2=Nome Cognome\".")
     return names
 
 
@@ -61,17 +77,32 @@ def load_transcript(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _check_labels(payload: dict[str, Any], labels: list[str]) -> None:
-    known = speaker_labels(payload)
-    anonymous = [label for label in known if is_anonymous(label)]
+def _check_known(payload: dict[str, Any], labels: Iterable[str]) -> None:
+    known = [label for label in speaker_labels(payload) if label != UNATTRIBUTED_DISPLAY]
     for label in labels:
         if label not in known:
             raise CommandError(
                 INVALID_ARGUMENTS,
-                f"'{label}' non è una voce di questa trascrizione. Voci senza nome: {', '.join(anonymous) or 'nessuna'}.",
+                f"'{label}' non è una voce di questa trascrizione. Voci: {', '.join(known) or 'nessuna'}.",
             )
-        if not is_anonymous(label):
-            raise CommandError(INVALID_ARGUMENTS, f"'{label}' ha già un nome: si possono nominare solo le voci 'Persona N'.")
+
+
+def _check_naming(payload: dict[str, Any], written: dict[str, str], confirm: list[str], correct: bool) -> None:
+    _check_known(payload, [*written, *confirm])
+    for label in written:
+        if label in confirm:
+            raise CommandError(INVALID_ARGUMENTS, f"'{label}' compare due volte.")
+        if not is_anonymous(label) and not correct:
+            raise CommandError(
+                INVALID_ARGUMENTS,
+                f"'{label}' ha già un nome, dato dal riconoscimento. Si corregge solo se la persona lo chiede: "
+                "in quel caso aggiungi --correct.",
+            )
+    for label in confirm:
+        if is_anonymous(label):
+            raise CommandError(
+                INVALID_ARGUMENTS, f"'{label}' non ha un nome da confermare: dagli un nome con \"{label}=Nome Cognome\"."
+            )
 
 
 def _resolve_recording(payload: dict[str, Any], transcript: Path, recording: str | None) -> Path | None:
@@ -105,11 +136,8 @@ def open_recording(
     return audio, None
 
 
-def _speaker_windows(payload: dict[str, Any], label: str) -> list[dict[str, float]] | None:
-    for speaker in payload.get("speakers", []):
-        if speaker["label"] == label:
-            return speaker.get("windows")
-    return None
+def _speaker(payload: dict[str, Any], label: str) -> dict[str, Any]:
+    return next((speaker for speaker in payload.get("speakers", []) if speaker["label"] == label), {})
 
 
 def _candidates(
@@ -118,7 +146,7 @@ def _candidates(
     """
     Rank the speaker's windows as clips, best first, or say why there are none.
     """
-    windows = _speaker_windows(payload, label)
+    windows = _speaker(payload, label).get("windows")
     if windows is None:
         return [], (
             "La trascrizione è di una versione precedente, che non salvava i tratti di ogni voce: "
@@ -141,23 +169,20 @@ def _candidates(
 def _grow_library(
     payload: dict[str, Any],
     transcript: Path,
-    names: dict[str, str],
+    results: list[dict[str, Any]],
     recording: str | None,
     library_dir: Path | None,
-) -> list[dict[str, Any]]:
-    results = [
-        {"label": label, "name": name, "clips_added": 0, "folder": None, "note": None} for label, name in names.items()
-    ]
+) -> None:
     if library_dir is None:
         for result in results:
             result["note"] = "La libreria delle voci non è configurata."
-        return results
+        return
 
     audio, problem = open_recording(payload, transcript, recording)
     if audio is None:
         for result in results:
             result["note"] = problem
-        return results
+        return
 
     selection = get_library_settings()
     trial = not library.trial_passed(library_dir, selection)
@@ -182,8 +207,47 @@ def _grow_library(
             },
         )
         result["clips_added"] = len(saved)
+        if not saved:
+            result["note"] = (
+                "Nessun tratto di questa voce somiglia abbastanza agli altri: probabilmente contengono altre voci "
+                "o rumori, quindi non ho aggiunto clip."
+            )
+            continue
         result["folder"] = host_path(library.clips_folder(library_dir, result["name"]))
-    return results
+
+
+def _add_note(result: dict[str, Any], note: str, *, first: bool = False) -> None:
+    if not result["note"]:
+        result["note"] = note
+    else:
+        result["note"] = f"{note} {result['note']}" if first else f"{result['note']} {note}"
+
+
+def _recognition_notes(payload: dict[str, Any], results: list[dict[str, Any]], library_dir: Path | None) -> None:
+    threshold = get_matching_settings().threshold
+    for result in results:
+        if result["action"] == CONFIRMED:
+            score = _speaker(payload, result["label"]).get("score")
+            if score is None:
+                continue
+            result["score"], result["threshold"] = score, threshold
+            if not result["clips_added"]:
+                continue
+            gain = "molto" if score - threshold < _CLOSE_TO_THRESHOLD else "poco"
+            _add_note(
+                result,
+                f"Era stata riconosciuta con punteggio {score:.3f} (soglia {threshold:.3f}): le nuove clip aiuteranno {gain}.",
+                first=True,
+            )
+        elif result["action"] == CORRECTED:
+            where = ""
+            if library_dir is not None and (library_dir / result["label"]).is_dir():
+                where = f" in {host_path(library_dir / result['label'])}"
+            _add_note(
+                result,
+                f"'{result['label']}' era stata riconosciuta al posto di '{result['name']}': ascolta le clip di "
+                f"'{result['label']}'{where}, cancella quelle che non sono sue, e rifai la verifica del riconoscimento.",
+            )
 
 
 def _write_transcript(transcript: Path, payload: dict[str, Any]) -> Path:
@@ -193,10 +257,27 @@ def _write_transcript(transcript: Path, payload: dict[str, Any]) -> Path:
     return text_path
 
 
-def _naming_lines(results: list[dict[str, Any]], trial: dict[str, Any] | None) -> list[str]:
+def _over_cap(results: list[dict[str, Any]], library_dir: Path | None) -> list[dict[str, Any]]:
+    if library_dir is None:
+        return []
+    selection = get_library_settings()
+    if not library.trial_passed(library_dir, selection):
+        return []
+    over = []
+    for person in dict.fromkeys(result["name"] for result in results if result["clips_added"]):
+        proposal = library.cap_proposal(library_dir, person, selection.max_clips)
+        if proposal:
+            over.append({"person": person, "cap": selection.max_clips, "remove": proposal})
+    return over
+
+
+def _naming_lines(
+    results: list[dict[str, Any]], trial: dict[str, Any] | None, over_cap: list[dict[str, Any]]
+) -> list[str]:
     lines = []
     for result in results:
-        line = f"{result['label']} → {result['name']}: "
+        arrow = "confermata" if result["action"] == CONFIRMED else f"→ {result['name']}"
+        line = f"{result['label']} {arrow}: "
         if result["clips_added"]:
             line += f"{result['clips_added']} clip aggiunte alla libreria delle voci, in {result['folder']}."
             if result["note"]:
@@ -209,14 +290,61 @@ def _naming_lines(results: list[dict[str, Any]], trial: dict[str, Any] | None) -
             "Periodo di prova della selezione delle clip: ascolta le clip aggiunte e cancella quelle con altre "
             f"voci, risate o rumori. Voci nominate finora: {trial['named_speakers']} su {trial['needed']}."
         )
+    for entry in over_cap:
+        lines.append(
+            f"{entry['person']} ha più di {entry['cap']} clip aggiunte: propongo di togliere le {len(entry['remove'])} "
+            "delle registrazioni con più clip, le meno somiglianti. Le tolgo solo dopo una conferma."
+        )
     return lines
 
 
-def _name_speakers(transcript: str, pairs: list[str], recording: str | None) -> dict[str, Any]:
+def _similar_names(
+    written: dict[str, str], library_dir: Path | None, new_people: list[str]
+) -> list[dict[str, Any]]:
+    if library_dir is None:
+        return []
+    confirmed_new = {_clean(name).casefold() for name in new_people}
+    similar = []
+    for label, name in written.items():
+        if name.casefold() in confirmed_new:
+            continue
+        people = library.similar_people(library_dir, name)
+        if people:
+            similar.append({"label": label, "name": name, "people": people})
+    return similar
+
+
+def _similar_summary(similar: list[dict[str, Any]]) -> dict[str, Any]:
+    lines = [
+        f"'{entry['name']}' (per {entry['label']}) somiglia a chi è già nella libreria: {', '.join(entry['people'])}."
+        for entry in similar
+    ]
+    lines.append("Non ho salvato niente: serve sapere se è una di queste persone o una persona nuova.")
+    for line in lines:
+        say(line)
+    return {"command": NAME_COMMAND, "status": SIMILAR_NAME, "message": " ".join(lines), "similar": similar}
+
+
+def _name_speakers(
+    transcript: str,
+    pairs: list[str],
+    recording: str | None,
+    confirm: list[str],
+    correct: bool,
+    new_people: list[str],
+) -> dict[str, Any]:
     written = parse_pairs(pairs)
+    confirm = list(dict.fromkeys(_clean(label) for label in confirm))
+    # A pair that gives a recognized speaker the name it already has is a confirmation.
+    for label, name in list(written.items()):
+        if not is_anonymous(label) and name.casefold() == label.casefold():
+            del written[label]
+            confirm.append(label)
+    if not written and not confirm:
+        raise CommandError(INVALID_ARGUMENTS, "Indica almeno una voce da nominare, per esempio \"Persona 2=Nome Cognome\".")
     transcript_path = Path(transcript)
     payload = load_transcript(transcript_path)
-    _check_labels(payload, list(written))
+    _check_naming(payload, written, confirm, correct)
     for name in written.values():
         problem = library.name_problem(name)
         if problem:
@@ -225,41 +353,74 @@ def _name_speakers(transcript: str, pairs: list[str], recording: str | None) -> 
     names = dict(written)
     if library_dir is not None:
         names = {label: library.canonical_name(library_dir, name) for label, name in written.items()}
+    similar = _similar_names(names, library_dir, new_people)
+    if similar:
+        return _similar_summary(similar)
 
+    results = [
+        {
+            "label": label,
+            "name": name,
+            "action": CORRECTED if not is_anonymous(label) else NAMED,
+            "clips_added": 0,
+            "folder": None,
+            "note": None,
+        }
+        for label, name in names.items()
+    ]
+    results += [
+        {"label": label, "name": label, "action": CONFIRMED, "clips_added": 0, "folder": None, "note": None}
+        for label in confirm
+    ]
     # Clips first: if rewriting the transcript then fails, the labels are still there and naming can be
     # repeated, and the clips it saves again replace the same files.
-    results = _grow_library(payload, transcript_path, names, recording, library_dir)
+    _grow_library(payload, transcript_path, results, recording, library_dir)
     for result in results:
-        if result["name"] != written[result["label"]]:
-            already = f"Nella libreria c'è già '{result['name']}': uso quel nome."
-            result["note"] = f"{already} {result['note']}" if result["note"] else already
-    text_path = _write_transcript(transcript_path, rename_speakers(payload, names))
+        if result["action"] != CONFIRMED and result["name"] != written[result["label"]]:
+            _add_note(result, f"Nella libreria c'è già '{result['name']}': uso quel nome.", first=True)
+    _recognition_notes(payload, results, library_dir)
+    text_path = _write_transcript(
+        transcript_path, rename_speakers(payload, {result["label"]: result["name"] for result in results})
+    )
     trial = None
     if library_dir is not None:
         status = library.trial_status(library_dir, get_library_settings())
         trial = {"passed": status.passed, "named_speakers": status.named_speakers, "needed": library.TRIAL_NAMED_SPEAKERS}
+    over_cap = _over_cap(results, library_dir)
 
-    lines = _naming_lines(results, trial)
+    lines = _naming_lines(results, trial, over_cap)
     for line in lines:
         say(line)
     return {
         "command": NAME_COMMAND,
-        "status": OK,
+        "status": OVER_CAP if over_cap else OK,
         "message": " ".join(["Nomi applicati alla trascrizione.", *lines]),
         "transcript_txt": host_path(text_path),
         "transcript_json": host_path(transcript_path),
         "named": results,
         "trial": trial,
+        "over_cap": over_cap,
     }
 
 
-def name_speakers(transcript: str, pairs: list[str], *, recording: str | None = None) -> dict[str, Any]:
+def name_speakers(
+    transcript: str,
+    pairs: list[str],
+    *,
+    recording: str | None = None,
+    confirm: list[str] | None = None,
+    correct: bool = False,
+    new_people: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Apply names confirmed by a person to a transcript, and add the named speakers' clips to the voice library.
+
+    `confirm` lists recognized speakers the person confirmed; `correct` lets pairs replace a recognized name;
+    `new_people` lists names the person confirmed as new people despite a similar name in the library.
     """
     return guarded(
         NAME_COMMAND,
-        lambda: _name_speakers(transcript, pairs, recording),
+        lambda: _name_speakers(transcript, pairs, recording, confirm or [], correct, new_people or []),
         failed="Non sono riuscito a dare i nomi",
     )
 
@@ -269,63 +430,97 @@ def _clear_listening_clips(out_dir: Path) -> None:
         try:
             path.unlink()
         except OSError:
-            # Still open in the player: the new file of that speaker replaces it.
+            # Still open in the player: the next listening tries again.
             pass
 
 
-def _prepare_listening(transcript: str, labels: list[str], recording: str | None, out_dir: str | None) -> dict[str, Any]:
-    labels = [" ".join(label.split()) for label in labels]
+def _longest_window(payload: dict[str, Any], label: str) -> dict[str, float] | None:
+    windows = _speaker(payload, label).get("windows") or []
+    return max(windows, key=lambda window: float(window["end"]) - float(window["start"]), default=None)
+
+
+def _listening_piece(
+    payload: dict[str, Any], label: str, audio: np.ndarray, voiceprints: voices.Voiceprints, clip: int
+) -> tuple[tuple[float, float] | None, int, str | None]:
+    """
+    Return the stretch to play for a speaker, how many full clips they have, and a note.
+    """
+    candidates, note = _candidates(payload, label, audio, voiceprints)
+    if candidates:
+        if clip > len(candidates):
+            return None, len(candidates), f"Questa voce ha solo {len(candidates)} clip da ascoltare."
+        best = candidates[clip - 1]
+        return (best.start, best.end), len(candidates), None
+    longest = _longest_window(payload, label)
+    if longest is None or clip > 1:
+        return None, 0, note
+    start, end = float(longest["start"]), float(longest["end"])
+    return (start, end), 0, (
+        f"{note} Ascolti il tratto più lungo, di {end - start:.0f} secondi: serve solo a riconoscere la voce."
+    )
+
+
+def _prepare_listening(
+    transcript: str, labels: list[str], recording: str | None, out_dir: str | None, clip: int
+) -> dict[str, Any]:
+    labels = [_clean(label) for label in labels]
     if not labels:
         raise CommandError(INVALID_ARGUMENTS, "Indica almeno una voce da ascoltare, per esempio \"Persona 2\".")
+    if clip < 1:
+        raise CommandError(INVALID_ARGUMENTS, "Il numero della clip parte da 1.")
     transcript_path = Path(transcript)
     payload = load_transcript(transcript_path)
-    _check_labels(payload, labels)
+    _check_known(payload, labels)
     folder = Path(out_dir) if out_dir else Path(tempfile.gettempdir()) / "trascrittore-ascolto"
     folder.mkdir(parents=True, exist_ok=True)
     _clear_listening_clips(folder)
 
-    speakers = [{"label": label, "file": None, "clips": 0, "note": None} for label in labels]
+    speakers = [{"label": label, "file": None, "clip": clip, "clips": 0, "seconds": None, "note": None} for label in labels]
     audio, problem = open_recording(payload, transcript_path, recording)
     voiceprints = voices.Voiceprints()
-    gap = np.zeros(int(_LISTEN_GAP_SEC * voices.SAMPLE_RATE), dtype=np.float32)
     for speaker in speakers:
         if audio is None:
             speaker["note"] = problem
             continue
-        candidates, speaker["note"] = _candidates(payload, speaker["label"], audio, voiceprints)
-        best = candidates[: library.LISTENING_CLIPS]
-        if not best:
+        piece, speaker["clips"], speaker["note"] = _listening_piece(payload, speaker["label"], audio, voiceprints, clip)
+        if piece is None:
             continue
-        pieces = []
-        for candidate in best:
-            pieces += [voices.cut(audio, candidate.start, candidate.end), gap]
-        path = folder / f"{LISTEN_PREFIX}{speaker['label']}.wav"
-        sf.write(path, np.concatenate(pieces[:-1]), voices.SAMPLE_RATE, subtype="PCM_16")
-        speaker["file"], speaker["clips"] = host_path(path), len(best)
+        # One file per clip: the one heard before may still be open in the player.
+        path = folder / f"{LISTEN_PREFIX}{speaker['label']} - {clip}.wav"
+        sf.write(path, voices.cut(audio, *piece), voices.SAMPLE_RATE, subtype="PCM_16")
+        speaker["file"], speaker["seconds"] = host_path(path), round(piece[1] - piece[0], 1)
 
     for speaker in speakers:
         if speaker["file"]:
-            say(f"{speaker['label']}: da ascoltare in {speaker['file']}")
+            count = f"clip {clip} di {speaker['clips']}" if speaker["clips"] else "nessuna clip intera"
+            say(f"{speaker['label']} ({count}): da ascoltare in {speaker['file']}")
+            if speaker["note"]:
+                say(f"  {speaker['note']}")
         else:
-            say(f"{speaker['label']}: nessuna clip da ascoltare. {speaker['note']}")
+            say(f"{speaker['label']}: niente da ascoltare. {speaker['note']}")
     return {
         "command": LISTEN_COMMAND,
         "status": OK,
-        "message": "Clip pronte: la persona le ascolta e conferma di chi è la voce prima di darle il nome.",
+        "message": "Clip pronta: la persona la ascolta e conferma di chi è la voce prima di darle il nome.",
         "speakers": speakers,
     }
 
 
 def prepare_listening(
-    transcript: str, labels: list[str], *, recording: str | None = None, out_dir: str | None = None
+    transcript: str,
+    labels: list[str],
+    *,
+    recording: str | None = None,
+    out_dir: str | None = None,
+    clip: int = 1,
 ) -> dict[str, Any]:
     """
-    Join the best one or two clips of each speaker in one file, so the person hears whose voice it is before naming.
+    Cut one clip of each speaker, the `clip`-th best, so the person hears whose voice it is before naming.
 
-    One file per speaker, because the default player on Windows handles one file at a time better.
+    A speaker without a full-length window is heard from their longest window, which never becomes a clip.
     """
     return guarded(
         LISTEN_COMMAND,
-        lambda: _prepare_listening(transcript, labels, recording, out_dir),
+        lambda: _prepare_listening(transcript, labels, recording, out_dir, clip),
         failed="Non sono riuscito a preparare le clip da ascoltare",
     )

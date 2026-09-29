@@ -263,3 +263,64 @@ def test_the_trial_report_lists_the_kept_clips_the_person_deleted(tmp_path, monk
     assert not summary["passed"]
     assert "va corretta" in summary["message"]
     assert summary["disagreements"][0]["clip"] == "Registrazione 3 00.00.10.wav"
+
+
+@pytest.mark.parametrize(
+    ("given", "existing", "similar"),
+    [
+        ("Marco Rosi", "Marco Rossi", True),
+        ("Marko Rosi", "Marco Rossi", True),
+        ("M. Rossi", "Marco Rossi", True),
+        ("M Rossi", "Marco Rossi", True),
+        ("Marco", "Marco Rossi", True),
+        ("marco  rossi", "Marco Rossi", False),
+        ("Marco Bianchi", "Marco Rossi", False),
+        ("Rossi", "Marco Rossi", False),
+        ("L. Rossi", "Marco Rossi", False),
+    ],
+)
+def test_similar_names(given, existing, similar):
+    assert library.names_are_similar(given, existing) is similar
+
+
+def test_a_name_already_in_the_library_has_no_similar_people(tmp_path):
+    for person in ("Marco Rossi", "Marco Rosi"):
+        (tmp_path / person).mkdir()
+
+    assert library.similar_people(tmp_path, "marco rossi") == []
+    assert library.similar_people(tmp_path, "Marco Ross") == ["Marco Rosi", "Marco Rossi"]
+
+
+def _added_pool(tmp_path):
+    pool = tmp_path / "Luca Bianchi" / library.CLIPS_FOLDER
+    pool.mkdir(parents=True)
+    for name in ("Altra 00.00.01.wav", "Altra 00.00.02.wav"):
+        (pool / name).write_bytes(b"clip")
+    (pool / "a mano.wav").write_bytes(b"placed by hand")
+    record = {name: {"recording_file": "Altra.m4a", "consistency": 0.8} for name in ("Altra 00.00.01.wav", "Altra 00.00.02.wav")}
+    (pool / library.CLIPS_RECORD).write_text(json.dumps(record), encoding="utf-8")
+    return pool
+
+
+def test_only_recorded_clips_are_removed(tmp_path):
+    pool = _added_pool(tmp_path)
+
+    removed, refused = library.remove_clips(tmp_path, "Luca Bianchi", ["altra 00.00.01.wav", "a mano.wav"])
+
+    assert removed == ["Altra 00.00.01.wav"]
+    assert [entry["clip"] for entry in refused] == ["a mano.wav"]
+    assert sorted(path.name for path in pool.glob("*.wav")) == ["Altra 00.00.02.wav", "a mano.wav"]
+    record = json.loads((pool / library.CLIPS_RECORD).read_text(encoding="utf-8"))
+    assert "removed" in record["Altra 00.00.01.wav"] and "removed" not in record["Altra 00.00.02.wav"]
+    assert library.cap_proposal(tmp_path, "Luca Bianchi", 1) == []
+
+
+def test_nothing_is_removed_during_the_trial(tmp_path, monkeypatch):
+    pool = _added_pool(tmp_path)
+    monkeypatch.setattr(library, "library_dir", lambda: tmp_path)
+
+    summary = library.remove_clips_report("Luca Bianchi", ["Altra 00.00.01.wav"], SELECTION)
+
+    assert summary["status"] == "invalid_arguments"
+    assert "periodo di prova" in summary["message"]
+    assert (pool / "Altra 00.00.01.wav").exists()

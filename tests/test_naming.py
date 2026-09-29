@@ -22,7 +22,13 @@ def _payload(*, windows: bool = True) -> dict[str, object]:
         {"start": 33.0, "end": 36.0},
     ]
     speakers = [
-        {"label": "Mario Rossi", "recognized": True, "speech_sec": 30.0, "windows": [{"start": 40.0, "end": 50.0}]},
+        {
+            "label": "Mario Rossi",
+            "recognized": True,
+            "speech_sec": 30.0,
+            "score": 0.7,
+            "windows": [{"start": 40.0, "end": 50.0}],
+        },
         {"label": "Persona 1", "recognized": False, "speech_sec": 33.0, "windows": persona_1_windows},
         {"label": "Persona 2", "recognized": False, "speech_sec": 4.0, "windows": []},
     ]
@@ -106,8 +112,16 @@ def test_naming_rewrites_both_files_and_adds_the_speakers_clips(transcript_and_l
     assert record["Registrazione 00.00.03.wav"]["transcript"] == str(transcript)
     assert record["Registrazione 00.00.03.wav"]["label"] == "Persona 1"
     assert summary["named"] == [
-        {"label": "Persona 1", "name": "Luca Bianchi", "clips_added": 3, "folder": str(pool), "note": None}
+        {
+            "label": "Persona 1",
+            "name": "Luca Bianchi",
+            "action": "named",
+            "clips_added": 3,
+            "folder": str(pool),
+            "note": None,
+        }
     ]
+    assert summary["over_cap"] == []
     assert summary["trial"] == {"passed": False, "named_speakers": 1, "needed": 10}
     assert "Luca Bianchi" in capsys.readouterr().err
 
@@ -233,24 +247,191 @@ def test_naming_a_missing_transcript_is_refused(tmp_path):
     assert summary["status"] == "file_not_found"
 
 
-def test_listening_joins_the_best_two_clips_of_each_speaker_in_one_file(transcript_and_library, tmp_path):
+def _pass_trial(library_dir: Path, selection) -> None:
+    (library_dir / library.TRIAL_RECORD).write_text(
+        json.dumps(
+            {
+                "passed": [
+                    {
+                        "keep_clips": selection.keep_clips,
+                        "min_consistency": selection.min_consistency,
+                        "version": library.SELECTION_VERSION,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_a_recognized_speaker_the_person_confirms_gets_more_clips(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    (library_dir / "Mario Rossi").mkdir()
+
+    summary = naming.name_speakers(str(transcript), [], confirm=["Mario Rossi"])
+
+    assert summary["status"] == "ok"
+    result = summary["named"][0]
+    assert (result["action"], result["name"], result["clips_added"]) == ("confirmed", "Mario Rossi", 1)
+    assert (result["score"], result["threshold"]) == (0.7, naming.get_matching_settings().threshold)
+    assert "0.700" in result["note"] and "aiuteranno poco" in result["note"]
+    assert (library_dir / "Mario Rossi" / "registrazioni" / "Registrazione 00.00.40.wav").is_file()
+    payload, _ = _read(transcript)
+    assert payload["speakers"][0]["label"] == "Mario Rossi" and payload["speakers"][0]["named"] is True
+
+
+def test_a_pair_that_repeats_a_recognized_name_is_a_confirmation(transcript_and_library):
+    transcript, _ = transcript_and_library
+
+    summary = naming.name_speakers(str(transcript), ["Mario Rossi=mario rossi"])
+
+    assert summary["named"][0]["action"] == "confirmed"
+
+
+def test_a_recognized_name_is_corrected_only_with_correct(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    (library_dir / "Mario Rossi").mkdir()
+
+    summary = naming.name_speakers(str(transcript), ["Mario Rossi=Luca Bianchi"], correct=True)
+
+    assert summary["status"] == "ok"
+    result = summary["named"][0]
+    assert (result["action"], result["name"], result["clips_added"]) == ("corrected", "Luca Bianchi", 1)
+    assert "al posto di 'Luca Bianchi'" in result["note"]
+    assert str(library_dir / "Mario Rossi") in result["note"]
+    assert "[00:00:40] Luca Bianchi: va bene" in _read(transcript)[1].splitlines()
+    assert list((library_dir / "Mario Rossi").iterdir()) == []
+
+
+def test_an_anonymous_speaker_cannot_be_confirmed(transcript_and_library):
+    transcript, _ = transcript_and_library
+
+    summary = naming.name_speakers(str(transcript), [], confirm=["Persona 1"])
+
+    assert summary["status"] == "invalid_arguments"
+    assert "non ha un nome da confermare" in summary["message"]
+
+
+def test_a_similar_name_stops_the_naming_until_the_person_decides(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    (library_dir / "Luca Bianchi").mkdir()
+    before = _read(transcript)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianco"])
+
+    assert summary["status"] == "similar_name"
+    assert summary["similar"] == [{"label": "Persona 1", "name": "Luca Bianco", "people": ["Luca Bianchi"]}]
+    assert _read(transcript) == before
+    assert not (library_dir / "Luca Bianco").exists()
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianco"], new_people=["luca bianco"])
+
+    assert summary["status"] == "ok"
+    assert (library_dir / "Luca Bianco" / "registrazioni").is_dir()
+
+
+def test_passing_the_cap_proposes_clips_to_remove(transcript_and_library, monkeypatch):
+    transcript, library_dir = transcript_and_library
+    selection = naming.get_library_settings()
+    monkeypatch.setattr(
+        naming,
+        "get_library_settings",
+        lambda: library.LibrarySettings(
+            keep_clips=selection.keep_clips, min_consistency=selection.min_consistency, max_clips=4
+        ),
+    )
+    _pass_trial(library_dir, selection)
+    pool = library_dir / "Luca Bianchi" / "registrazioni"
+    pool.mkdir(parents=True)
+    record = {}
+    for second, consistency in ((1, 0.9), (2, 0.8), (3, 0.7), (4, 0.95)):
+        name = f"Altra 00.00.0{second}.wav"
+        (pool / name).write_bytes(b"clip")
+        record[name] = {"recording_file": "Altra.m4a", "consistency": consistency, "vote": "keep", "trial": False}
+    (pool / "clip.json").write_text(json.dumps(record), encoding="utf-8")
+    (pool / "a mano.wav").write_bytes(b"placed by hand")
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    assert summary["status"] == "over_cap"
+    assert summary["over_cap"] == [
+        {
+            "person": "Luca Bianchi",
+            "cap": 4,
+            "remove": ["Altra 00.00.03.wav", "Altra 00.00.02.wav", "Registrazione 00.00.03.wav"],
+        }
+    ]
+    assert len(list(pool.glob("*.wav"))) == 8
+
+
+def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, tmp_path):
     transcript, _ = transcript_and_library
     FakeVoiceprints.outliers = {3.0}
     out_dir = tmp_path / "ascolto"
     out_dir.mkdir()
-    (out_dir / "ascolta Persona 3.wav").write_bytes(b"old")
+    (out_dir / "ascolta Persona 3 - 1.wav").write_bytes(b"old")
     (out_dir / "altro.wav").write_bytes(b"not ours")
 
-    summary = naming.prepare_listening(str(transcript), ["Persona 1", "Persona 2"], out_dir=str(out_dir))
+    summary = naming.prepare_listening(str(transcript), ["Persona 1", "Mario Rossi"], out_dir=str(out_dir))
 
     assert summary["status"] == "ok"
     assert summary["speakers"][0] == {
         "label": "Persona 1",
-        "file": str(out_dir / "ascolta Persona 1.wav"),
-        "clips": 2,
+        "file": str(out_dir / "ascolta Persona 1 - 1.wav"),
+        "clip": 1,
+        "clips": 3,
+        "seconds": 10.0,
         "note": None,
     }
-    assert round(sf.info(out_dir / "ascolta Persona 1.wav").duration, 2) == 20.7
-    assert summary["speakers"][1]["file"] is None
-    assert "troppo poco" in summary["speakers"][1]["note"]
-    assert sorted(path.name for path in out_dir.iterdir()) == ["altro.wav", "ascolta Persona 1.wav"]
+    assert summary["speakers"][1]["file"] == str(out_dir / "ascolta Mario Rossi - 1.wav")
+    assert round(sf.info(out_dir / "ascolta Persona 1 - 1.wav").duration, 2) == 10.0
+    assert sorted(path.name for path in out_dir.iterdir()) == [
+        "altro.wav",
+        "ascolta Mario Rossi - 1.wav",
+        "ascolta Persona 1 - 1.wav",
+    ]
+
+    third = naming.prepare_listening(str(transcript), ["Persona 1"], out_dir=str(out_dir), clip=3)
+    fourth = naming.prepare_listening(str(transcript), ["Persona 1"], out_dir=str(out_dir), clip=4)
+
+    assert third["speakers"][0]["file"] == str(out_dir / "ascolta Persona 1 - 3.wav")
+    assert fourth["speakers"][0]["file"] is None
+    assert "solo 3 clip" in fourth["speakers"][0]["note"]
+
+
+def test_a_speaker_without_a_full_clip_is_heard_from_the_longest_stretch(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    payload = _payload()
+    payload["speakers"][2]["windows"] = [{"start": 71.0, "end": 73.0}, {"start": 76.0, "end": 80.0}]
+    transcript.write_text(json.dumps(payload), encoding="utf-8")
+
+    summary = naming.prepare_listening(str(transcript), ["Persona 2"], out_dir=str(tmp_path))
+
+    speaker = summary["speakers"][0]
+    assert (speaker["clips"], speaker["seconds"]) == (0, 4.0)
+    assert "tratto più lungo" in speaker["note"]
+    assert naming.name_speakers(str(transcript), ["Persona 2=Anna Neri"])["named"][0]["clips_added"] == 0
+
+
+def test_the_unattributed_voice_cannot_be_heard(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+
+    summary = naming.prepare_listening(str(transcript), ["Voce non attribuita"], out_dir=str(tmp_path))
+
+    assert summary["status"] == "invalid_arguments"
+
+
+def test_after_the_trial_a_speaker_whose_clips_are_all_discarded_is_told_why(transcript_and_library, monkeypatch):
+    transcript, library_dir = transcript_and_library
+    FakeVoiceprints.outliers = {13.0}
+    strict = library.LibrarySettings(keep_clips=8, min_consistency=0.99)
+    monkeypatch.setattr(naming, "get_library_settings", lambda: strict)
+    _pass_trial(library_dir, strict)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    result = summary["named"][0]
+    assert (result["clips_added"], result["folder"]) == (0, None)
+    assert "altre voci o rumori" in result["note"]
+    assert "None" not in summary["message"]
+    assert not (library_dir / "Luca Bianchi").exists()

@@ -33,7 +33,8 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill deve
 2. Trascina la registrazione sopra `Trascrivi.bat`: audio o video, per esempio l'mp4 di una call su Teams. Un file alla volta, e deve essere sul PC, non "solo online".
 3. Scrivi quante persone parlano, oppure premi solo Invio se non lo sai.
 4. Alla fine, per ogni voce non riconosciuta, ti mostra due frasi di quella persona e ti chiede il nome. Con Invio resta "Persona 1", "Persona 2"…
-5. Per le voci a cui hai dato un nome si apre il lettore con qualche secondo di quella voce: ascoltala e conferma che è davvero quella persona. Solo allora il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta.
+5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Poi si apre la cartella con le clip aggiunte.
+6. Se il nome che scrivi somiglia a quello di una persona già nella libreria (per esempio "Marco Rosi" quando c'è "Marco Rossi", "M. Rossi" o solo "Marco"), il programma ti chiede se intendevi lei o una persona nuova, prima di salvare qualsiasi cosa.
 
 Accanto al file trovi:
 
@@ -44,11 +45,18 @@ Con la GPU un'ora di registrazione richiede pochi minuti. Sulla CPU può volerci
 
 **Dare i nomi più tardi.** Trascina il file `<nome file> - trascrizione.json` sopra `Trascrivi.bat`: ti fa le stesse domande sui nomi, senza trascrivere di nuovo. Se nel frattempo hai spostato la registrazione, ti chiede di trascinarla nella finestra.
 
+**Confermare o correggere una voce riconosciuta.** Sempre trascinando il file `.json`, il programma ti chiede anche se vuoi confermare o correggere una voce che ha riconosciuto da solo. Scegli la voce dall'elenco, poi:
+
+- premi solo Invio se è davvero quella persona: dopo l'ascolto aggiunge altre sue clip alla libreria, e ti dice se servono molto (il riconoscimento era incerto) o poco;
+- scrivi il nome giusto se l'ha scambiata per un'altra: dopo l'ascolto corregge la trascrizione e dà le clip alla persona giusta. Le clip della persona sbagliata restano dove sono: ascoltale, cancella quelle che non sono sue e fai `Verifica.bat`.
+
+Alla fine di una trascrizione questa domanda non compare: si fa solo quando lo chiedi tu.
+
 ## Con Claude Code o Codex
 
 Dopo l'installazione puoi chiedere al tuo agente, per esempio: "trascrivi la registrazione che ho appena salvato con OBS" e poi "chi è Persona 2?". L'agente usa lo stesso trascrittore sul tuo PC, e la trascrizione non esce dal PC, a meno che l'agente non la legga per risponderti.
 
-Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce.
+Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce. Una voce già riconosciuta la conferma o la corregge solo se glielo chiedi tu, per esempio "vorrei aggiungere delle clip di Sebastiano".
 
 ## Voci da riconoscere
 
@@ -68,6 +76,8 @@ Per non riconoscere più una persona, cancella la sua cartella dentro `voci`.
 Quando dai un nome a una voce, le sue clip finiscono in `voci\Nome Cognome\registrazioni`. Il nome del file dice da quale registrazione vengono e da che minuto.
 
 All'inizio il programma è in **periodo di prova**: tiene tutte le clip, anche quelle che secondo lui sono brutte. Ascoltale e cancella quelle con altre voci, risate o rumori. Dopo 10 voci con nome fai doppio clic su `Verifica.bat`. Se tra le clip che hai cancellato non ce n'è nessuna che il programma avrebbe tenuto, ti chiede se le hai ascoltate tutte e, se rispondi di sì, da lì in poi scarta da solo le peggiori. Altrimenti ti elenca quelle clip: in quel caso avvisa chi ti ha dato il trascrittore.
+
+Dopo il periodo di prova ogni persona tiene al massimo **64 clip** aggiunte dalle registrazioni (`max_clips` sotto `[library]` in `trascrittore.ini`). Quando una nuova registrazione supera il limite, il programma ti propone quali togliere, prendendole dalle registrazioni con più clip, e le toglie solo se confermi. Le clip che hai messo tu a mano non le tocca mai.
 
 `Verifica.bat` controlla anche quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia: in quel caso ti mostra la riga da scrivere in `trascrittore.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome.
 

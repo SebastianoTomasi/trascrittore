@@ -32,7 +32,7 @@ def _positive_int(value: str) -> int:
     except ValueError:
         raise argparse.ArgumentTypeError(f"'{value}' non è un numero intero.") from None
     if number < 1:
-        raise argparse.ArgumentTypeError("il numero di persone deve essere almeno 1.")
+        raise argparse.ArgumentTypeError(f"'{value}' deve essere almeno 1.")
     return number
 
 
@@ -54,22 +54,43 @@ def _parser() -> _Parser:
 
     name = commands.add_parser(
         "name",
-        help="dà un nome alle voci 'Persona N' e aggiunge le loro clip alla libreria delle voci",
+        help="dà un nome alle voci e aggiunge le loro clip alla libreria delle voci",
         description=(
             "Riscrive i due file della trascrizione con i nomi dati, senza trascrivere di nuovo, e aggiunge "
             "le clip di ogni voce nominata alla libreria. Solo una persona dà i nomi: un agente usa solo nomi "
-            "che la persona ha confermato o scritto, dopo che ha ascoltato le clip preparate da 'listen'."
+            "che la persona ha confermato o scritto, dopo che ha ascoltato le clip di 'listen'. Una voce "
+            "riconosciuta si conferma o si corregge solo quando la persona lo chiede."
         ),
     )
     name.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
-    name.add_argument("names", nargs="+", metavar="ETICHETTA=NOME", help='per esempio "Persona 2=Luca Bianchi"')
+    name.add_argument("names", nargs="*", metavar="ETICHETTA=NOME", help='per esempio "Persona 2=Luca Bianchi"')
     name.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
+    name.add_argument(
+        "--confirm", action="append", default=[], metavar="ETICHETTA",
+        help="una voce riconosciuta che la persona conferma: aggiunge altre sue clip; ripetibile",
+    )
+    name.add_argument(
+        "--correct", action="store_true",
+        help="permette di sostituire il nome di una voce riconosciuta, quando la persona lo corregge",
+    )
+    name.add_argument(
+        "--new-person", action="append", default=[], metavar="NOME",
+        help="un nome che la persona conferma come persona nuova, anche se somiglia a uno della libreria; ripetibile",
+    )
 
-    listen = commands.add_parser("listen", help="prepara le 1-2 clip migliori di ogni voce da ascoltare prima di nominarla")
+    listen = commands.add_parser("listen", help="prepara una clip di ogni voce da ascoltare prima di nominarla")
     listen.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
     listen.add_argument("labels", nargs="+", metavar="ETICHETTA", help='per esempio "Persona 2"')
     listen.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     listen.add_argument("--out-dir", default=None, help="cartella delle clip da ascoltare")
+    listen.add_argument("--clip", type=_positive_int, default=1, help="quale clip: 1 la migliore, 2 la seconda, ...")
+
+    remove = commands.add_parser(
+        "remove-clips",
+        help="toglie dalla libreria clip aggiunte da 'name', dopo che la persona ha confermato la proposta",
+    )
+    remove.add_argument("person", help="il nome della cartella della persona in 'voci'")
+    remove.add_argument("clips", nargs="+", metavar="CLIP", help="i file proposti da 'name' in 'over_cap'")
 
     check = commands.add_parser(
         "check",
@@ -113,13 +134,29 @@ def _transcribe(args: argparse.Namespace) -> dict[str, Any]:
 def _name(args: argparse.Namespace) -> dict[str, Any]:
     from src.transcriber import naming
 
-    return naming.name_speakers(args.transcript, args.names, recording=args.recording)
+    return naming.name_speakers(
+        args.transcript,
+        args.names,
+        recording=args.recording,
+        confirm=args.confirm,
+        correct=args.correct,
+        new_people=args.new_person,
+    )
 
 
 def _listen(args: argparse.Namespace) -> dict[str, Any]:
     from src.transcriber import naming
 
-    return naming.prepare_listening(args.transcript, args.labels, recording=args.recording, out_dir=args.out_dir)
+    return naming.prepare_listening(
+        args.transcript, args.labels, recording=args.recording, out_dir=args.out_dir, clip=args.clip
+    )
+
+
+def _remove_clips(args: argparse.Namespace) -> dict[str, Any]:
+    from src.asr.utils.config import get_library_settings
+    from src.transcriber import library
+
+    return library.remove_clips_report(args.person, args.clips, get_library_settings())
 
 
 def _check(args: argparse.Namespace) -> dict[str, Any]:
@@ -143,7 +180,14 @@ def _trial(args: argparse.Namespace) -> dict[str, Any]:
     )
 
 
-_COMMANDS = {"transcribe": _transcribe, "name": _name, "listen": _listen, "check": _check, "trial": _trial}
+_COMMANDS = {
+    "transcribe": _transcribe,
+    "name": _name,
+    "listen": _listen,
+    "remove-clips": _remove_clips,
+    "check": _check,
+    "trial": _trial,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
