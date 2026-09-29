@@ -1,6 +1,6 @@
 # Correcting a wrongly recognized name
 
-**State:** open
+**State:** closed
 **Scope:** feature:voice-library-growth
 **Destination:** product
 **Revisit when:** a person finds a speaker recognized with the wrong name and
@@ -35,7 +35,31 @@ Options discussed:
 - in both cases, consider whether the wrongly matched person's pool needs a
   look, since it scored above the threshold for someone else's voice.
 
+## Progress
+
+On 2026-09-29 the user chose that a recognized name can be corrected, and that
+the clips then go to the right person after the listening check. It happens
+only when the person asks for it explicitly, for example by telling the agent;
+neither the transcriber nor the agent starts it or offers it by itself. For parity, the person's path is
+`Trascrivi.bat` when a transcript's JSON file is dropped on it: besides the
+questions on "Persona N", it asks whether to confirm or correct a recognized
+speaker. The questions at the end of a run stay as they are.
+The wrongly matched person's clips are left untouched: the message says who was
+recognized in place of whom and suggests listening to that person's clips and
+running the recognition check again. The
+accepted rules above stay in force until the whole change is settled and
+propagated.
+
 [Adding clips from a recognized speaker](clips-from-recognized-speakers.md)
 uses the same command on the same labels, and
 [listening to recognized speakers](listening-to-more-clips.md) is the first
 step of both; design them together.
+
+## Resolution
+
+Settled on 2026-09-29 as recorded above. The rule is in
+[Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules) ("A recognized speaker changes only on the
+person's request"), with the reasons in
+[ADR 0005](../adr/0005-recognized-speakers-get-clips-only-on-request.md) and
+the commands in
+[Naming speakers later](../features/agent-cli/frontend/agent-command-surface.md#naming-speakers-later).

@@ -1,6 +1,6 @@
 # Listening to more clips, and to recognized speakers
 
-**State:** open
+**State:** closed
 **Scope:** feature:voice-library-growth
 **Destination:** product
 **Revisit when:** the `listen` command is next changed, or when a person wants
@@ -27,6 +27,30 @@ gave, which is the first step of
 [correcting a wrongly recognized name](correcting-a-recognized-name.md). `name`
 keeps its own rule until that item and the item on clips from recognized
 speakers are decided.
+
+## Progress
+
+On 2026-09-29 the user chose:
+
+- `listen` accepts any speaker of the transcript, recognized or not, since
+  confirming and correcting a recognized speaker start from it (see
+  [correcting a wrongly recognized name](correcting-a-recognized-name.md)).
+- `listen` plays one clip at a time: the best one first. A person unsure of the
+  voice asks for the next best, again one at a time. This replaces both the
+  joined file of two clips and the `--clips N` idea.
+- After `name` saves clips, the transcriber opens the person's `registrazioni`
+  folder, so the person can click, listen to and delete the clips there, as the
+  trial asks. When the folder cannot be opened, for example from an agent, the
+  message gives its path.
+
+- A speaker without any full-length window can still be heard: `listen` plays
+  the longest window the transcript records, down to
+  `matching.min_window_sec`, and says how long it is. It serves to recognize
+  the voice by ear only; the library still takes only full-length windows, so
+  `name` then changes the transcript and adds no clips.
+
+This changes "the one or two best clips" in the documents listed at the end.
+The accepted rules stay in force until the change is propagated.
 
 Established facts that bound N:
 
@@ -55,3 +79,14 @@ Questions to settle:
   [Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules),
   the listening check in the implementation artifact,
   `docker/skill-trascrittore.md` and the launcher's `help`.
+
+## Resolution
+
+Settled on 2026-09-29 as recorded above. The rules are in
+[Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules) ("Listening check, always" and "The clips are
+the person's to review"), the command in
+[Listening before naming](../features/agent-cli/frontend/agent-command-surface.md#listening-before-naming),
+and the mechanics in
+[Clip selection](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#clip-selection).
+Whether 10-second windows are right was measured the same day; see
+[Shorter clips for the library](shorter-clips-for-the-library.md).

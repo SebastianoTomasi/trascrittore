@@ -31,6 +31,10 @@ a named speaker's voice clips to the voice library belongs to
 - [Non-goals](../../../product/transcriber-promise.md#non-goals) — the
   commands keep one transcription at a time and leave minutes and summaries to
   the agent.
+- [Rules](../../voice-library-growth/product/naming-grows-the-library.md#rules)
+  of voice library growth — naming later confirms or corrects a recognized
+  speaker only on the person's request, and stops on a name similar to a person
+  in the library, so the capability and failures below follow those rules.
 - [Data classes](../../../product/personal-data-and-obligations.md#data-classes)
   — the speaker windows belong to the transcript class declared there, so this
   feature inherits its obligations and adds none.
@@ -46,7 +50,10 @@ speakers stayed "Persona N".
 
 Afterwards the agent can propose names for those speakers from what they said.
 The person confirms or writes each name, and the transcript is updated without
-transcribing the recording again.
+transcribing the recording again. When the person asks, the agent also confirms
+or corrects a speaker the transcriber recognized, as
+[voice library growth](../../voice-library-growth/product/naming-grows-the-library.md#rules)
+details; it never proposes that step by itself.
 
 ## Parity between people and agents
 
@@ -97,7 +104,9 @@ relay the message or act on it. Ordinary reasons are:
 else in them changes.
 
 **Naming later fails.** A name given for a label the transcript does not contain
-is refused with a message, and the files stay as they were.
+is refused with a message, and the files stay as they were. So is a name the
+voice library growth rules stop, such as a name similar to a person already in
+the library.
 
 ## Non-goals
 

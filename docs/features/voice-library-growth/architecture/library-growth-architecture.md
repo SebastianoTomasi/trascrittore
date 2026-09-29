@@ -14,22 +14,25 @@ The rules the person sees are in
 ## Dependencies
 
 - [Rules](../product/naming-grows-the-library.md#rules) — this architecture
-  realizes naming that adds to the library, nothing saved without a name, the
-  listening check, the trial and the recognition check.
+  realizes naming that adds to the library, recognized speakers confirmed or
+  corrected on request, nothing saved without a name, the listening check, the
+  cap on added clips, the trial and the recognition check.
 - [Transcript JSON](../../agent-cli/architecture/agent-cli-architecture.md#transcript-json)
   — clips are cut from the windows that this contract adds to the transcript.
 - [Components](../../agent-cli/architecture/agent-cli-architecture.md#components)
   — every new command runs through the host launcher, which mounts the voice
-  library writable only for the commands that change it: naming and the trial.
+  library writable only for the commands that change it: naming, including the
+  removal of clips over the cap, and the trial.
 - [What an update must not break](../../../product/transcriber-promise.md#what-an-update-must-not-break)
   — the added clips live in folders that every version reads: one folder per
   person, with clips directly inside it or in subfolders.
 
 ## Where clips come from
 
-When a speaker is named, clips are cut from the original recording using that
+When a speaker is named, or a recognized speaker is confirmed or corrected on
+the person's request, clips are cut from the original recording using that
 speaker's windows in the transcript JSON. No clip or voiceprint exists for a
-speaker before a name is given. When the recording or the windows are missing,
+speaker before a name is given or confirmed. When the recording or the windows are missing,
 or the file found does not last as long as the transcript says, no clips are
 added.
 
@@ -65,6 +68,14 @@ wherever it sits there:
   folder, keeps its record;
 - a clip that is deleted, or moved into another person's folder, counts as
   deleted by the person.
+
+## Clips over the cap
+
+The cap counts the clips in a person's `registrazioni` folder that have an
+entry in its clip record. Only those clips can be proposed for removal, and
+only after the trial; a clip placed by hand, in any folder, never is. A
+proposal names the clips by file name, and a removal deletes only clips the
+person confirmed that are still in the folder.
 
 ## Trial state
 

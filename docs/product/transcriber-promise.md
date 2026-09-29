@@ -99,8 +99,9 @@ Neither group acts on the transcriber.
 
 Each PC has its own voice library, managed by the person who uses that PC:
 they decide whose voices it holds. The library grows in two ways: the person
-places voice clips in it, and naming a speaker the transcriber did not
-recognize adds clips of that speaker's voice, as
+places voice clips in it, and naming a speaker adds clips of that speaker's
+voice. Naming covers a speaker the transcriber did not recognize and, only when
+the person asks, confirming or correcting one it recognized, as
 [Naming a speaker grows the voice library](../features/voice-library-growth/product/naming-grows-the-library.md)
 details. Voice clips sent by the maintainer are only a starting point. There is
 no shared library.
@@ -130,9 +131,10 @@ details links to it.
   under their name. When recognition is not sure enough, the speaker appears
   as "Persona N", because a wrong name is worse than none. Words it cannot
   attribute to any speaker appear as "Voce non attribuita".
-- **Name the speakers it did not recognize.** A person can give a name to each
-  "Persona N", seeing two of their sentences as a reminder. Naming also adds
-  clips of that speaker's voice to the voice library, as
+- **Name speakers.** A person can give a name to each
+  "Persona N", seeing two of their sentences as a reminder, and, when they ask,
+  confirm or correct a name the transcriber gave. Naming also adds clips of
+  that speaker's voice to the voice library, as
   [Naming a speaker grows the voice library](../features/voice-library-growth/product/naming-grows-the-library.md)
   details.
 - **Keep a voice library.** A person adds someone by creating a folder with

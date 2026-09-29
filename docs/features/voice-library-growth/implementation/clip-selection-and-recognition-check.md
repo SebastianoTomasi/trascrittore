@@ -4,7 +4,8 @@
 
 ## Scope
 
-This artifact states how candidate clips are ranked and selected, how the trial
+This artifact states how candidate clips are ranked and selected, how similar
+names and clips over the cap are found, how the trial
 compares the selection with the person's choices, and how the recognition check
 measures the threshold and margin without fooling itself. The contracts these
 mechanics satisfy are in
@@ -13,11 +14,15 @@ mechanics satisfy are in
 ## Dependencies
 
 - [Rules](../product/naming-grows-the-library.md#rules) — the trial's
-  criterion, the number of clips kept, and what the recognition check reports.
+  criterion, the number of clips kept, listening one clip at a time, what
+  counts as a similar name, the cap and its order of removal, and what the
+  recognition check reports.
 - [Where added clips go](../architecture/library-growth-architecture.md#where-added-clips-go),
-  [Clip record](../architecture/library-growth-architecture.md#clip-record) and
+  [Clip record](../architecture/library-growth-architecture.md#clip-record),
+  [Clips over the cap](../architecture/library-growth-architecture.md#clips-over-the-cap) and
   [Recognition check](../architecture/library-growth-architecture.md#recognition-check)
-  — the pool layout, how a recorded clip is identified, and the check's inputs.
+  — the pool layout, how a recorded clip is identified, which clips may be
+  removed, and the check's inputs.
 
 ## How recognition scores today
 
@@ -57,10 +62,30 @@ numbers.
   discard.
 - **What is kept.** After the trial, only the windows voted keep are saved as
   clips. Their file names carry the recording and the window's time.
-- **The listening check.** The person hears the two best clips by the same
-  score, joined in one file with a pause of 0.7 seconds, so the player opens
-  once per speaker. With a single clip the file holds only that one. For an
-  agent, opening the file means starting the default player on the person's PC.
+- **The listening check.** The person hears one clip at a time, ranked by the
+  same score: the first listening plays the best, and each further request the
+  next one. A speaker with no full-length window is played from their longest
+  recorded window, down to `matching.min_window_sec`; that window is only
+  heard, never saved. For an agent, opening a clip means starting the default
+  player on the person's PC.
+
+## Similar names
+
+Before a naming saves anything, the given name is compared, ignoring case and
+spacing, with the folders of the library other than an exact match. It is
+similar to a folder when:
+
+- the two names are one or two letter edits apart;
+- the surnames match and one first name is the other's initial;
+- the given name is a single word equal to the first word of a folder's name.
+
+## Clips over the cap
+
+After a naming saves clips, the person's clips in `registrazioni` that have a
+clip record are counted against `library.max_clips` (64). When they are more,
+the proposal takes them from the recording with the most such clips, lowest
+consistency first (the consistency is in the clip record), recounting after
+each, until the count is back at the cap. During the trial nothing is proposed.
 
 ## Trial bookkeeping
 
@@ -110,11 +135,15 @@ itself may be wrong.
 
 ## Later
 
-On 2026-09-25 the user confirmed the values above (8 clips, the 0.60 floor, two
-clips to hear, the 0.03 slack and the 10 missing voices) and postponed:
+On 2026-09-25 the user confirmed the values above (8 clips, the 0.60 floor, the
+0.03 slack and the 10 missing voices); on 2026-09-29 listening one clip at a
+time replaced the two clips joined in one file, and the cap was settled. Still
+postponed:
 
-- [the cap on clips per person](../../../deferred/clip-cap-per-person.md), and
-  which clips to drop when it is reached;
 - [how many additions trigger a new run of the check](../../../deferred/recognition-check-cadence.md);
 - [score normalization](../../../deferred/recognition-score-normalization.md),
   which would change the score scale and require a new calibration.
+
+On 2026-09-29 a measurement confirmed 10-second windows as the length to keep.
+[Shorter clips for the library](../../../deferred/shorter-clips-for-the-library.md)
+records it and the possible move to clips of about 7.5 seconds.

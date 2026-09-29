@@ -1,6 +1,6 @@
 # Adding clips from a recognized speaker
 
-**State:** open
+**State:** closed
 **Scope:** feature:voice-library-growth
 **Destination:** product
 **Revisit when:** [correcting a wrongly recognized name](correcting-a-recognized-name.md)
@@ -26,6 +26,25 @@ person listens and confirms, which is the same guard that protects the naming
 of a "Persona N". Clips from a recognized speaker could then be added only
 after an explicit confirmation, never automatically.
 
+## Progress
+
+On 2026-09-29 the user chose to allow clips from a recognized speaker after
+the listening check and an explicit confirmation. It happens only when the
+person asks for it explicitly, for example "vorrei aggiungere delle clip di
+Sebastiano"; neither the transcriber nor the agent starts it or offers it by
+itself. For parity, the person's path is `Trascrivi.bat` when a
+transcript's JSON file is dropped on it: besides the questions on "Persona N",
+it asks whether to confirm or correct a recognized speaker. The questions at
+the end of a run stay as they are.
+When the person confirms a recognized speaker, the clips are added even when
+they help little, since the person asked. Before that, the command shows the
+recognition score and says plainly whether new clips help little (score well
+above `matching.threshold`) or much (score close to it). During the trial,
+speakers confirmed or corrected this way count towards the 10 named speakers
+like any other, since their clips go through the same selection and listening.
+The accepted rules above stay in force until the whole change is
+settled and propagated.
+
 Questions to settle:
 
 - **The command.** A confirmation that reads clearly, for example
@@ -48,3 +67,10 @@ Questions to settle:
 - **Listening first.** It needs `listen` to accept recognized speakers, which
   [Listening to more clips, and to recognized speakers](listening-to-more-clips.md)
   covers.
+
+## Resolution
+
+Settled on 2026-09-29 as recorded above. The rule is in
+[Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules) ("A recognized speaker changes only on the
+person's request", and the trial), with the reasons in
+[ADR 0005](../adr/0005-recognized-speakers-get-clips-only-on-request.md).

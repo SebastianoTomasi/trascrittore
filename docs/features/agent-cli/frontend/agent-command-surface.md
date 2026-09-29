@@ -23,6 +23,10 @@ and flag names are left to the code.
 - [Components](../architecture/agent-cli-architecture.md#components) — every
   command goes through the host launcher, so a person and an agent get the same
   behavior.
+- [Rules](../../voice-library-growth/product/naming-grows-the-library.md#rules)
+  of voice library growth — confirming or correcting a recognized speaker on
+  request, similar names, the cap, and listening one clip at a time decide what
+  naming and listening accept and where they stop for the person.
 
 ## Commands ask nothing
 
@@ -91,11 +95,42 @@ the same kind of result summary.
 An agent calls it only with names the person has confirmed or written. The
 skill states this rule.
 
+A label that already holds a recognized name is accepted only in a form that
+states the person's intent: confirming the name, or correcting it to another.
+Before confirming, the summary carries the recognition score and whether new
+clips would help little or much. An agent uses this form only when the person
+asked, never on its own suggestion.
+
+Because commands ask nothing, the steps that need the person's decision end
+the command with a status of their own, and the agent asks the person before
+calling it again:
+
+- **A similar name.** Nothing is saved. The summary lists the people in the
+  library whose names are similar. The agent calls the command again with the
+  person the person meant, or with an option confirming a new person.
+- **Clips over the cap.** The new clips are saved, and the summary lists the
+  added clips proposed for removal. The agent runs the removal only after the
+  person confirms.
+
+When the command saves clips, it opens the person's folder of added clips in
+the file manager on the PC when it can; the summary always gives the folder.
+
+## Listening before naming
+
+The listening command takes a transcript's JSON file and a speaker's label,
+recognized or not, and plays one clip of that speaker: the best one, or the
+next best when asked for it. A speaker without a full clip is played from their
+longest stretch of speech, and the summary says how long it lasts. The summary
+also says how many clips the speaker has.
+
 ## The person's path
 
 `Trascrivi.bat` keeps what a person has today: drag and drop, the question about
 the speaker count, and the naming questions at the end of a run. Dropping a
 transcript's JSON file on it asks the same naming questions without
-transcribing again, which is the person's way of naming speakers later. It
-collects the answers and passes them to the same commands an agent uses, so the
-two paths never drift apart.
+transcribing again, which is the person's way of naming speakers later. In
+that case it also asks whether the person wants to confirm or correct a
+recognized speaker; the questions at the end of a run do not. When a command
+stops on a similar name or proposes clips to remove, `Trascrivi.bat` asks the
+person the same question the agent would. It collects the answers and passes
+them to the same commands an agent uses, so the two paths never drift apart.

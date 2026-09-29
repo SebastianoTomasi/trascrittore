@@ -33,7 +33,8 @@ A speaker whom recognition did not name, shown in the transcript as
 _Avoid_: unknown speaker
 
 **Naming**  
-A person giving a name to an anonymous speaker.
+A person giving a name to a speaker: to an anonymous speaker, or, when the
+person asks for it, confirming or correcting the name recognition gave.
 
 **Unattributed speech**  
 Words the transcriber heard but could not assign to any speaker, shown in the
@@ -65,8 +66,9 @@ its own voice library and reports which speakers the current settings would
 name wrongly or leave anonymous.
 
 **Listening check**  
-The step of naming in which the person hears the best voice clips of a speaker
-and confirms whose voice it is, before any clip joins the voice library.
+The step of naming in which the person hears a speaker's best voice clips, one
+at a time, and confirms whose voice it is, before any clip joins the voice
+library.
 
 **Trial period**  
 The time during which every clip cut from a named speaker is kept, until the
