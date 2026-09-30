@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from functools import lru_cache
 
-from src.asr.utils.device import DOCKER_GPU_FALLBACK_ENV, DeviceChoice, probe_cuda, resolve_device
+from src.asr.utils.device import DeviceChoice, limit_batch_size, probe_cuda, resolve_device
 from src.paths import (
     DEFAULT_ALIGNED_TRANSCRIPTS_DIR,
     DEFAULT_CACHE_DIR,
@@ -121,14 +121,29 @@ def _device_choice() -> DeviceChoice:
     Decide the compute device once per process, warning when `auto` falls back to CPU.
     """
     requested = config["whisper"]["device"].strip()
+    require_gpu = os.getenv("TRANSCRIBER_REQUIRE_GPU") == "1"
+    if require_gpu and requested.lower() == "cpu":
+        raise RuntimeError("Questa installazione richiede la GPU NVIDIA: togli device = cpu da trascrittore.ini.")
     cuda_available, cuda_error = probe_cuda() if requested.lower() != "cpu" else (False, None)
+    supported_compute_types = None
+    if cuda_available:
+        try:
+            import ctranslate2
+
+            supported_compute_types = ctranslate2.get_supported_compute_types("cuda")
+            if not supported_compute_types:
+                raise RuntimeError("CTranslate2 non supporta questa GPU NVIDIA.")
+        except Exception as exc:
+            cuda_available, cuda_error = False, str(exc).strip() or type(exc).__name__
     choice = resolve_device(
         requested,
         config["whisper"]["compute_type"].strip(),
         cuda_available=cuda_available,
         cuda_error=cuda_error,
-        docker_gpu_missing=os.getenv(DOCKER_GPU_FALLBACK_ENV, "").strip().lower() == "docker",
+        supported_compute_types=supported_compute_types,
     )
+    if require_gpu and choice.device == "cpu":
+        raise RuntimeError(f"La GPU NVIDIA non funziona: {choice.fallback_reason}")
     if choice.fallback_reason:
         from src.utils.logging_setup import log_warning
 
@@ -145,12 +160,17 @@ def get_whisper_settings() -> WhisperSettings:
     Return Whisper/ASR-related configuration with the resolved device and compute type.
     """
     choice = _device_choice()
+    gpu_memory_bytes = None
+    if choice.device.startswith("cuda"):
+        import torch
+
+        gpu_memory_bytes = torch.cuda.get_device_properties(choice.device).total_memory
 
     return WhisperSettings(
         model_id=config["whisper"]["model_id"],
         device=choice.device,
         compute_type=choice.compute_type,
-        batch_size=int(config["whisper"]["batch_size"]),
+        batch_size=limit_batch_size(int(config["whisper"]["batch_size"]), choice.device, gpu_memory_bytes),
         language=config["whisper"].get("language", "").strip() or None,
         initial_prompt=config["whisper"].get("initial_prompt", "").strip() or None,
         vad_onset=float(config["vad"]["onset"]),

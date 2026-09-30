@@ -1,4 +1,4 @@
-# Transcriber
+# Trascrittore
 
 The transcriber turns a recording into a transcript that says who spoke, when,
 and what they said, for anyone who needs a written record of what was said.

@@ -145,15 +145,22 @@ details links to it.
   names the person confirms, as
   [Transcribing through an agent](../features/agent-cli/product/transcribing-through-an-agent.md)
   details.
-- **Work with or without a GPU.** It uses an NVIDIA GPU when there is one;
-  otherwise it transcribes on the CPU, much more slowly, and says so on screen
-  and in the transcript.
+- **Work with or without a GPU.** On a supported NVIDIA GPU, transcription,
+  alignment, speaker separation and recognition use that GPU. The transcriber
+  does not present a mixed GPU/CPU run as the solution for such a PC. A PC
+  without an NVIDIA GPU can still transcribe on its CPU, with a warning about
+  the slower processing. It says which device was used on screen and in the
+  transcript.
 - **Explain what went wrong.** Ordinary problems, such as an unreadable
   recording, Docker not running, the transcriber not installed or GPU memory
   running out, end with a plain message saying what to do.
-- **Install and update from a file.** A person installs or updates the
-  transcriber by loading the file the maintainer distributes, and the
-  installation reports whether the GPU works.
+- **Install and update from files.** One installer detects the PC's NVIDIA GPU
+  and loads only the matching prebuilt image from local release files. The
+  CUDA 12.6 image serves older supported GPUs such as the MX230; the CUDA 12.8
+  image serves newer GPUs such as the RTX 2070 and RTX 5070. The maintainer may
+  send both image files or just the one needed for a known PC. Installation
+  reports whether the selected image can actually use the GPU. The delivery
+  and verification rules are in [GPU image selection](../deployment/gpu-image-selection.md).
 - **Adjust settings without a new version.** A person changes processing and
   recognition settings by writing them in `trascrittore.ini`, next to the
   scripts.

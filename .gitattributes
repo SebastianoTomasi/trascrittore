@@ -1,2 +1,4 @@
 # cmd.exe misparses labels in LF-only batch files.
 *.bat text eol=crlf
+# Keep dependency-layer cache stable across Windows checkouts.
+pyproject.toml text eol=lf

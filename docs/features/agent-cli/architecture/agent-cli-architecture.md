@@ -31,6 +31,8 @@ get a command line and a skill instead of an MCP server is in
 - [What an update must not break](../../../product/transcriber-promise.md#what-an-update-must-not-break)
   — the fields of the transcript JSON are not in that baseline, so the
   guarantee below covers only what this feature adds.
+- [Installation and update](../../../deployment/gpu-image-selection.md#installation-and-update)
+  — the launcher uses the active image selected and checked by the installer.
 
 ## Components
 
@@ -42,8 +44,12 @@ get a command line and a skill instead of an MCP server is in
     `trascrittore.ini` and the voiceprint cache. `voci` is writable only for
     the commands that change the library; every other command mounts it
     read-only;
-  - requesting the GPU for a transcription, and falling back to the CPU when
-    Docker cannot start the container with it (exit status 125);
+  - requesting the GPU for a transcription on a PC installed for GPU use. The
+    installer selects a compatible image before the launcher runs, as
+    [GPU image selection](../../../deployment/gpu-image-selection.md) defines.
+    If GPU execution stops working, the launcher reports the failure instead
+    of silently continuing with some or all phases on CPU. On a PC without an
+    NVIDIA GPU, the same commands remain available on CPU with a warning;
   - the one-transcription-at-a-time check.
 
   `Trascrivi.bat`, `Verifica.bat` and agents all go through the launcher.

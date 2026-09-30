@@ -11,14 +11,15 @@ close to the maintainer. This record moved here from YIAN on 2026-09-24,
 together with the code; the transcriber is now the whole project, so
 the record has project scope.
 
-Today it ships as a file. `docker/build.ps1 -Export <export folder>` writes
-`trascrittore.tar` together with the `.bat` scripts; the people who use
-it download those files and load the image with `Installa.bat` (`docker load`).
-This was confirmed on 2026-09-24 as the way to finish the pilot.
+Today it ships as local files. `docker/build.ps1 -Variant both -Export <export folder>`
+writes `trascrittore-cu126.tar` and `trascrittore-cu128.tar` with the installer
+and launcher; a person downloads both or just the TAR for their GPU.
+`Installa.bat` selects and checks one image before making it active.
+The file-based delivery method was chosen on 2026-09-24 for the pilot.
 
 A private registry would make updates cheap: the Dockerfile orders its layers
 dependencies → models → code, so a pull would download only the code layer of a
-few KB instead of the whole image, about 7 GB compressed. The idea was discussed and explicitly
+few KB instead of a whole image, about 7 GB compressed. The idea was discussed and explicitly
 postponed ("non facciamolo ora"). It can wait because it needs decisions that
 belong to the maintainer:
 

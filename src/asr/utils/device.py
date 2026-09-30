@@ -3,10 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-# Set by Trascrivi.bat when `docker run --gpus all` failed and it retried without a GPU.
-DOCKER_GPU_FALLBACK_ENV = "TRANSCRIBER_GPU_FALLBACK"
-
-# CTranslate2 has no half-precision kernels on CPU.
 _CPU_UNSUPPORTED_COMPUTE_TYPES = {"float16", "int8_float16"}
 
 
@@ -17,30 +13,30 @@ class DeviceChoice:
     fallback_reason: str | None = None
 
 
+def limit_batch_size(batch_size: int, device: str, gpu_memory_bytes: int | None = None) -> int:
+    if not device.startswith("cuda") or gpu_memory_bytes is None:
+        return batch_size
+    if gpu_memory_bytes <= 4 * 1024**3:
+        return min(batch_size, 1)
+    if gpu_memory_bytes <= 6 * 1024**3:
+        return min(batch_size, 4)
+    return batch_size
+
+
 def probe_cuda() -> tuple[bool, str | None]:
-    """
-    Return whether CUDA is usable and, when it is not, the driver error explaining why.
-    """
+    """Run a PyTorch tensor operation and a cuDNN kernel on the selected GPU."""
     import torch
 
-    if torch.cuda.is_available():
-        return True, None
     try:
-        torch.cuda.init()
+        if not torch.cuda.is_available():
+            torch.cuda.init()
+            return False, "CUDA non e disponibile."
+        x = torch.ones((1, 1, 1), device="cuda")
+        torch.nn.GRU(1, 1, batch_first=True).to("cuda")(x)
+        torch.cuda.synchronize()
     except Exception as exc:
         return False, str(exc).strip() or type(exc).__name__
-    return False, None
-
-
-def _fallback_reason(cuda_error: str | None, docker_gpu_missing: bool) -> str:
-    if docker_gpu_missing:
-        return (
-            "Docker non ha dato accesso alla GPU NVIDIA (l'avvio con --gpus è fallito). "
-            "Aggiorna il driver NVIDIA e controlla che Docker Desktop usi WSL2."
-        )
-    if cuda_error:
-        return f"PyTorch non riesce a usare la GPU NVIDIA: {cuda_error}"
-    return "Nessuna GPU NVIDIA disponibile."
+    return True, None
 
 
 def resolve_device(
@@ -49,24 +45,37 @@ def resolve_device(
     *,
     cuda_available: bool,
     cuda_error: str | None = None,
-    docker_gpu_missing: bool = False,
+    supported_compute_types: set[str] | None = None,
 ) -> DeviceChoice:
-    """
-    Pick the device and compute type used by every pipeline step.
-
-    `auto` prefers CUDA and falls back to CPU with a reason; an explicit `cuda`
-    without a usable GPU is an error.
-    """
+    """Choose one device for every transcription phase and a valid Whisper precision."""
     requested = requested.strip().lower()
-    if requested.startswith("cuda"):
-        if not cuda_available:
-            raise RuntimeError(f"Config requested device '{requested}' but CUDA is not available on this system.")
-        return DeviceChoice(requested, compute_type)
-    if requested not in {"auto", "cpu"}:
+    if requested not in {"auto", "cpu"} and not requested.startswith("cuda"):
         raise RuntimeError(f"whisper.device must be auto, cpu or cuda, got '{requested}'.")
-    if requested == "auto" and cuda_available:
-        return DeviceChoice("cuda", compute_type)
+    if requested.startswith("cuda") and not cuda_available:
+        raise RuntimeError(f"Config requested device '{requested}' but CUDA is not available on this system.")
 
+    use_cuda = requested.startswith("cuda") or (requested == "auto" and cuda_available)
+    device = requested if requested.startswith("cuda") else "cuda" if use_cuda else "cpu"
+    if compute_type == "auto":
+        if use_cuda:
+            supported = supported_compute_types or set()
+            compute_type = next(
+                (kind for kind in ("float16", "int8_float32", "int8", "float32") if kind in supported),
+                "float16" if supported_compute_types is None else "",
+            )
+            if not compute_type:
+                raise RuntimeError("CTranslate2 non supporta questa GPU NVIDIA.")
+        else:
+            compute_type = "int8"
+    elif use_cuda and supported_compute_types is not None and compute_type not in supported_compute_types:
+        raise RuntimeError(f"CTranslate2 non supporta compute_type={compute_type} su questa GPU NVIDIA.")
+
+    if use_cuda:
+        return DeviceChoice(device, compute_type)
     cpu_compute_type = "int8" if compute_type in _CPU_UNSUPPORTED_COMPUTE_TYPES else compute_type
-    reason = _fallback_reason(cuda_error, docker_gpu_missing) if requested == "auto" else None
+    reason = (
+        f"PyTorch non riesce a usare la GPU NVIDIA: {cuda_error}"
+        if cuda_error
+        else "Nessuna GPU NVIDIA disponibile."
+    ) if requested == "auto" else None
     return DeviceChoice("cpu", cpu_compute_type, reason)

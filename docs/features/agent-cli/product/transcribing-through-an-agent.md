@@ -25,6 +25,9 @@ a named speaker's voice clips to the voice library belongs to
 - [What users are assumed to have](../../../product/transcriber-promise.md#what-users-are-assumed-to-have)
   — agents run on Windows itself, not inside WSL, so every command must work
   from the Windows shells an agent uses.
+- [Work with or without a GPU](../../../product/transcriber-promise.md#capabilities)
+  — the result reports CPU use only for a PC without an NVIDIA GPU; a GPU
+  failure is an error rather than a successful mixed-device run.
 - [No use policy](../../../product/transcriber-promise.md#no-use-policy) —
   whether a transcript reaches an agent's model provider is the person's
   choice. The transcriber neither performs nor blocks it.
@@ -86,8 +89,8 @@ no new class of data.
 
 **Transcribing succeeds.** The transcript's text and JSON files appear next to
 the recording, as they do today. The command ends with a result summary that
-the agent can read. When the transcriber fell back to the CPU, the summary says
-so, as the files do.
+the agent can read. On a PC without an NVIDIA GPU, the summary and files say
+that the CPU was used.
 
 **Transcribing fails for an ordinary reason.** The command gives a plain Italian
 message saying what happened and what to do next, as the promise requires for
@@ -98,6 +101,7 @@ relay the message or act on it. Ordinary reasons are:
 - Docker not running;
 - the transcriber not installed;
 - GPU memory running out;
+- GPU execution becoming unavailable on a PC installed for GPU use;
 - another transcription already running.
 
 **Naming later succeeds.** Both transcript files show the new names, and nothing

@@ -74,7 +74,7 @@ error. It ends with a result summary with these fields:
 - the status (success or the kind of failure) and an Italian message;
 - the paths of the transcript's text and JSON files;
 - the recording's duration and the elapsed time;
-- the device used, with the CPU fallback warning when there was one;
+- the device used, with a CPU warning on a PC without an NVIDIA GPU;
 - for each speaker, the displayed label, whether it was recognized, and how
   long they spoke.
 

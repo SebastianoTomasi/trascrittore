@@ -1,6 +1,6 @@
 <#
 Host launcher of the transcriber: the only place that knows how to run its Docker image.
-Trascrivi.bat, Verifica.bat and agents all go through it, so people and agents get the same behavior.
+Installa.bat, Trascrivi.bat, Verifica.bat and agents all go through it.
 
   powershell -NoProfile -ExecutionPolicy Bypass -File trascrittore.ps1 <command> [arguments]
 
@@ -21,6 +21,9 @@ $Voices = Join-Path $Here 'voci'
 $Config = Join-Path $Here 'trascrittore.ini'
 $DataDir = Join-Path $env:LOCALAPPDATA 'Trascrittore'
 $Cache = Join-Path $DataDir 'cache'
+$GpuModeFile = Join-Path $DataDir 'gpu-mode.txt'
+$GpuMode = if (Test-Path -LiteralPath $GpuModeFile) { (Get-Content -LiteralPath $GpuModeFile -Raw).Trim() } else { 'gpu' }
+if ($GpuMode -notin @('gpu', 'cpu')) { $GpuMode = 'gpu' }
 $ListenDir = Join-Path $DataDir 'ascolto'
 $SkillSource = Join-Path $Here 'skill-trascrittore.md'
 $SkillName = 'trascrittore'
@@ -196,12 +199,11 @@ function Add-Mount($Plan, [string]$HostFolder, [string]$ContainerFolder, [switch
     [void]$Plan.HostPaths.Add($ContainerFolder + '=' + $HostFolder.TrimEnd('\'))
 }
 
-function Get-DockerArguments($Plan, [bool]$Gpu, [bool]$CpuFallback) {
+function Get-DockerArguments($Plan, [bool]$Gpu) {
     # The trailing | keeps the value from ending with a backslash.
     $arguments = @('run', '--rm', '-e', 'TZ=Europe/Rome', '-e', ('TRANSCRIBER_HOST_PATHS=' + ($Plan.HostPaths -join '|') + '|'))
     if ($Plan.Transcription) { $arguments += @('--name', $TranscriptionName) }
-    if ($Gpu) { $arguments += @('--gpus', 'all') }
-    if ($CpuFallback) { $arguments += @('-e', 'TRANSCRIBER_GPU_FALLBACK=docker') }
+    if ($Gpu) { $arguments += @('--gpus', 'all', '-e', 'TRANSCRIBER_REQUIRE_GPU=1') }
     $arguments += @($Plan.Mounts)
     if (Test-Path -LiteralPath $Config -PathType Leaf) {
         # The person's file holds only what they changed; the image has the defaults for everything else.
@@ -213,22 +215,13 @@ function Get-DockerArguments($Plan, [bool]$Gpu, [bool]$CpuFallback) {
 }
 
 function Invoke-Plan($Plan) {
-    # A transcription asks Docker for the GPU and, when Docker cannot start the container with it
-    # (exit status 125), retries on the CPU. The other commands always use the CPU.
-    # Standard output is captured: it carries only the summary, and progress on stderr still shows live.
+    # The installer checks the GPU before selecting the active image. A later GPU failure
+    # must be reported, not turned into a slow CPU transcription.
     $script:RunLines = @()
-    $attempts = if ($Plan.Transcription) { @('gpu', 'cpu') } else { @('cpu') }
-    foreach ($attempt in $attempts) {
-        $dockerArguments = Get-DockerArguments $Plan ($attempt -eq 'gpu') ($Plan.Transcription -and $attempt -eq 'cpu')
-        $script:RunLines = @(& docker @dockerArguments)
-        $script:RunCode = $LASTEXITCODE
-        if ($script:RunCode -ne 125) { return }
-        if ($Plan.Transcription -and (Test-Busy)) { return }
-        if ($attempt -eq 'gpu') {
-            Write-Line ''
-            Write-Line "Docker non riesce a usare la GPU: riprovo sulla CPU, sara' molto piu' lento."
-        }
-    }
+    $gpu = $Plan.Transcription -and $GpuMode -eq 'gpu'
+    $dockerArguments = Get-DockerArguments $Plan $gpu
+    $script:RunLines = @(& docker @dockerArguments)
+    $script:RunCode = $LASTEXITCODE
 }
 
 function Exit-WithoutSummary($Plan) {
@@ -236,6 +229,9 @@ function Exit-WithoutSummary($Plan) {
     if ($script:RunCode -eq 125) {
         if ($Plan.Transcription -and (Test-Busy)) {
             Exit-With $Plan.Command 'busy' "Un'altra trascrizione e' in corso su questo PC: aspetta che finisca e riprova."
+        }
+        if ($Plan.Transcription -and $GpuMode -eq 'gpu') {
+            Exit-With $Plan.Command 'error' "Docker non riesce a usare la GPU NVIDIA: controlla il driver, riavvia Docker Desktop e riprova."
         }
         Exit-With $Plan.Command 'error' "Docker non e' riuscito ad avviare il trascrittore: leggi i messaggi qui sopra."
     }
@@ -691,6 +687,124 @@ function Install {
 }
 
 
+function Invoke-Setup {
+    <# Select one local CUDA archive, verify its kernels, then activate it. ASCII for Windows PowerShell 5.1. #>
+    $ErrorActionPreference = 'Stop'
+    $Here = $PSScriptRoot
+    $ActiveTag = 'trascrittore:latest'
+    $DataDir = Join-Path $env:LOCALAPPDATA 'Trascrittore'
+    $ModeFile = Join-Path $DataDir 'gpu-mode.txt'
+
+    function Get-GpuVariant([string]$Capability) {
+        if ($Capability -notmatch '^(\d+)\.(\d+)$') {
+            throw "Capacita GPU non riconosciuta: $Capability"
+        }
+        $major = [int]$Matches[1]
+        $minor = [int]$Matches[2]
+        if ($major -eq 6 -and $minor -eq 1) { return 'cu126' }
+        if ($major -ge 7 -and $major -le 12) { return 'cu128' }
+        throw "Questa GPU (compute capability $Capability) non e' supportata dalle immagini disponibili."
+    }
+
+    function Get-InstalledImageId([string]$Tag) {
+        $id = & docker image inspect -f '{{.Id}}' $Tag 2>$null
+        if ($LASTEXITCODE -eq 0) { return ($id | Select-Object -First 1) }
+        return $null
+    }
+
+    try {
+        foreach ($file in @('trascrittore.ps1', 'skill-trascrittore.md')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Here $file) -PathType Leaf)) {
+                throw "Non trovo $file accanto a Installa.bat."
+            }
+        }
+        & docker info *> $null
+        if ($LASTEXITCODE -ne 0) { throw "Docker Desktop non e' avviato. Aprilo, aspetta che sia pronto e riprova." }
+
+        $smiPaths = @(
+            (Join-Path $env:WINDIR 'System32\nvidia-smi.exe')
+            (Join-Path $env:ProgramW6432 'NVIDIA Corporation\NVSMI\nvidia-smi.exe')
+        )
+        $smi = $smiPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $smi) {
+            $command = Get-Command nvidia-smi -ErrorAction SilentlyContinue
+            $smi = if ($command) { $command.Source } else { $null }
+        }
+        $gpuLines = if ($smi) { @(& $smi --query-gpu=name,compute_cap --format=csv,noheader 2>$null) } else { @() }
+        $smiOk = $smi -and $LASTEXITCODE -eq 0 -and $gpuLines.Count -gt 0
+        $gpuMode = 'cpu'
+        if ($smiOk) {
+            $variants = @()
+            foreach ($line in $gpuLines) {
+                if ($line -notmatch ',\s*(\d+\.\d+)\s*$') { throw "nvidia-smi ha restituito un valore inatteso: $line" }
+                $variants += Get-GpuVariant $Matches[1]
+                Write-Host "GPU rilevata: $line"
+            }
+            if (@($variants | Select-Object -Unique).Count -ne 1) {
+                throw "Le GPU presenti richiedono immagini CUDA diverse. Contatta chi ti ha dato il trascrittore."
+            }
+            $variant = $variants[0]
+            $gpuMode = 'gpu'
+        }
+        else {
+            $nvidiaController = Get-CimInstance Win32_VideoController -ErrorAction Stop |
+                Where-Object { $_.Name -match 'NVIDIA' }
+            if ($nvidiaController) {
+                throw "Windows vede una GPU NVIDIA ma nvidia-smi non funziona. Aggiorna il driver NVIDIA e riprova."
+            }
+            $variant = if (Test-Path -LiteralPath (Join-Path $Here 'trascrittore-cu128.tar')) { 'cu128' } else { 'cu126' }
+            Write-Warning "Nessuna GPU NVIDIA rilevata: la trascrizione usera' la CPU, molto piu' lentamente."
+        }
+
+        $archive = Join-Path $Here "trascrittore-$variant.tar"
+        if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
+            throw "Manca trascrittore-$variant.tar accanto a Installa.bat. Chiedi questo archivio a chi ti ha dato il trascrittore."
+        }
+        $candidateTag = "trascrittore:$variant"
+        $oldId = Get-InstalledImageId $ActiveTag
+        $promoted = $false
+        try {
+            Write-Host "Carico solo trascrittore-$variant.tar. Ci vuole qualche minuto..."
+            & docker load -i $archive
+            if ($LASTEXITCODE -ne 0) { throw "Il caricamento dell'immagine non e' riuscito." }
+            $candidateId = Get-InstalledImageId $candidateTag
+            if (-not $candidateId) { throw "L'archivio non contiene l'immagine $candidateTag." }
+
+            if ($gpuMode -eq 'gpu') {
+                Write-Host "Controllo i kernel GPU di PyTorch e CTranslate2..."
+                & docker run --rm --gpus all --entrypoint python $candidateTag -m docker.gpu_probe
+                if ($LASTEXITCODE -ne 0) { throw "Il controllo GPU e' fallito. La versione gia' installata resta attiva." }
+            }
+            & docker tag $candidateTag $ActiveTag
+            if ($LASTEXITCODE -ne 0) { throw "Non riesco ad attivare l'immagine verificata." }
+            $promoted = $true
+
+            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Here 'trascrittore.ps1') install
+            if ($LASTEXITCODE -ne 0) { throw "Non riesco a installare i comandi e la skill." }
+            New-Item -ItemType Directory -Force -Path $DataDir, (Join-Path $DataDir 'cache') | Out-Null
+            [IO.File]::WriteAllText($ModeFile, $gpuMode + "`n", [Text.Encoding]::ASCII)
+            if ($oldId -and $oldId -ne $candidateId) {
+                & docker image rm $oldId *> $null
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Warning "La vecchia immagine e' ancora usata da un container; potrai liberare lo spazio dopo la sua chiusura."
+                }
+            }
+            Write-Host "Installazione completata ($variant, $gpuMode). Trascina una registrazione su Trascrivi.bat."
+        }
+        catch {
+            if ($promoted) {
+                if ($oldId) { & docker tag $oldId $ActiveTag | Out-Null }
+                else { & docker image rm $ActiveTag | Out-Null }
+            }
+            throw
+        }
+    }
+    catch {
+        [Console]::Error.WriteLine("Installazione non riuscita: $($_.Exception.Message)")
+        exit 1
+    }
+}
+
 $command = if ($args.Count) { [string]$args[0] } else { 'help' }
 $rest = if ($args.Count -gt 1) { @($args[1..($args.Count - 1)]) } else { @() }
 switch ($command) {
@@ -703,6 +817,7 @@ switch ($command) {
     'interactive' { Invoke-Interactive $rest }
     'verify' { Invoke-Verify $rest }
     'install' { Install }
+    'setup' { Invoke-Setup; exit 0 }
     { $_ -in @('help', '--help', '-h', '/?') } { [Console]::Out.WriteLine($Help); exit 0 }
     default { Exit-With $command 'invalid_arguments' "Comando sconosciuto: $command. Vedi: trascrittore.ps1 help" }
 }
