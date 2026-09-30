@@ -117,7 +117,8 @@ powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\ex
 - Layers go dependencies → models → code, so a code change reuses the cached
   dependencies and models. Docker still needs time to export the large image.
   A lock change reinstalls dependencies. `-ModelImage trascrittore:latest` can
-  reuse models from an existing image when their IDs are unchanged.
+  reuse models from an existing image when their IDs are unchanged; that build
+  needs no Hugging Face token or model download.
 - The image works offline (`HF_HUB_OFFLINE=1`). It is about 20 GB in Docker,
   7 GB as a `.tar`.
 - `-Export` writes `trascrittore-cu128.tar`, the `.bat` files, `trascrittore.ps1`,

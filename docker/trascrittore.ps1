@@ -665,17 +665,13 @@ $SettingsTemplate = @'
 ; Le righe che iniziano con ; sono solo note.
 '@
 
-function Install {
-    # Installa.bat calls this. The settings file is created once and never replaced: it holds the person's changes.
+function Install-SettingsAndSkill {
+    # Setup creates the settings file once; it holds the person's changes.
     if (-not (Test-Path -LiteralPath $Config)) {
         $lines = $SettingsTemplate.Replace("`r`n", "`n").Replace("`n", "`r`n") + "`r`n"
         [IO.File]::WriteAllText($Config, $lines, (New-Object System.Text.UTF8Encoding $false))
     }
     # The skill always comes with the image of the same version, so it is installed every time.
-    if (-not (Test-Path -LiteralPath $SkillSource -PathType Leaf)) {
-        Write-Line "Non trovo skill-trascrittore.md accanto a trascrittore.ps1: la skill per gli agenti non e' installata."
-        exit 1
-    }
     $text = [IO.File]::ReadAllText($SkillSource, [Text.Encoding]::UTF8).Replace('{{CARTELLA}}', $Here)
     foreach ($root in @((Join-Path $env:USERPROFILE '.claude\skills'), (Join-Path $env:USERPROFILE '.agents\skills'))) {
         $folder = Join-Path $root $SkillName
@@ -683,17 +679,12 @@ function Install {
         [IO.File]::WriteAllText((Join-Path $folder 'SKILL.md'), $text, (New-Object System.Text.UTF8Encoding $false))
     }
     Write-Line 'Skill per Claude Code e Codex installata: puoi chiedere al tuo agente di trascrivere una registrazione.'
-    exit 0
 }
 
 
 function Invoke-Setup {
-    <# Select one local CUDA archive, verify its kernels, then activate it. ASCII for Windows PowerShell 5.1. #>
+    # Verify the local CUDA image before activating it.
     $ErrorActionPreference = 'Stop'
-    $Here = $PSScriptRoot
-    $ActiveTag = 'trascrittore:latest'
-    $DataDir = Join-Path $env:LOCALAPPDATA 'Trascrittore'
-    $ModeFile = Join-Path $DataDir 'gpu-mode.txt'
 
     function Assert-SupportedGpu([string]$Capability) {
         if ($Capability -notmatch '^(\d+)\.(\d+)$') {
@@ -712,10 +703,8 @@ function Invoke-Setup {
     }
 
     try {
-        foreach ($file in @('trascrittore.ps1', 'skill-trascrittore.md')) {
-            if (-not (Test-Path -LiteralPath (Join-Path $Here $file) -PathType Leaf)) {
-                throw "Non trovo $file accanto a Installa.bat."
-            }
+        if (-not (Test-Path -LiteralPath $SkillSource -PathType Leaf)) {
+            throw "Non trovo skill-trascrittore.md accanto a Installa.bat."
         }
         & docker info *> $null
         if ($LASTEXITCODE -ne 0) { throw "Docker Desktop non e' avviato. Aprilo, aspetta che sia pronto e riprova." }
@@ -754,7 +743,7 @@ function Invoke-Setup {
             throw "Manca trascrittore-cu128.tar accanto a Installa.bat. Chiedi questo archivio a chi ti ha dato il trascrittore."
         }
         $candidateTag = 'trascrittore:cu128'
-        $oldId = Get-InstalledImageId $ActiveTag
+        $oldId = Get-InstalledImageId $Image
         $promoted = $false
         try {
             Write-Host "Carico trascrittore-cu128.tar. Ci vuole qualche minuto..."
@@ -768,14 +757,13 @@ function Invoke-Setup {
                 & docker run --rm --gpus all --entrypoint python $candidateTag -m docker.gpu_probe
                 if ($LASTEXITCODE -ne 0) { throw "Il controllo GPU e' fallito. La versione gia' installata resta attiva." }
             }
-            & docker tag $candidateTag $ActiveTag
+            & docker tag $candidateTag $Image
             if ($LASTEXITCODE -ne 0) { throw "Non riesco ad attivare l'immagine verificata." }
             $promoted = $true
 
-            & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $Here 'trascrittore.ps1') install
-            if ($LASTEXITCODE -ne 0) { throw "Non riesco a installare i comandi e la skill." }
-            New-Item -ItemType Directory -Force -Path $DataDir, (Join-Path $DataDir 'cache') | Out-Null
-            [IO.File]::WriteAllText($ModeFile, $gpuMode + "`n", [Text.Encoding]::ASCII)
+            Install-SettingsAndSkill
+            New-Item -ItemType Directory -Force -Path $Cache | Out-Null
+            [IO.File]::WriteAllText($GpuModeFile, $gpuMode + "`n", [Text.Encoding]::ASCII)
             if ($oldId -and $oldId -ne $candidateId) {
                 & docker image rm $oldId *> $null
                 if ($LASTEXITCODE -ne 0) {
@@ -786,8 +774,8 @@ function Invoke-Setup {
         }
         catch {
             if ($promoted) {
-                if ($oldId) { & docker tag $oldId $ActiveTag | Out-Null }
-                else { & docker image rm $ActiveTag | Out-Null }
+                if ($oldId) { & docker tag $oldId $Image | Out-Null }
+                else { & docker image rm $Image | Out-Null }
             }
             throw
         }
@@ -809,7 +797,6 @@ switch ($command) {
     'trial' { Complete-Plan (New-TrialPlan $rest) }
     'interactive' { Invoke-Interactive $rest }
     'verify' { Invoke-Verify $rest }
-    'install' { Install }
     'setup' { Invoke-Setup; exit 0 }
     { $_ -in @('help', '--help', '-h', '/?') } { [Console]::Out.WriteLine($Help); exit 0 }
     default { Exit-With $command 'invalid_arguments' "Comando sconosciuto: $command. Vedi: trascrittore.ps1 help" }
