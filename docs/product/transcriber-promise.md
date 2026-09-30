@@ -154,13 +154,13 @@ details links to it.
 - **Explain what went wrong.** Ordinary problems, such as an unreadable
   recording, Docker not running, the transcriber not installed or GPU memory
   running out, end with a plain message saying what to do.
-- **Install and update from files.** One installer detects the PC's NVIDIA GPU
-  and loads only the matching prebuilt image from local release files. The
-  CUDA 12.6 image serves older supported GPUs such as the MX230; the CUDA 12.8
-  image serves newer GPUs such as the RTX 2070 and RTX 5070. The maintainer may
-  send both image files or just the one needed for a known PC. Installation
-  reports whether the selected image can actually use the GPU. The delivery
-  and verification rules are in [GPU image selection](../deployment/gpu-image-selection.md).
+- **Install and update from files.** One installer checks the PC's NVIDIA GPU
+  and loads the CUDA 12.8 image from a local release file. It supports GPUs
+  such as the RTX 2070 and RTX 5070. Older NVIDIA GPUs, including the MX230,
+  are outside the supported range because transcription on the MX230 proved too
+  slow to be useful. Installation reports whether the image can actually use
+  the GPU. The delivery and verification rules are in
+  [GPU installation](../deployment/gpu-installation.md).
 - **Adjust settings without a new version.** A person changes processing and
   recognition settings by writing them in `trascrittore.ini`, next to the
   scripts.

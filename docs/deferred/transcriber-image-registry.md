@@ -11,10 +11,9 @@ close to the maintainer. This record moved here from YIAN on 2026-09-24,
 together with the code; the transcriber is now the whole project, so
 the record has project scope.
 
-Today it ships as local files. `docker/build.ps1 -Variant both -Export <export folder>`
-writes `trascrittore-cu126.tar` and `trascrittore-cu128.tar` with the installer
-and launcher; a person downloads both or just the TAR for their GPU.
-`Installa.bat` selects and checks one image before making it active.
+Today it ships as local files. `docker/build.ps1 -Export <export folder>`
+writes `trascrittore-cu128.tar` with the installer and launcher.
+`Installa.bat` checks the GPU and the image before making it active.
 The file-based delivery method was chosen on 2026-09-24 for the pilot.
 
 A private registry would make updates cheap: the Dockerfile orders its layers

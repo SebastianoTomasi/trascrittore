@@ -695,15 +695,14 @@ function Invoke-Setup {
     $DataDir = Join-Path $env:LOCALAPPDATA 'Trascrittore'
     $ModeFile = Join-Path $DataDir 'gpu-mode.txt'
 
-    function Get-GpuVariant([string]$Capability) {
+    function Assert-SupportedGpu([string]$Capability) {
         if ($Capability -notmatch '^(\d+)\.(\d+)$') {
             throw "Capacita GPU non riconosciuta: $Capability"
         }
         $major = [int]$Matches[1]
-        $minor = [int]$Matches[2]
-        if ($major -eq 6 -and $minor -eq 1) { return 'cu126' }
-        if ($major -ge 7 -and $major -le 12) { return 'cu128' }
-        throw "Questa GPU (compute capability $Capability) non e' supportata dalle immagini disponibili."
+        if ($major -lt 7 -or $major -gt 12) {
+            throw "Questa GPU (compute capability $Capability) non e' supportata. Serve una GPU NVIDIA con compute capability 7.0-12.x."
+        }
     }
 
     function Get-InstalledImageId([string]$Tag) {
@@ -734,16 +733,11 @@ function Invoke-Setup {
         $smiOk = $smi -and $LASTEXITCODE -eq 0 -and $gpuLines.Count -gt 0
         $gpuMode = 'cpu'
         if ($smiOk) {
-            $variants = @()
             foreach ($line in $gpuLines) {
                 if ($line -notmatch ',\s*(\d+\.\d+)\s*$') { throw "nvidia-smi ha restituito un valore inatteso: $line" }
-                $variants += Get-GpuVariant $Matches[1]
+                Assert-SupportedGpu $Matches[1]
                 Write-Host "GPU rilevata: $line"
             }
-            if (@($variants | Select-Object -Unique).Count -ne 1) {
-                throw "Le GPU presenti richiedono immagini CUDA diverse. Contatta chi ti ha dato il trascrittore."
-            }
-            $variant = $variants[0]
             $gpuMode = 'gpu'
         }
         else {
@@ -752,19 +746,18 @@ function Invoke-Setup {
             if ($nvidiaController) {
                 throw "Windows vede una GPU NVIDIA ma nvidia-smi non funziona. Aggiorna il driver NVIDIA e riprova."
             }
-            $variant = if (Test-Path -LiteralPath (Join-Path $Here 'trascrittore-cu128.tar')) { 'cu128' } else { 'cu126' }
             Write-Warning "Nessuna GPU NVIDIA rilevata: la trascrizione usera' la CPU, molto piu' lentamente."
         }
 
-        $archive = Join-Path $Here "trascrittore-$variant.tar"
+        $archive = Join-Path $Here 'trascrittore-cu128.tar'
         if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) {
-            throw "Manca trascrittore-$variant.tar accanto a Installa.bat. Chiedi questo archivio a chi ti ha dato il trascrittore."
+            throw "Manca trascrittore-cu128.tar accanto a Installa.bat. Chiedi questo archivio a chi ti ha dato il trascrittore."
         }
-        $candidateTag = "trascrittore:$variant"
+        $candidateTag = 'trascrittore:cu128'
         $oldId = Get-InstalledImageId $ActiveTag
         $promoted = $false
         try {
-            Write-Host "Carico solo trascrittore-$variant.tar. Ci vuole qualche minuto..."
+            Write-Host "Carico trascrittore-cu128.tar. Ci vuole qualche minuto..."
             & docker load -i $archive
             if ($LASTEXITCODE -ne 0) { throw "Il caricamento dell'immagine non e' riuscito." }
             $candidateId = Get-InstalledImageId $candidateTag
@@ -789,7 +782,7 @@ function Invoke-Setup {
                     Write-Warning "La vecchia immagine e' ancora usata da un container; potrai liberare lo spazio dopo la sua chiusura."
                 }
             }
-            Write-Host "Installazione completata ($variant, $gpuMode). Trascina una registrazione su Trascrivi.bat."
+            Write-Host "Installazione completata (CUDA 12.8, $gpuMode). Trascina una registrazione su Trascrivi.bat."
         }
         catch {
             if ($promoted) {

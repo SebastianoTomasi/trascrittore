@@ -27,12 +27,14 @@ four steps on a 16 kHz copy of the recording:
 4. speaker recognition: pyannote/embedding voiceprints of fixed windows, overlapped
    speech excluded, matched against the voice library with a threshold and a margin.
 
-Unrecognized voices become "Persona 1..N". The installer selects a CUDA 12.6
-image for SM 6.1 GPUs or a CUDA 12.8 image for SM 7.0–12.x GPUs, then tests
-PyTorch and CTranslate2 kernels before activation. `device = auto` uses the
-GPU for every transcription phase on a GPU installation. `compute_type = auto`
-uses float16 where CTranslate2 supports it, int8_float32 on older GPUs, and
-int8 on a PC without NVIDIA. A GPU failure stops the run with an error.
+Unrecognized voices become "Persona 1..N". The installer accepts NVIDIA GPUs
+with compute capability 7.0–12.x and tests the CUDA 12.8 image's PyTorch and
+CTranslate2 kernels before activation. Older GPUs, including the MX230, are
+unsupported because transcription on the MX230 was too slow to be useful.
+`device = auto` uses the GPU for every transcription phase on a GPU
+installation. `compute_type = auto` uses float16 where CTranslate2 supports it,
+another supported precision otherwise, and int8 on a PC without NVIDIA. A GPU
+failure stops the run with an error.
 The JSON records, for each speaker, the windows used to recognize the voice.
 
 No command asks a question: each prints lines for people on stderr and ends
@@ -106,39 +108,33 @@ fake the models.
 ## Image and distribution
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Variant cu128
-powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Variant both -Export "C:\path\to\export\folder"
+powershell -ExecutionPolicy Bypass -File docker\build.ps1
+powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\export\folder"
 ```
 
 - The Hugging Face token goes from `.env` to BuildKit as a secret; it never lands
   in a layer or in the build history.
 - Layers go dependencies → models → code, so a code change reuses the cached
   dependencies and models. Docker still needs time to export the large image.
-  A lock change reinstalls dependencies. The CUDA 12.6 build copies the models
-  from the CUDA 12.8 image; a CUDA 12.8 build can copy them with `-ModelImage`.
-- Both images work offline (`HF_HUB_OFFLINE=1`). Each is about 20 GB in Docker,
-  7 GB as a `.tar`; Docker shares unchanged layers.
-- The CUDA 12.8 build downloads the models once; CUDA 12.6 copies the same
-  models from that freshly built image. `-ModelImage trascrittore:latest` can
-  reuse an existing image for the first build when its model IDs are unchanged.
-  On a clean Docker host, build `both` so CUDA 12.8 exists before CUDA 12.6.
-- `-Export` writes `trascrittore-cu126.tar` and/or `trascrittore-cu128.tar`,
-  the `.bat` files, `trascrittore.ps1`,
+  A lock change reinstalls dependencies. `-ModelImage trascrittore:latest` can
+  reuse models from an existing image when their IDs are unchanged.
+- The image works offline (`HF_HUB_OFFLINE=1`). It is about 20 GB in Docker,
+  7 GB as a `.tar`.
+- `-Export` writes `trascrittore-cu128.tar`, the `.bat` files, `trascrittore.ps1`,
   the skill, `LEGGIMI.md`, `LICENZE.md` and the `voci` folder. It writes no
   settings file: `Installa.bat` creates `trascrittore.ini` once, for the
   person's own changes, and no update replaces it.
 - Users download these files, run `Installa.bat` once and again after each
-  update; it selects and checks only the matching image, then installs the
-  skill for Claude Code
+  update; it checks the GPU and image, then installs the skill for Claude Code
   (`%USERPROFILE%\.claude\skills`) and Codex (`%USERPROFILE%\.agents\skills`),
   with the transcriber's folder written in.
 
-Before distributing an update, run the test suite, build both variants, and
-check that both TARs are complete and named correctly. On each target GPU,
-run `Installa.bat` and transcribe a short recording, checking the CUDA device
-in the result. An installer kernel check is not a substitute for the full
-recording test, especially on a 4 GB MX230. Keep the user's `voci` folder and
-`trascrittore.ini` out of the exported release folder.
+Before distributing an update, run the test suite, build the image, and check
+that the TAR is complete and named correctly. On each target GPU, run
+`Installa.bat` and transcribe a short recording, checking the CUDA device in
+the result. An installer kernel check is not a substitute for a full recording
+test. Keep the user's `voci` folder and `trascrittore.ini` out of the exported
+release folder.
 
 ## Sharing with a new person
 
@@ -146,15 +142,16 @@ recording test, especially on a 4 GB MX230. Keep the user's `voci` folder and
    from, which holds your settings and your voice library:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Variant both -Export "$env:USERPROFILE\Desktop\Trascrittore da condividere"
+   powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "$env:USERPROFILE\Desktop\Trascrittore da condividere"
    ```
 
 2. Drag the release files, from the browser, into the `trascrittore` shared
    drive on Claror's Google Drive, and give the person access to it:
-   `trascrittore-cu126.tar`, `trascrittore-cu128.tar`, `Installa.bat`,
+   `trascrittore-cu128.tar`, `Installa.bat`,
    `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`,
    `skill-trascrittore.md`, `LEGGIMI.md` and `LICENZE.md`. If the
-   destination GPU is known, send only its matching TAR.
+   destination PC has an older NVIDIA GPU, the installer will explain that it
+   is unsupported.
    `LICENZE.md` is required: the models' licenses ask for their credits in every
    distribution. The `.tar` is about 7 GB, too big for an agent's Drive
    connector, which passes file contents through the conversation.
@@ -171,7 +168,7 @@ recording test, especially on a 4 GB MX230. Keep the user's `voci` folder and
    30 GB free and, for speed, an NVIDIA GPU.
 
 For an update, export again and replace on Drive the files that changed, including
-the selected `trascrittore-cu*.tar`, and tell the person which ones. They put them in the
+`trascrittore-cu128.tar`, and tell the person which ones. They put them in the
 same folder and run `Installa.bat` again; their `voci` and `trascrittore.ini`
 stay as they are.
 

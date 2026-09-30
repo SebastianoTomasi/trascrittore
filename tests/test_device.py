@@ -11,7 +11,7 @@ def test_auto_uses_cuda_when_available():
     assert (choice.device, choice.compute_type, choice.fallback_reason) == ("cuda", "float16", None)
 
 
-def test_auto_uses_int8_float32_on_pascal_gpu():
+def test_auto_uses_supported_precision_when_float16_is_unavailable():
     choice = resolve_device("auto", "auto", cuda_available=True, supported_compute_types={"int8_float32", "float32"})
     assert (choice.device, choice.compute_type) == ("cuda", "int8_float32")
 

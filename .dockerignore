@@ -5,9 +5,6 @@
 !pyproject.toml
 !poetry.lock
 !docker/
-!docker/cu126/
-!docker/cu126/pyproject.toml
-!docker/cu126/poetry.lock
 !src/paths.py
 !src/settings.py
 !src/asr/

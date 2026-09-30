@@ -2,7 +2,7 @@
 # Transcriber: one recording in, a transcript with the speakers' names out.
 # Build with docker/build.ps1, which passes the Hugging Face token as a secret.
 ARG MODEL_STAGE=downloaded
-ARG MODEL_IMAGE=trascrittore:cu128
+ARG MODEL_IMAGE=trascrittore:latest
 FROM python:3.12-slim-bookworm AS dependencies
 
 RUN apt-get update \
@@ -20,16 +20,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYANNOTE_METRICS_ENABLED=false
 
 WORKDIR /app
-ARG CUDA_VARIANT=cu128
 
 # Layers go from slowest-changing to fastest: dependencies, models, then code.
 # The cache mount keeps downloaded wheels (torch alone is ~3 GB) out of the image
 # but available to the next build after a lock change.
-COPY pyproject.toml poetry.lock /build/cu128/
-COPY docker/cu126/pyproject.toml docker/cu126/poetry.lock /build/cu126/
+COPY pyproject.toml poetry.lock ./
 RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    cp /build/${CUDA_VARIANT}/pyproject.toml /build/${CUDA_VARIANT}/poetry.lock . \
-    && pip install poetry==2.2.0 \
+    pip install poetry==2.2.0 \
     && poetry install --only main --no-root \
     && pip uninstall -y poetry
 

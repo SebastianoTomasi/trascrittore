@@ -10,20 +10,20 @@ Tutto gira sul tuo PC: il trascrittore non manda niente a nessuno e funziona anc
 
 ## Cosa serve
 
-- Windows 10 o 11. Con una scheda NVIDIA è veloce; senza, funziona sulla CPU ma molto più lentamente, e il programma lo scrive chiaramente.
-- Circa 30 GB liberi su disco per una delle due immagini. Ogni archivio TAR occupa circa 7 GB e puoi cancellarlo dopo l'installazione.
+- Windows 10 o 11. Con una scheda NVIDIA supportata è veloce; senza una GPU NVIDIA, funziona sulla CPU ma molto più lentamente. Le schede NVIDIA più vecchie, come la MX230, non sono supportate perché la trascrizione è troppo lenta.
+- Circa 30 GB liberi su disco. L'archivio TAR occupa circa 7 GB e puoi cancellarlo dopo l'installazione.
 
 ## Installazione (una volta sola)
 
 1. Installa [Docker Desktop](https://www.docker.com/products/docker-desktop/) con le impostazioni predefinite. Riavvia il PC, apri Docker Desktop e aspetta che sia pronto. Al primo avvio accetta le condizioni d'uso e, se ti chiede di installare o aggiornare WSL, accetta. Se ti chiede di accedere, puoi saltare.
-2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu126.tar` e/o `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `LICENZE.md` e questo `LEGGIMI.md`. Se ti hanno inviato un solo archivio TAR, basta quello.
+2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `LICENZE.md` e questo `LEGGIMI.md`.
    - Meglio una cartella che OneDrive non sincronizza: se `Documenti` o il Desktop sono sincronizzati, OneDrive caricherebbe sul cloud gli archivi e poi la cartella `voci`.
    - Scaricali uno per uno: se scarichi tutta la cartella, Drive la divide in più file zip.
    - Per il file grande Google avvisa che non può controllarlo per i virus: scegli "Scarica comunque".
    - Se il browser dice che i file `.bat` o `.ps1` possono essere pericolosi, scegli "Mantieni".
-3. Fai doppio clic su `Installa.bat`. Rileva la GPU NVIDIA, carica solo l'archivio adatto e prova i calcoli GPU prima di attivarlo. Se il controllo fallisce, la versione già installata resta disponibile. Installa anche la skill che permette a Claude Code e Codex di usare il trascrittore, e crea `trascrittore.ini`, il file delle tue impostazioni.
+3. Fai doppio clic su `Installa.bat`. Controlla che la GPU NVIDIA sia supportata, carica l'archivio e prova i calcoli GPU prima di attivarlo. Se il controllo fallisce, la versione già installata resta disponibile. Installa anche la skill che permette a Claude Code e Codex di usare il trascrittore, e crea `trascrittore.ini`, il file delle tue impostazioni.
    - Se Windows mostra "PC protetto da Windows", clicca "Ulteriori informazioni" e poi "Esegui comunque". Può succedere di nuovo la prima volta che usi `Trascrivi.bat` e `Verifica.bat`.
-4. Finita l'installazione puoi cancellare gli archivi `trascrittore-cu*.tar` e recuperare spazio.
+4. Finita l'installazione puoi cancellare `trascrittore-cu128.tar` e recuperare spazio.
 
 Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill deve sapere dove si trova il trascrittore.
 
@@ -97,7 +97,7 @@ Le GPU AMD e Intel non usano CUDA: il trascrittore funziona sulla CPU.
 
 ## Aggiornamenti
 
-Quando esce una versione nuova, chi ti ha dato il trascrittore ti avvisa e ti dice quali file riscaricare: l'archivio `trascrittore-cu126.tar` o `trascrittore-cu128.tar` adatto alla tua GPU e, quando cambiano, anche gli script. Mettili nella stessa cartella e fai di nuovo doppio clic su `Installa.bat`. L'installazione verifica la nuova immagine prima di sostituire quella attiva. La cartella `voci` e il tuo `trascrittore.ini` restano come sono.
+Quando esce una versione nuova, chi ti ha dato il trascrittore ti avvisa e ti dice quali file riscaricare: `trascrittore-cu128.tar` e, quando cambiano, anche gli script. Mettili nella stessa cartella e fai di nuovo doppio clic su `Installa.bat`. L'installazione verifica la nuova immagine prima di sostituire quella attiva. La cartella `voci` e il tuo `trascrittore.ini` restano come sono.
 
 ## Se qualcosa non va
 
@@ -106,7 +106,8 @@ Quando esce una versione nuova, chi ti ha dato il trascrittore ti avvisa e ti di
 | Docker Desktop non è installato | Installalo come spiegato in "Installazione" e riprova. |
 | Docker Desktop non è avviato | Apri Docker Desktop, aspetta che sia pronto e riprova. |
 | Il trascrittore non è installato | Esegui `Installa.bat`. |
-| Manca trascrittore-cu126.tar o trascrittore-cu128.tar | Metti nella stessa cartella di `Installa.bat` l'archivio indicato nel messaggio e ripeti l'installazione. |
+| Manca trascrittore-cu128.tar | Mettilo nella stessa cartella di `Installa.bat` e ripeti l'installazione. |
+| Questa GPU NVIDIA non è supportata | Serve una scheda con compute capability 7.0–12.x. La MX230 non è supportata. |
 | Windows vede una GPU NVIDIA ma nvidia-smi non funziona | Aggiorna il driver NVIDIA, riavvia il PC e ripeti `Installa.bat`. L'installer non passa alla CPU se vede una GPU NVIDIA. |
 | Un'altra trascrizione è in corso su questo PC | Aspetta che finisca e riprova. |
 | Non riesco a leggere la registrazione | Controlla che sia un file audio o video e che sia sul PC: se è "solo online" su OneDrive o Google Drive, scaricalo prima. |
