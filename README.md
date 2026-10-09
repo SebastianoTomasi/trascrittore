@@ -14,7 +14,7 @@ It is a personal tool for people close to the maintainer, on Windows only. The
 user guide, in Italian, is [docker/LEGGIMI.md](docker/LEGGIMI.md). Product
 decisions live under [docs/](docs/), starting from
 [the product promise](docs/product/transcriber-promise.md), and
-[CONTEXT.md](CONTEXT.md) holds the vocabulary.
+[GLOSSARY.md](GLOSSARY.md) holds the vocabulary.
 
 ## How it works
 

@@ -1,6 +1,6 @@
 ---
 name: advisor-migrate-docs
-description: Migrate one or more user-selected documents into an initialized delivery-process-advisor project. Reorganize their content into advisor documents, resolve necessary decisions with the user, and replace the in-scope originals without retaining source copies. Use when adopting, migrating, or restructuring existing documentation, including pre-existing project documents that carry no advisor marker; the request to migrate is itself the adoption, and no second adoption request is needed. This skill owns the migration case and invokes advisor-grill-with-docs for writing and acceptance, and advisor-propagate-change when a migration changes a rule the project has already accepted.
+description: Migrate user-selected documentation into an initialized delivery-process-advisor project. Preserve its normative or informative role, resolve necessary transfer decisions, and replace originals without redundant copies. Use when adopting, migrating, or restructuring existing documentation, including unmarked project documents; the migration request is itself adoption into the advisor structure. This skill invokes advisor-grill-with-docs for writing and acceptance, and advisor-propagate-change when an accepted rule changes.
 disable-model-invocation: false
 ---
 
@@ -8,8 +8,8 @@ disable-model-invocation: false
 
 Transfer the supplied content faithfully into the project's advisor structure.
 Resolve only choices needed for that transfer; report missing design decisions
-as later work. Completed migration leaves the new documents, with no copies of
-the originals in `sources/`, archives, or replacement stubs.
+as later work. Completed migration leaves one home for each input's content,
+without archived copies or replacement stubs for superseded specifications.
 
 ## Read and map
 
@@ -23,6 +23,13 @@ the originals in `sources/`, archives, or replacement stubs.
    it. A linked document is context, not automatically another migration input.
    Identify unreadable or unavailable portions and pause the affected transfer;
    never treat an extraction failure as empty content.
+   Establish each input's role from its content and the user's scope. An
+   existing informative reference that remains informative may stay in, or move
+   to, a permitted `sources/` location as the sole copy. Preserve its historical
+   or external context; moving it establishes no project rule. This is not
+   permission to keep a replaced specification as an archival source or to
+   import copies of external documents. Split mixed inputs by role without
+   losing their meaningful passages.
 3. Follow the advisor's reading path to inspect relevant existing artifacts,
    authority boundaries, and only the catalogs for the scopes being migrated.
    Choose authority and project or feature scope from the decisions expressed,
@@ -42,10 +49,10 @@ to file later-phase material; record unresolved inputs in proposed work.
 
 ## Resolve only necessary decisions
 
-Resolve explicitly delegated choices under `docs/advisor-docs.md`. Use
-`advisor-grill-me`, the bundled `grill-me` skill, for remaining choices that
-change the migration. Ask one question at a time, explain the consequence,
-suggest a default, and wait for the answer before applying that choice.
+Resolve explicitly delegated choices under `docs/advisor-docs.md`. Use the
+separately installed `grilling` skill for remaining choices that change the
+migration: explain each consequence, suggest a default, and wait for the answer
+before applying that choice.
 Continue independent transfers where useful. The migration request authorizes
 writing documents as decisions settle.
 
@@ -72,7 +79,7 @@ writing documents as decisions settle.
 Use the writing and acceptance procedures in `advisor-grill-with-docs` within
 this migration's scope, and `advisor-propagate-change` when the migration
 changes a rule the project has already accepted. Use
-`advisor-domain-modeling` for resolved terminology and qualifying ADRs; preserve
+`domain-modeling` for resolved terminology and qualifying ADRs; preserve
 existing ADR locations, numbering, and decision history. Keep existing reasons
 and alternatives without inventing rationale or manufacturing an ADR for each
 moved paragraph.
@@ -118,7 +125,9 @@ documentation or reproduce their content; do not leave them linked only
 through a discarded original.
 
 Remove only input files inside the target project that this migration replaces.
-Do not retain them as sources, archives, or redirect documents. External input
+Do not retain replaced specifications as sources, archives, or redirect
+documents. Informative inputs follow the single-copy placement rule above.
+External input
 files and remote documents are read without importing copies into the advisor;
 deleting those external originals requires that scope in the user's request.
 Resolve actual deletion paths within the target and remove only checked input

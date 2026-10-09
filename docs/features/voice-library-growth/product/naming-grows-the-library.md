@@ -155,7 +155,7 @@ transcript and the new clips to the right person.
 ## Data
 
 The feature handles voice clips cut from the person's own recordings. Voice
-clips are an existing term in `CONTEXT.md`. It also keeps a record of where
+clips are an existing term in `GLOSSARY.md`. It also keeps a record of where
 each added clip came from, prepares listening files, and records the trial's
 result. The recognition check reads named transcripts and their recordings.
 Nothing leaves the PC.

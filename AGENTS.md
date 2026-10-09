@@ -17,7 +17,7 @@
 
 ## Vocabulary
 
-- Name things in code, messages and documentation with the terms of `CONTEXT.md`, and avoid the words it lists as avoided.
+- Name things in code, messages and documentation with the terms of `GLOSSARY.md`, and avoid the words it lists as avoided.
 
 ## Documentation
 

@@ -86,10 +86,10 @@ feature has nothing to decide in. Its name is fixed so the dismissal is visible
 in a listing.
 
 Two positions belong to the advisor’s process but hold content the project  
-owns: `CONTEXT.md` at the project root, and `docs/adr/` for decision records.  
+owns: `GLOSSARY.md` at the project root, and `docs/adr/` for decision records.  
 Neither is an artifact, and neither carries the `advisor-` prefix, a scaffold  
 or a question list: nothing is delivered there, and the  
-`advisor-domain-modeling` skill carries their format.
+separately installed `domain-modeling` skill carries their format.
 
 ## Where material that is not a document sits
 
@@ -112,6 +112,13 @@ to one authority belongs in that authority's `sources/` folder at project or
 feature scope. Select full reads by relevance; broader placement makes a
 source a candidate for more work, not a mandatory full read for every session.
 
+Store experiment material in an `experiments/` subfolder of the relevant
+`sources/` location. Use `docs/sources/experiments/` for experiments relevant
+across the project. Look in these subfolders when selecting sources relevant
+to the current work. Experiment material remains informative; storing it does
+not adopt its findings as decisions. The agent carrying out the experiments
+manages their conduct and lifecycle.
+
 A source is the user’s file, not the advisor’s: no `advisor-` prefix, no  
 scaffold, no question list and no marker line, so it belongs to no phase and  
 counts toward no position. None is delivered — a `sources/` folder exists  
@@ -126,11 +133,10 @@ the workflow determines when that reading is needed.
 
 ## What a document says about itself
 
-`docs/deferred/` holds project-owned deferred-item records beside the  
-normative documentation tree but outside every authority and phase. They have  
-no artifact marker or phase coverage. Their `open`/`closed` work state is  
-distinct from the artifact statuses below. Initialization creates the empty  
-directory but no sample record or local protocol file.
+Deferred work lives in project-owned `advisor:deferred` issues in the
+configured tracker, outside every authority and phase. Issue open/closed state
+is distinct from the artifact statuses below. Legacy `docs/deferred/` files
+are an archive and are not recovered unless explicitly migrated.
 
 An artifact places one line directly below its title, never in frontmatter:
 

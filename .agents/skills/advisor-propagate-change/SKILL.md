@@ -13,9 +13,9 @@ Before starting or resuming, recover relevant deferred items through
 `advisor-defer`. Read `docs/advisor-docs.md` for the status, dependency, Review
 block, and provenance rules, and use the shared reading guidance in
 `advisor-agents.md` to find the affected artifacts; read those files when they
-are not already read. Use `advisor-grill-me` for the questions this procedure
+are not already read. Use the separately installed `grilling` skill for the questions this procedure
 raises and `advisor-grill-with-docs` for writing and accepting the artifacts it
-changes. Invoke `advisor-domain-modeling` for a qualifying ADR.
+changes. Invoke the separately installed `domain-modeling` skill for a qualifying ADR.
 
 ## Propagating the change
 
@@ -36,12 +36,13 @@ starts a focused session:
    it, using the root file's selective reading guidance.
    Do not reopen unrelated phases merely because the change is upstream.
 3. Explain consequences, resolve explicitly delegated choices under
-   `docs/advisor-docs.md`, and ask only the remaining new choices, one at a time.
+   `docs/advisor-docs.md`, and ask only the remaining new choices, through
+   `grilling`.
    Apply consequences already determined by the answers without
    seeking approval for each document edit. If more decisions are coupled,
    resolve their compatible replacement together; do not accept drafts using
    each other as their only evidence of readiness.
-4. When the change is agreed, use `advisor-domain-modeling` for the qualifying
+4. When the change is agreed, use `domain-modeling` for the qualifying
    ADR, including reasons and sources, and supersede an incompatible old ADR
    through its existing format. Before replacing a current rule, mark affected
    accepted artifacts whose compatibility is not yet checked `needs-review`

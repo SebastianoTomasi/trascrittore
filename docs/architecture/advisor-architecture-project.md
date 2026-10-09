@@ -57,11 +57,16 @@ What is inside this system, and which systems does it talk to without owning?
 **2. `components`**
 Which components exist, and what is each one responsible for — stated so that
 two plausible responsibilities could not both be true?
+Assess whether knowledge that changes for the same reason is kept together
+within a component.
 
 - *Decides:* where a new piece of work lands.
 - *Why it matters:* if responsibilities overlap, the same rule is enforced in
   two places and drifts; if they leave a gap, it is enforced nowhere and the
-  gap is found in production.
+  gap is found in production. When a change to one component's internal
+  knowledge forces changes in another, reconsider whether that knowledge is
+  split across a misplaced boundary. This is a design criterion: a coordinated
+  change alone does not prove that the boundary is wrong.
 
 **3. `component-dependencies`**
 Which component may depend on which, and which direction is forbidden?

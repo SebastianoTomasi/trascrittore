@@ -38,10 +38,15 @@ structure.
 
 **1. `feature-components`**
 Which existing components does this feature change, and does a new one appear?
+Does changing one component's internal knowledge force changes in another,
+suggesting that a responsibility or boundary should be reconsidered?
 
 - *Decides:* where the work lands and what its blast radius is.
 - *Why it matters:* a new component decided during implementation is a
-  component nobody assigned a responsibility to.
+  component nobody assigned a responsibility to. A feature can also expose
+  knowledge that changes for the same reason but is split between components;
+  use that as evidence when evaluating the boundaries, while leaving the final
+  decomposition to the project.
 
 **2. `feature-interfaces`**
 Which semantic interfaces are added or changed, and what does each promise to

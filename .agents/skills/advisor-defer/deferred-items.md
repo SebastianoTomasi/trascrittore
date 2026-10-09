@@ -1,100 +1,111 @@
-# Deferred items
+# Deferred issues
 
-Keep durable future work in one Markdown file under the target project's
-`docs/deferred/` directory. Deferred items are project work records, not
-normative artifacts, conversation handoffs, or substitutes for accepted
-prerequisites. No tracker is used.
+Deferred work is an issue in the target project's configured tracker, identified
+by the additional `advisor:deferred` label. It is project work, not a normative
+artifact, implementation ticket, or conversation handoff. Legacy
+`docs/deferred/` files are an archive: normal capture and recovery never read,
+update, or import them, even when their `State` is `open`. Use
+`advisor-migrate-deferred` only on an explicit migration request.
+
+## Tracker prerequisite
+
+Before capture, recovery, or closure, read both `docs/agents/issue-tracker.md`
+and `docs/agents/triage-labels.md`. They are the same project-owned
+configuration used by the separately installed `to-tickets` skill. If either
+is missing, stop the dependent action and ask the user to run
+`setup-matt-pocock-skills`; do not guess a tracker. If the configured tracker
+cannot be queried, stop a session that requires recovery and report the
+failure. Do not treat an empty or partial query result as a completed check.
+
+Use the configured tracker operations. If `advisor:deferred` is absent from
+the project's label configuration or tracker, add and provision it during
+capture or explicit setup, preserving the configured type (`bug`,
+`enhancement`, etc.) and triage labels. During read-only advice, stop and
+request this setup instead of mutating either location. The label is a
+separate routing axis, not a type or readiness state. Apply an existing type
+label when the work clearly fits one; do not require a triage state merely
+because an issue is waiting. Do not change another issue's labels without
+checking whether it describes the same work.
 
 ## Capture
 
-Accept a question, idea, or other future concern when it is not needed by the
-current work. Before writing, make sure the input identifies what should be
-revisited and gives either a possible outcome or a meaningful revisit
-condition. If it does not, conduct a short `advisor-grill-me` session, one
-decision-critical question at a time, only until that minimum is clear. Do not
-save an unintelligible note.
+Accept a question, idea, or other future concern only when it is not an input
+needed by the current decision. It must identify what to revisit and either a
+possible outcome or a meaningful revisit condition. If unclear, invoke
+the separately installed `grilling` skill for the shortest clarification that
+establishes that minimum. Search open and closed issues for the same work and
+read plausible matches, including comments, before creating anything. Update
+an existing issue when it is the same work; link related but distinct work.
 
-Look for an existing record of the same work and update it; otherwise choose a
-descriptive lowercase kebab-case filename. Initialization normally creates the
-empty directory; if it is absent in an older or partial installation, create it
-with the first real record. Keep filenames stable through routing changes and
-closure. Advice alone reads records without creating or changing them.
+Inspect identifiable current work and the relevant authority boundary before
+choosing Scope and Destination. Use `project`, `feature:<confirmed-slug>`, or
+`undecided` for Scope; use an authority name or `undecided` for Destination.
+Do not invent a feature identity, condition, or destination. Preserve an
+undecided value when evidence does not settle it. An undeclared capability
+belongs in the issue body and creates no feature folder.
 
-Before choosing Scope or Destination, inspect current work when it can be
-identified, and read the relevant authority boundary when assessing a candidate
-destination. Use the conversation and project files to fill what they establish;
-`undecided` is not a shortcut when available evidence can resolve the field.
-Leave a field `undecided` when evidence is insufficient; do not explore
-unrelated work solely to fill it.
+The issue must make sense without the original conversation. Give it a clear
+title, `Scope`, `Destination`, and `Revisit when`; explain the question or
+outcome, why it can wait, accepted constraints, relevant links, partial
+progress, and remaining questions. Keep the tracker issue open and apply
+`advisor:deferred`. The tracker's open/closed state is its lifecycle; readiness
+is assessed from the condition and current accepted decisions, never from a
+required triage label. A Product non-goal alone creates no issue. If there is
+real work to reconsider it, link the Product rule.
 
-Use this opening shape; the prose beneath it follows the future work:
+For a local Markdown tracker, use one file per issue at
+`.scratch/advisor-deferred/issues/<descriptive-slug>.md`, separate from the
+numbered feature tickets written by `to-tickets`. Keep a stable filename.
+Use this opening shape and keep later discussion under `## Comments`:
 
 ```markdown
 # Retry policy for payments
 
+**Labels:** advisor:deferred, enhancement
 **State:** open
 **Scope:** feature:checkout
 **Destination:** architecture
-**Revisit when:** the payment provider contract is being defined.
+**Revisit when:** the payment provider contract is defined.
 
 Decide which payment failures may be retried and how to avoid duplicate charges.
-This can wait while Product settles how uncertain payment outcomes are shown.
-Link the originating artifact and any already-established constraints here.
+This can wait while Product settles uncertain payment outcomes. Link the
+originating artifact and established constraints here.
 ```
 
-State is `open` or `closed`. Scope is `project`, `feature:<confirmed-slug>`, or
-`undecided`. Destination is one of the project's authority names, or `undecided`;
-use authority names also for work such as Security or Operations that has no
-phase. Describe the revisit condition in plain language, linking specific
-inputs where known. Use `undecided` for a condition still needing clarification.
-For an undeclared feature, describe the intended capability in the body and
-keep Scope undecided until its identity is agreed; create no feature folder.
-
-The record must make sense without the original conversation: state what should
-be revisited, why it can wait, and the relevant context, links, established
-facts, partial progress, and remaining questions. An input needed by the
-current artifact stays an open decision in that artifact. Do not turn a user's
-choice to proceed against advice into a deferred item or deviation record.
-
-A Product non-goal remains an authoritative Product decision and creates no
-deferred item automatically. If there is actual future work to reconsider that
-non-goal, link the Product rule rather than duplicating it.
+`enhancement` is illustrative; use only labels configured for the project.
+For a hosted tracker, put Scope, Destination, and Revisit when in the body and
+use its native issue state, labels, and comments. Do not give a hosted issue a
+second State field that could disagree with the tracker.
 
 ## Recover and classify
 
 Before recommending work or starting or resuming an advisor session:
 
-1. List the records and read their titles and opening fields. If the directory
-   is absent, continue normally. An unreadable record is an incomplete check,
-   not evidence that no deferred item exists; name it in the result.
-2. For a general next-work request, consider all open records. For scoped work,
-   read relevant open records in full: the feature and authority, shared
-   project work that may apply, and undecided routing that may concern it.
-   Inspect incomplete fields as candidates for classification. Follow related
-   subjects and links too, since a destination can be stale. Closed records
-   need body reads only when linked or relevant to an apparent duplicate.
-3. Compare each candidate with current accepted decisions and necessary inputs.
-   Report items ready now, still waiting and what they await, and apparently
-   answered or superseded items with evidence. Read previous progress before
-   asking anything. A label, closed record, or phase name proves no prerequisite
-   by itself. Do not store these judgements as additional states.
-4. Present unclassified items for routing when it matters to the work. During
-   an authorized session, update a destination inferable from the authority
-   boundaries; ask only if the choice changes the intended scope. Advice alone
-   returns the assessment without changing the record; the calling next-work
-   workflow owns the recommendation. Consider relevant deferred items before
-   dependent decisions and re-evaluate waiting ones as their inputs settle.
-   The session workflow remains one question at a time.
+1. Query **open** issues carrying `advisor:deferred`. Verify the query completed
+   and read titles and routing fields. Do not expand this inventory to ordinary
+   issues or implementation tickets. Read relevant candidates in full,
+   including comments and partial progress. For general next-work advice,
+   consider every returned issue. For scoped work, include the feature and
+   authority, applicable project work, undecided routing, and related subjects
+   whose stored destination may be stale.
+2. Compare the revisit condition and issue context with accepted decisions and
+   necessary inputs. Report what is ready, still waiting (and for what), or
+   apparently answered or superseded, with evidence. An issue's type, triage
+   label, or open state alone proves no readiness. Do not save these judgements
+   as another issue status or synchronized readiness label.
+3. During an authorized session, fill an inferable destination from the
+   authority boundary; ask only if routing changes intended scope. Advice-only
+   work changes no issue. Consider relevant deferred work before dependent
+   decisions, and re-evaluate waiting issues as inputs settle. Keep the
+   session's questioning procedure.
 
 ## Resume and close
 
-Keep partial progress and remaining questions in the open record so another
-session can resume it. Write current rules in the owning artifact through the
-normal acceptance and propagation procedure, then set State to `closed` and add
-`## Resolution` linking the accepted answer. For an item already answered,
-verify that the answer applies before closing. A deliberately dropped item
-closes with the user's agreed reason; changes to accepted rules still propagate.
-
-Keep the closed file at the same path. Link to the normative answer rather than
-maintaining another copy of it. Closure is work tracking, not artifact
-acceptance. Existing external issues are outside this local procedure.
+Keep partial progress and remaining questions in the open issue or its
+comments. Put a settled answer in the owning artifact through
+`advisor-grill-with-docs`, or `advisor-propagate-change` when it changes an
+accepted rule. Verify an apparent existing answer applies before closure.
+Then add a resolution linking the authoritative answer and close the issue.
+A deliberately dropped issue closes with the user's agreed reason. Retain
+closed issues in the tracker; do not delete them. Closure tracks work and does
+not itself accept a normative decision.
