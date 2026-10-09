@@ -8,7 +8,7 @@
 ## Checks
 
 - Run `.venv/Scripts/python -m pytest -q` after every code change.
-- After changing `Dockerfile`, `docker/`, `pyproject.toml` or `poetry.lock`, rebuild the image with `docker/build.ps1` and transcribe a short recording with it.
+- After changing `Dockerfile`, `docker/`, `pyproject.toml` or `uv.lock`, rebuild the image with `docker/build.ps1` and transcribe a short recording with it.
 
 ## Personal data
 
@@ -23,5 +23,7 @@
 
 - `README.md` is for developers; `docker/LEGGIMI.md` is the guide for the people who use the tool, in Italian.
 
+
+@advisor-agents.md
 
 Before doing any work, read and follow [advisor-agents.md](advisor-agents.md).
