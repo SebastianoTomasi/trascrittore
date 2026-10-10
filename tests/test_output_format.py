@@ -250,6 +250,19 @@ def test_a_word_without_times_follows_the_previous_word():
     assert _segments(turn) == [(10.0, 11.4, "Nel 2026 partiamo.")]
 
 
+def test_a_word_without_times_opening_a_whisper_segment_starts_with_it():
+    result = {
+        "segments": [
+            {"start": 0.0, "words": [_word("Ciao.", 0.0, 0.5, "Alice")]},
+            {"start": 3.0, "words": [{"word": "2026", "speaker": "Alice"}, _word("arrivo.", 3.4, 3.9, "Alice")]},
+        ]
+    }
+
+    [turn] = build_transcript_turns(result, "monologo.mp4")
+
+    assert _segments(turn) == [(0.0, 0.5, "Ciao."), (3.0, 3.9, "2026 arrivo.")]
+
+
 def test_segments_lose_what_cleaning_removes_from_their_turn():
     result = {
         "segments": [
