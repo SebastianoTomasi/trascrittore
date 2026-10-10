@@ -12,8 +12,9 @@ RUN apt-get update \
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    POETRY_VIRTUALENVS_CREATE=false \
-    POETRY_NO_INTERACTION=1 \
+    UV_PROJECT_ENVIRONMENT=/usr/local \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
     HF_HOME=/models/hf \
     TORCH_HOME=/models/torch \
     NLTK_DATA=/models/nltk \
@@ -24,11 +25,12 @@ WORKDIR /app
 # Layers go from slowest-changing to fastest: dependencies, models, then code.
 # The cache mount keeps downloaded wheels (torch alone is ~3 GB) out of the image
 # but available to the next build after a lock change.
-COPY pyproject.toml poetry.lock ./
-RUN --mount=type=cache,target=/root/.cache/pypoetry \
-    pip install poetry==2.2.0 \
-    && poetry install --only main --no-root \
-    && pip uninstall -y poetry
+# uv installs into the image's own Python (UV_PROJECT_ENVIRONMENT); --inexact keeps pip.
+COPY pyproject.toml uv.lock ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    pip install uv==0.11.8 \
+    && uv sync --locked --no-dev --inexact \
+    && pip uninstall -y uv
 
 # CTranslate2 (faster-whisper) loads cuBLAS and cuDNN from the pip wheels torch already installs.
 ENV LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib

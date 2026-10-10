@@ -90,10 +90,10 @@ without a byte order mark in the ANSI code page. The design is in
 
 ## Development
 
-Requirements: Python 3.12, Poetry 2, ffmpeg on `PATH`, an NVIDIA GPU for fast runs.
+Requirements: Python 3.12, uv, ffmpeg on `PATH`, an NVIDIA GPU for fast runs.
 
 ```powershell
-poetry install --no-root
+uv sync
 copy .env.example .env               # set HF_TOKEN
 # optional: a trascrittore.ini with the local folders, and TRANSCRIBER_SETTINGS=trascrittore.ini in .env
 .venv\Scripts\python -m src.transcriber transcribe "C:\path\to\Registrazione.m4a" --speakers 3
