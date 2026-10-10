@@ -3,7 +3,7 @@
 # local trascrittore.ini must never reach an image handed to other people.
 *
 !pyproject.toml
-!poetry.lock
+!uv.lock
 !docker/
 !src/paths.py
 !src/settings.py
