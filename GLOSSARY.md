@@ -17,8 +17,9 @@ was said, measured from the start of the recording, and who said it.
 _Avoid_: minutes
 
 **Segment**  
-One sentence of a speaker's turn in the transcript, or the part of it before
-or after a pause of a second or more, with the time it starts and ends.  
+One sentence of a turn in the transcript, unattributed speech included, or the
+part of it before or after a pause of a second or more, with the time it
+starts and ends.  
 _Avoid_: chunk
 
 **Speaker**  
