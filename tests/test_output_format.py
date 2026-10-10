@@ -7,6 +7,14 @@ def _word(word: str, start: float, end: float, speaker: str) -> dict[str, object
     return {"word": word, "start": start, "end": end, "speaker": speaker}
 
 
+def _whole_turn(speaker: str, time: str, start: float, end: float, text: str) -> dict[str, object]:
+    """
+    A turn that is one segment: one sentence, or none finished, without a long pause.
+    """
+    segment = {"start_sec": start, "end_sec": end, "text": text}
+    return {"speaker": speaker, "time": time, "start_sec": start, "end_sec": end, "text": text, "segments": [segment]}
+
+
 def test_build_transcript_turns_keeps_start_and_end_seconds():
     result = {
         "segments": [
@@ -28,9 +36,9 @@ def test_build_transcript_turns_keeps_start_and_end_seconds():
     }
 
     assert build_transcript_turns(result, "260614_0841.mp3") == [
-        {"speaker": "Alice", "time": "08:41", "start_sec": 0.0, "end_sec": 1.4, "text": "ciao come stai"},
-        {"speaker": "Bob", "time": "08:41", "start_sec": 1.5, "end_sec": 3.5, "text": "bene grazie davvero tanto"},
-        {"speaker": "Alice", "time": "08:42", "start_sec": 70.0, "end_sec": 71.2, "text": "ottimo allora"},
+        _whole_turn("Alice", "08:41", 0.0, 1.4, "ciao come stai"),
+        _whole_turn("Bob", "08:41", 1.5, 3.5, "bene grazie davvero tanto"),
+        _whole_turn("Alice", "08:42", 70.0, 71.2, "ottimo allora"),
     ]
 
 
@@ -51,13 +59,7 @@ def test_build_transcript_turns_extends_end_when_smoothing_short_flips():
     }
 
     assert build_transcript_turns(result, "260614_0841.mp3", {"Alice": "AliceRenamed"}) == [
-        {
-            "speaker": "AliceRenamed",
-            "time": "08:41",
-            "start_sec": 0.0,
-            "end_sec": 2.4,
-            "text": "oggi andiamo sì al mare",
-        }
+        _whole_turn("AliceRenamed", "08:41", 0.0, 2.4, "oggi andiamo sì al mare")
     ]
 
 
@@ -192,6 +194,81 @@ def test_build_transcript_turns_uses_offsets_for_free_form_filenames():
         ("Alice", "00:00:05", 5.2),
         ("Bob", "01:02:05", 3725.4),
     ]
+
+
+def _segments(turn: dict[str, object]) -> list[tuple[float, float, str]]:
+    return [(segment["start_sec"], segment["end_sec"], segment["text"]) for segment in turn["segments"]]
+
+
+def test_one_speaker_turn_is_split_into_sentences_and_at_long_pauses():
+    result = {
+        "segments": [
+            {
+                "start": 0.0,
+                "words": [
+                    _word("Allora.", 0.0, 0.5, "Alice"),
+                    _word("Oggi", 0.7, 1.0, "Alice"),
+                    _word("parliamo", 1.1, 1.6, "Alice"),
+                    _word("di", 1.7, 1.8, "Alice"),
+                    _word("budget.", 3.5, 4.0, "Alice"),
+                    _word("Poi", 6.0, 6.3, "Alice"),
+                    _word("vediamo.", 6.4, 7.0, "Alice"),
+                ],
+            }
+        ]
+    }
+
+    [turn] = build_transcript_turns(result, "monologo.mp4")
+
+    assert (turn["start_sec"], turn["end_sec"]) == (0.0, 7.0)
+    assert turn["text"] == "Allora. Oggi parliamo di budget. Poi vediamo."
+    assert _segments(turn) == [
+        (0.0, 0.5, "Allora."),
+        (0.7, 1.8, "Oggi parliamo di"),
+        (3.5, 4.0, "budget."),
+        (6.0, 7.0, "Poi vediamo."),
+    ]
+
+
+def test_a_word_without_times_follows_the_previous_word():
+    result = {
+        "segments": [
+            {
+                "start": 9.8,
+                "words": [
+                    _word("Nel", 10.0, 10.3, "Alice"),
+                    {"word": "2026", "speaker": "Alice"},
+                    _word("partiamo.", 10.9, 11.4, "Alice"),
+                ],
+            }
+        ]
+    }
+
+    [turn] = build_transcript_turns(result, "monologo.mp4")
+
+    assert _segments(turn) == [(10.0, 11.4, "Nel 2026 partiamo.")]
+
+
+def test_segments_lose_what_cleaning_removes_from_their_turn():
+    result = {
+        "segments": [
+            {
+                "start": 0.0,
+                "words": [
+                    _word("Buongiorno.", 0.0, 0.6, "Alice"),
+                    _word("Ehm.", 1.0, 1.3, "Alice"),
+                    _word("Grazie", 2.0, 2.3, "Alice"),
+                    _word("per", 2.4, 2.5, "Alice"),
+                    _word("la", 2.6, 2.7, "Alice"),
+                    _word("visione!", 2.8, 3.2, "Alice"),
+                ],
+            }
+        ]
+    }
+
+    [turn] = build_transcript_turns(result, "monologo.mp4")
+
+    assert _segments(turn) == [(0.0, 0.6, "Buongiorno."), (1.0, 1.3, "Ehm.")]
 
 
 def test_format_offset_pads_and_clamps():

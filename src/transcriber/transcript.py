@@ -180,6 +180,7 @@ def build_payload(
                 "start_sec": turn["start_sec"],
                 "end_sec": turn["end_sec"],
                 "text": turn["text"],
+                "segments": turn["segments"],
             }
             for turn in turns
         ],

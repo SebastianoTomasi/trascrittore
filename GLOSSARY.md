@@ -16,6 +16,11 @@ The text the transcriber produces from one recording: what was said, when it
 was said, measured from the start of the recording, and who said it.  
 _Avoid_: minutes
 
+**Segment**  
+One sentence of a speaker's turn in the transcript, or the part of it before
+or after a pause of a second or more, with the time it starts and ends.  
+_Avoid_: chunk
+
 **Speaker**  
 A person whose voice is heard in a recording, whether or not the transcriber
 can tell who they are.  

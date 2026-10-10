@@ -35,7 +35,9 @@ unsupported because transcription on the MX230 was too slow to be useful.
 installation. `compute_type = auto` uses float16 where CTranslate2 supports it,
 another supported precision otherwise, and int8 on a PC without NVIDIA. A GPU
 failure stops the run with an error.
-The JSON records, for each speaker, the windows used to recognize the voice.
+The JSON records, for each speaker, the windows used to recognize the voice,
+and, in each turn, its segments: one per sentence, split again at pauses of a
+second or more, each with its start, end and text.
 
 No command asks a question: each prints lines for people on stderr and ends
 with one JSON result summary on stdout, and exits with 0 on success, 2 for

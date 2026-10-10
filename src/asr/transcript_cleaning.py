@@ -77,6 +77,20 @@ def is_obvious_transcript_noise(text: str) -> bool:
     return all(token in _FILLERS for token in normalized.split())
 
 
+def _clean_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Remove from each segment what is removed from its turn; a segment left without words goes.
+
+    Fillers stay, as they stay in the turn's text. A phrase or prompt that spans two segments stays in both.
+    """
+    cleaned: list[dict[str, Any]] = []
+    for segment in segments:
+        text = clean_transcript_text(str(segment["text"]))
+        if _normalize_text(text):
+            cleaned.append({**segment, "text": text})
+    return cleaned
+
+
 def clean_transcript_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Remove clearly hallucinated boilerplate turns while preserving metadata.
@@ -88,5 +102,8 @@ def clean_transcript_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         text = clean_transcript_text(str(turn.get("text", "")))
         if is_obvious_transcript_noise(text):
             continue
-        cleaned.append({**turn, "text": text})
+        cleaned_turn = {**turn, "text": text}
+        if "segments" in turn:
+            cleaned_turn["segments"] = _clean_segments(turn["segments"])
+        cleaned.append(cleaned_turn)
     return cleaned

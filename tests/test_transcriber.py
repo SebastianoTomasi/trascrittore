@@ -21,7 +21,8 @@ from src.transcriber.transcript import (
 
 
 def _turn(speaker: str, start: float, end: float, text: str) -> dict[str, object]:
-    return {"speaker": speaker, "time": "", "start_sec": start, "end_sec": end, "text": text}
+    segments = [{"start_sec": start, "end_sec": end, "text": text}]
+    return {"speaker": speaker, "time": "", "start_sec": start, "end_sec": end, "text": text, "segments": segments}
 
 
 TURNS = [
@@ -225,6 +226,7 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         "start_sec": 66.0,
         "end_sec": 80.0,
         "text": "io direi di rimandare",
+        "segments": [{"start_sec": 66.0, "end_sec": 80.0, "text": "io direi di rimandare"}],
     }
 
 
