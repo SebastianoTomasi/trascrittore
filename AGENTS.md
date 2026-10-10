@@ -24,6 +24,21 @@
 - `README.md` is for developers; `docker/LEGGIMI.md` is the guide for the people who use the tool, in Italian.
 
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on this repository and are handled with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repository root. See `docs/agents/domain.md`.
+
+
 @advisor-agents.md
 
 Before doing any work, read and follow [advisor-agents.md](advisor-agents.md).
