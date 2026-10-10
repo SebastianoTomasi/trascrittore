@@ -65,6 +65,7 @@ def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str
     """
     Yield normalized (word, speaker_label, word_start_sec, word_end_sec) tuples from WhisperX output.
     """
+    previous_end = 0.0
     for seg in result.get("segments", []):
         segment_speaker = seg.get("speaker") or "UNATTRIBUTED"
         segment_start = float(seg.get("start", 0.0))
@@ -73,8 +74,10 @@ def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str
             if not word:
                 continue
             speaker = w.get("speaker") or segment_speaker
-            start = float(w.get("start", segment_start))
+            # whisperX leaves the words it cannot align, such as numbers, without times: they follow the previous word.
+            start = float(w.get("start", max(segment_start, previous_end)))
             end = float(w.get("end", start))
+            previous_end = max(previous_end, end)
             yield word, speaker, start, end
 
 
@@ -224,13 +227,47 @@ def _speaker_turns(mapping: Dict[str, str], result: Dict[str, Any]) -> list[Spea
     return _move_sentence_edges(_smooth_short_turns(turns))
 
 
+# A pause this long inside a sentence ends a segment, so that the gaps between segments show every pause.
+_SEGMENT_PAUSE_SEC = 1.0
+
+
+def _segment_words(words: list[Word]) -> list[list[Word]]:
+    """
+    Split a turn's words into sentences, and a sentence where the speaker pauses.
+    """
+    segments: list[list[Word]] = []
+    current: list[Word] = []
+    for word in words:
+        if current and word.start - current[-1].end >= _SEGMENT_PAUSE_SEC:
+            segments.append(current)
+            current = []
+        current.append(word)
+        if _ends_sentence(word):
+            segments.append(current)
+            current = []
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _segments(turn: SpeakerTurn) -> list[dict[str, Any]]:
+    return [
+        {
+            "start_sec": round(words[0].start, 3),
+            "end_sec": round(max(word.end for word in words), 3),
+            "text": " ".join(word.text for word in words),
+        }
+        for words in _segment_words(turn.words)
+    ]
+
+
 def build_transcript_turns(
     result: Dict[str, Any],
     input_path: str,
     mapping: Dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Build cleaned speaker turns with time and start/end seconds from a word-level result.
+    Build cleaned speaker turns with time, start/end seconds and timed segments from a word-level result.
 
     `time` is wall-clock HH:MM when the filename encodes the recording start, and
     HH:MM:SS from the start of the recording otherwise.
@@ -243,6 +280,7 @@ def build_transcript_turns(
             "start_sec": round(turn.start, 3),
             "end_sec": round(turn.end, 3),
             "text": " ".join(word.text for word in turn.words).strip(),
+            "segments": _segments(turn),
         }
         for turn in _speaker_turns(mapping or {}, result)
     ]

@@ -42,6 +42,26 @@ def test_the_echoed_prompt_is_removed_only_where_it_appears_whole(monkeypatch):
     ]
 
 
+def test_an_echoed_prompt_split_across_segments_leaves_them_all(monkeypatch):
+    monkeypatch.setattr(transcript_cleaning, "_configured_initial_prompt", lambda: LONG_PROMPT)
+    first, second = LONG_PROMPT.split(". ")
+    turn = {
+        "speaker": "A",
+        "text": f"Va bene. Ehm. {LONG_PROMPT}",
+        "segments": [
+            {"start_sec": 0.0, "end_sec": 0.6, "text": "Va bene."},
+            {"start_sec": 1.0, "end_sec": 1.3, "text": "Ehm."},
+            {"start_sec": 2.0, "end_sec": 4.0, "text": f"{first}."},
+            {"start_sec": 4.1, "end_sec": 9.0, "text": second},
+        ],
+    }
+
+    [cleaned] = clean_transcript_turns([turn])
+
+    assert cleaned["text"] == "Va bene. Ehm."
+    assert [segment["text"] for segment in cleaned["segments"]] == ["Va bene.", "Ehm."]
+
+
 def test_only_turns_made_of_fillers_are_dropped_as_noise():
     turns = [
         {"speaker": "A", "text": "Eh."},

@@ -39,7 +39,7 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill deve
 Accanto al file trovi:
 
 - `<nome file> - trascrizione.txt`: il testo da leggere;
-- `<nome file> - trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce.
+- `<nome file> - trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce e l'inizio e la fine di ogni frase.
 
 Con una GPU NVIDIA recente un'ora di registrazione richiede pochi minuti. Una GPU meno recente può impiegare di più, pur usando la GPU per tutte le fasi della trascrizione. Solo sulla CPU può volerci più della durata della registrazione. Si fa una trascrizione alla volta: se ne è già in corso una, aspetta che finisca.
 

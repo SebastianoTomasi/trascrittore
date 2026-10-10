@@ -115,7 +115,14 @@ def test_speaker_recognition_stage_reads_saved_artifacts(monkeypatch):
         assert recognized_result["segments"][0]["speaker"] == "Alice"
         assert recognized_result["segments"][0]["words"][0]["speaker"] == "Alice"
         assert json.loads(Path(transcript_path).read_text())["turns"] == [
-            {"speaker": "Alice", "time": "08:41", "start_sec": 0.0, "end_sec": 0.0, "text": "ciao"}
+            {
+                "speaker": "Alice",
+                "time": "08:41",
+                "start_sec": 0.0,
+                "end_sec": 0.0,
+                "text": "ciao",
+                "segments": [{"start_sec": 0.0, "end_sec": 0.0, "text": "ciao"}],
+            }
         ]
         assert json.loads(Path(diagnostics_path).read_text()) == {
             "library_people": ["Alice"],
@@ -148,5 +155,12 @@ def test_diarized_transcript_accepts_free_form_filenames(tmp_path):
     assert Path(transcript_path).name == "Registrazione di prova è.json"
     assert transcript["date"] is None
     assert transcript["turns"] == [
-        {"speaker": "Alice", "time": "00:01:02", "start_sec": 62.0, "end_sec": 63.4, "text": "buongiorno a tutti"}
+        {
+            "speaker": "Alice",
+            "time": "00:01:02",
+            "start_sec": 62.0,
+            "end_sec": 63.4,
+            "text": "buongiorno a tutti",
+            "segments": [{"start_sec": 62.0, "end_sec": 63.4, "text": "buongiorno a tutti"}],
+        }
     ]
