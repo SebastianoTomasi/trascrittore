@@ -209,7 +209,7 @@ def test_one_speaker_turn_is_split_into_sentences_and_at_long_pauses():
                     _word("Allora.", 0.0, 0.5, "Alice"),
                     _word("Oggi", 0.7, 1.0, "Alice"),
                     _word("parliamo", 1.1, 1.6, "Alice"),
-                    _word("di", 1.7, 1.8, "Alice"),
+                    _word("di,", 1.7, 1.8, "Alice"),
                     _word("budget.", 3.5, 4.0, "Alice"),
                     _word("Poi", 6.0, 6.3, "Alice"),
                     _word("vediamo.", 6.4, 7.0, "Alice"),
@@ -221,13 +221,14 @@ def test_one_speaker_turn_is_split_into_sentences_and_at_long_pauses():
     [turn] = build_transcript_turns(result, "monologo.mp4")
 
     assert (turn["start_sec"], turn["end_sec"]) == (0.0, 7.0)
-    assert turn["text"] == "Allora. Oggi parliamo di budget. Poi vediamo."
+    assert turn["text"] == "Allora. Oggi parliamo di, budget. Poi vediamo."
     assert _segments(turn) == [
         (0.0, 0.5, "Allora."),
-        (0.7, 1.8, "Oggi parliamo di"),
+        (0.7, 1.8, "Oggi parliamo di,"),
         (3.5, 4.0, "budget."),
         (6.0, 7.0, "Poi vediamo."),
     ]
+    assert " ".join(segment["text"] for segment in turn["segments"]) == turn["text"]
 
 
 def test_a_word_without_times_follows_the_previous_word():

@@ -77,7 +77,7 @@ def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str
             # whisperX leaves the words it cannot align, such as numbers, without times: they follow the previous word.
             start = float(w.get("start", max(segment_start, previous_end)))
             end = float(w.get("end", start))
-            previous_end = end
+            previous_end = max(previous_end, end)
             yield word, speaker, start, end
 
 

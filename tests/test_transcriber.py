@@ -238,6 +238,7 @@ def test_rename_speakers_changes_only_the_named_labels():
     assert speaker_labels(renamed) == ["Mario Rossi", "Luca Bianchi", "Persona 2"]
     assert [turn["speaker"] for turn in renamed["turns"]] == ["Mario Rossi", "Luca Bianchi", "Mario Rossi", "Persona 2"]
     assert renamed["speakers"][1]["windows"] == payload["speakers"][1]["windows"]
+    assert [turn["segments"] for turn in renamed["turns"]] == [turn["segments"] for turn in payload["turns"]]
     assert {key: value for key, value in renamed.items() if key not in ("speakers", "turns")} == {
         key: value for key, value in payload.items() if key not in ("speakers", "turns")
     }
@@ -326,6 +327,7 @@ def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch
     assert payload["warnings"] and payload["device"] == "cpu"
     assert payload["speakers"][1]["windows"] == [{"start": 66.0, "end": 76.0}, {"start": 76.123, "end": 79.5}]
     assert text == render_payload_text(payload)
+    assert payload["turns"][1]["segments"] == [{"start_sec": 66.0, "end_sec": 80.0, "text": "io direi di rimandare"}]
 
     assert summary["status"] == "ok"
     assert summary["message"].endswith("Senza nome: Persona 1, Persona 2.")

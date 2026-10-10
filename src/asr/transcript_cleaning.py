@@ -77,17 +77,24 @@ def is_obvious_transcript_noise(text: str) -> bool:
     return all(token in _FILLERS for token in normalized.split())
 
 
-def _clean_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _clean_segments(segments: list[dict[str, Any]], turn_text: str) -> list[dict[str, Any]]:
     """
-    Remove from each segment what is removed from its turn; a segment left without words goes.
+    Remove from each segment what is removed from its turn, given the turn's cleaned text.
 
-    Fillers stay, as they stay in the turn's text. A phrase or prompt that spans two segments stays in both.
+    A segment goes when no word of it is left, or when its words are no longer in the turn: a phrase or
+    prompt split across segments is removed whole from the turn but not from each part. Fillers stay,
+    as they stay in the turn's text.
     """
+    turn_words = f" {_normalize_text(turn_text)} "
     cleaned: list[dict[str, Any]] = []
     for segment in segments:
-        text = clean_transcript_text(str(segment["text"]))
-        if _normalize_text(text):
-            cleaned.append({**segment, "text": text})
+        original = str(segment["text"])
+        text = clean_transcript_text(original)
+        normalized = _normalize_text(text)
+        if normalized and f" {normalized} " in turn_words:
+            # When no word was removed, the segment keeps its own punctuation, such as a comma before a pause.
+            kept = original if normalized == _normalize_text(original) else text
+            cleaned.append({**segment, "text": kept})
     return cleaned
 
 
@@ -104,6 +111,6 @@ def clean_transcript_turns(turns: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         cleaned_turn = {**turn, "text": text}
         if "segments" in turn:
-            cleaned_turn["segments"] = _clean_segments(turn["segments"])
+            cleaned_turn["segments"] = _clean_segments(turn["segments"], text)
         cleaned.append(cleaned_turn)
     return cleaned

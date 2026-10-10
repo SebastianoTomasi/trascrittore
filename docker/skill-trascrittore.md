@@ -43,7 +43,8 @@ on that text.
 For times inside a turn, for example to cut a video, read `transcript_json`. Each of its `turns` has
 `segments`: one per sentence, split again where the speaker pauses for a second or more, each with
 `start_sec`, `end_sec` and `text`. A gap between two segments is a pause. Use them instead of
-transcribing the recording again.
+running Whisper yourself. A transcript made by an older version has no `segments`: transcribe the
+recording again with `trascrittore transcribe`.
 
 When `status` is not `ok`, relay `message`. The statuses:
 
