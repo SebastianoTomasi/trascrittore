@@ -6,7 +6,7 @@
 
 This artifact states where the clips of a named speaker come from, and how the
 voice library holds the clips added from recordings. It also states what the
-trial period and the recognition check must keep. Algorithms are left to
+recognition check must keep. Algorithms are left to
 [the implementation](../implementation/clip-selection-and-recognition-check.md).
 The rules the person sees are in
 [the Product artifact](../product/naming-grows-the-library.md).
@@ -15,14 +15,14 @@ The rules the person sees are in
 
 - [Rules](../product/naming-grows-the-library.md#rules) — this architecture
   realizes naming that adds to the library, recognized speakers confirmed or
-  corrected on request, nothing saved without a name, the listening check, the
-  cap on added clips, the trial and the recognition check.
+  corrected on request, nothing saved without a name, the listening check, only
+  the selected clips saved, the cap on added clips and the recognition check.
 - [Transcript JSON](../../agent-cli/architecture/agent-cli-architecture.md#transcript-json)
   — clips are cut from the windows that this contract adds to the transcript.
 - [Components](../../agent-cli/architecture/agent-cli-architecture.md#components)
   — every new command runs through the host launcher, which mounts the voice
-  library writable only for the commands that change it: naming, including the
-  removal of clips over the cap, and the trial.
+  library writable only for the commands that change it: naming, and the
+  removal of clips over the cap.
 - [What an update must not break](../../../product/transcriber-promise.md#what-an-update-must-not-break)
   — the added clips live in folders that every version reads: one folder per
   person, with clips directly inside it or in subfolders.
@@ -57,33 +57,21 @@ feature. The clip record below is never needed to recognize anyone.
 
 Each person's `registrazioni` folder holds `clip.json`, a record of every clip
 saved there: the recording and the transcript it came from, the speaker's label
-in that transcript, the window's times, and the selection's vote. The record
-serves the trial and the recognition check, and it goes away with the person's
-folder.
-
-A recorded clip is identified by its file name within its person's folder,
-wherever it sits there:
-
-- a clip moved elsewhere in that person's folder, such as into a condition
-  folder, keeps its record;
-- a clip that is deleted, or moved into another person's folder, counts as
-  deleted by the person.
+in that transcript, the window's times, and how much the clip resembles the
+rest of the speaker's voice. The record serves the cap and the recognition
+check, and it goes away with the person's folder. The entry of a clip the
+person deleted stays, so the check still finds the transcript it came from.
+Records written before
+[ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md) also
+hold the selection's vote, which nothing reads any more.
 
 ## Clips over the cap
 
 The cap counts the clips in a person's `registrazioni` folder that have an
-entry in its clip record. Only those clips can be proposed for removal, and
-only after the trial; a clip placed by hand, in any folder, never is. A
-proposal names the clips by file name, and a removal deletes only clips the
-person confirmed that are still in the folder.
-
-## Trial state
-
-During the trial, the selection's vote on each saved clip is kept in the clip
-record. The vote is never shown to the person before they judge the clips:
-deletions that followed the vote would prove nothing about the selection. A
-clip the person deleted stays distinguishable from one they kept, so the votes
-can be compared with the person's deletions after 10 named speakers.
+entry in its clip record. Only those clips can be proposed for removal; a clip
+placed by hand, in any folder, never is. A proposal names the clips by file
+name, and a removal deletes only clips the person confirmed that are still in
+the folder.
 
 ## Recognition check
 

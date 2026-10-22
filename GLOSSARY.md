@@ -76,11 +76,6 @@ The step of naming in which the person hears a speaker's best voice clips, one
 at a time, and confirms whose voice it is, before any clip joins the voice
 library.
 
-**Trial period**  
-The time during which every clip cut from a named speaker is kept, until the
-person's deletions show that the transcriber's own choice of clips can be
-trusted.
-
 **Agent**  
 An AI coding assistant, such as Claude Code or Codex, that uses the transcriber
 on behalf of a person.
