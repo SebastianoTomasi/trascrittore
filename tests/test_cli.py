@@ -35,6 +35,7 @@ def test_transcribe_passes_its_arguments_and_prints_the_summary(monkeypatch, cap
         ["transcribe"],
         ["listen", "Registrazione - trascrizione.json"],
         ["listen", "Registrazione - trascrizione.json", "Persona 1", "--clip", "0"],
+        ["listen", "Registrazione - trascrizione.json", "Persona 1", "Persona 2"],
         ["remove-clips", "Luca Bianchi"],
         ["rinomina"],
         [],
@@ -74,7 +75,7 @@ def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
     monkeypatch.setattr(
         naming,
         "prepare_listening",
-        lambda transcript, labels, *, recording, out_dir, clip: calls.append(("listen", transcript, labels, out_dir, clip))
+        lambda transcript, label, *, recording, out_dir, clip: calls.append(("listen", transcript, label, out_dir, clip))
         or ok,
     )
     monkeypatch.setattr(
@@ -94,8 +95,8 @@ def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
     assert cli.main(["trial"]) == 0
     assert cli.main(["trial", "--reviewed"]) == 0
     assert calls == [
-        ("listen", "t.json", ["Persona 1"], "/ascolto", 1),
-        ("listen", "t.json", ["Mario Rossi"], None, 2),
+        ("listen", "t.json", "Persona 1", "/ascolto", 1),
+        ("listen", "t.json", "Mario Rossi", None, 2),
         ("remove", "Luca Bianchi", ["a.wav", "b.wav"]),
         ("check", [("a.json", "a.m4a")], [r"C:\b.json"]),
         # Only a check given nothing looks for transcripts itself.

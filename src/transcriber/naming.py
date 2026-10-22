@@ -1,5 +1,5 @@
 """
-Naming speakers after the transcript exists, and preparing the clips a person listens to first.
+Naming speakers after the transcript exists, and preparing the clip a person listens to first.
 
 Only a person gives a name: an agent calls these commands with names the person confirmed or wrote.
 Naming never transcribes again. It rewrites both transcript files from the JSON file, and cuts clips
@@ -461,66 +461,60 @@ def _listening_piece(
 
 
 def _prepare_listening(
-    transcript: str, labels: list[str], recording: str | None, out_dir: str | None, clip: int
+    transcript: str, label: str, recording: str | None, out_dir: str | None, clip: int
 ) -> dict[str, Any]:
-    labels = [_clean(label) for label in labels]
-    if not labels:
-        raise CommandError(INVALID_ARGUMENTS, "Indica almeno una voce da ascoltare, per esempio \"Persona 2\".")
+    label = _clean(label)
+    if not label:
+        raise CommandError(INVALID_ARGUMENTS, "Indica la voce da ascoltare, per esempio \"Persona 2\".")
     if clip < 1:
         raise CommandError(INVALID_ARGUMENTS, "Il numero della clip parte da 1.")
     transcript_path = Path(transcript)
     payload = load_transcript(transcript_path)
-    _check_known(payload, labels)
+    _check_known(payload, [label])
     folder = Path(out_dir) if out_dir else Path(tempfile.gettempdir()) / "trascrittore-ascolto"
     folder.mkdir(parents=True, exist_ok=True)
     _clear_listening_clips(folder)
 
-    speakers = [{"label": label, "file": None, "clip": clip, "clips": 0, "seconds": None, "note": None} for label in labels]
+    heard: dict[str, Any] = {"label": label, "file": None, "clip": clip, "clips": 0, "seconds": None, "note": None}
     audio, problem = open_recording(payload, transcript_path, recording)
-    voiceprints = voices.Voiceprints()
-    for speaker in speakers:
-        if audio is None:
-            speaker["note"] = problem
-            continue
-        piece, speaker["clips"], speaker["note"] = _listening_piece(payload, speaker["label"], audio, voiceprints, clip)
-        if piece is None:
-            continue
-        # One file per clip: the one heard before may still be open in the player.
-        path = folder / f"{LISTEN_PREFIX}{speaker['label']} - {clip}.wav"
-        sf.write(path, voices.cut(audio, *piece), voices.SAMPLE_RATE, subtype="PCM_16")
-        speaker["file"], speaker["seconds"] = host_path(path), round(piece[1] - piece[0], 1)
+    if audio is None:
+        heard["note"] = problem
+    else:
+        piece, heard["clips"], heard["note"] = _listening_piece(payload, label, audio, voices.Voiceprints(), clip)
+        if piece is not None:
+            # One file per clip: the one heard before may still be open in the player.
+            path = folder / f"{LISTEN_PREFIX}{label} - {clip}.wav"
+            sf.write(path, voices.cut(audio, *piece), voices.SAMPLE_RATE, subtype="PCM_16")
+            heard["file"], heard["seconds"] = host_path(path), round(piece[1] - piece[0], 1)
 
-    for speaker in speakers:
-        if speaker["file"]:
-            count = f"clip {clip} di {speaker['clips']}" if speaker["clips"] else "nessuna clip intera"
-            say(f"{speaker['label']} ({count}): da ascoltare in {speaker['file']}")
-            if speaker["note"]:
-                say(f"  {speaker['note']}")
-        else:
-            say(f"{speaker['label']}: niente da ascoltare. {speaker['note']}")
-    return {
-        "command": LISTEN_COMMAND,
-        "status": OK,
-        "message": "Clip pronta: la persona la ascolta e conferma di chi è la voce prima di darle il nome.",
-        "speakers": speakers,
-    }
+    if heard["file"]:
+        count = f"clip {clip} di {heard['clips']}" if heard["clips"] else "nessuna clip intera"
+        say(f"{label} ({count}): da ascoltare in {heard['file']}")
+        if heard["note"]:
+            say(f"  {heard['note']}")
+        message = f"Clip di {label} pronta: la persona la ascolta e conferma di chi è la voce prima di darle il nome."
+    else:
+        message = f"{label}: niente da ascoltare. {heard['note']}"
+        say(message)
+    return {"command": LISTEN_COMMAND, "status": OK, "message": message, **heard}
 
 
 def prepare_listening(
     transcript: str,
-    labels: list[str],
+    label: str,
     *,
     recording: str | None = None,
     out_dir: str | None = None,
     clip: int = 1,
 ) -> dict[str, Any]:
     """
-    Cut one clip of each speaker, the `clip`-th best, so the person hears whose voice it is before naming.
+    Cut one clip of a speaker, the `clip`-th best, so the person hears whose voice it is before naming.
 
-    A speaker without a full-length window is heard from their longest window, which never becomes a clip.
+    One speaker at a time: the person answers before hearing the next. A speaker without a full-length
+    window is heard from their longest window, which never becomes a clip.
     """
     return guarded(
         LISTEN_COMMAND,
-        lambda: _prepare_listening(transcript, labels, recording, out_dir, clip),
-        failed="Non sono riuscito a preparare le clip da ascoltare",
+        lambda: _prepare_listening(transcript, label, recording, out_dir, clip),
+        failed="Non sono riuscito a preparare la clip da ascoltare",
     )

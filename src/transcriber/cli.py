@@ -78,9 +78,11 @@ def _parser() -> _Parser:
         help="un nome che la persona conferma come persona nuova, anche se somiglia a uno della libreria; ripetibile",
     )
 
-    listen = commands.add_parser("listen", help="prepara una clip di ogni voce da ascoltare prima di nominarla")
+    listen = commands.add_parser(
+        "listen", help="prepara una clip di una voce da ascoltare prima di nominarla; una voce alla volta"
+    )
     listen.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
-    listen.add_argument("labels", nargs="+", metavar="ETICHETTA", help='per esempio "Persona 2"')
+    listen.add_argument("label", metavar="ETICHETTA", help='per esempio "Persona 2"')
     listen.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     listen.add_argument("--out-dir", default=None, help="cartella delle clip da ascoltare")
     listen.add_argument("--clip", type=_positive_int, default=1, help="quale clip: 1 la migliore, 2 la seconda, ...")
@@ -148,7 +150,7 @@ def _listen(args: argparse.Namespace) -> dict[str, Any]:
     from src.transcriber import naming
 
     return naming.prepare_listening(
-        args.transcript, args.labels, recording=args.recording, out_dir=args.out_dir, clip=args.clip
+        args.transcript, args.label, recording=args.recording, out_dir=args.out_dir, clip=args.clip
     )
 
 

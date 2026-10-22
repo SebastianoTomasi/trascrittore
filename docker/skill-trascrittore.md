@@ -68,17 +68,19 @@ also adds it to this PC's voice library, so later recordings recognize that pers
 would teach the transcriber the wrong voice.
 
 1. Propose names to the person, quoting the lines that suggest them.
-2. For each name the person confirms, let them hear the voice first:
+2. For each name the person confirms, let them hear the voice first, one speaker at a time:
 
    ```
-   trascrittore listen "<transcript.json>" "Persona 2" [...] --open
+   trascrittore listen "<transcript.json>" "Persona 2" --open
    ```
 
    It opens, in the person's default player, one 10-second clip of that speaker: the best one.
-   You cannot judge a voice by ear: ask the person whether it is really that person. If they are
-   unsure, play the next one with `--clip 2`, then `--clip 3`, one at a time; the summary's
-   `clips` says how many there are. A speaker without any full clip is played from their longest
-   stretch (`seconds`), which serves only to recognize the voice.
+   Clips opened together cannot be told apart, so `listen` takes one speaker only. Tell the person
+   whose voice is playing and the name it would get, for example "this is Persona 2: is it Luca
+   Bianchi?", and wait for the answer before playing the next speaker. You cannot judge a voice by
+   ear. If the person is unsure, play the same speaker's next clip with `--clip 2`, then
+   `--clip 3`; the summary's `clips` says how many there are. A speaker without any full clip is
+   played from their longest stretch (`seconds`), which serves only to recognize the voice.
 3. Only for the voices the person confirmed:
 
    ```
@@ -90,7 +92,7 @@ would teach the transcriber the wrong voice.
    the person can listen to the clips and delete bad ones.
 
 - If the person says the voice is not that person, do not name it.
-- If `listen` found nothing to play for a speaker, its `note` says why. The name can still be
+- If `listen` found nothing to play, its `note` says why. The name can still be
   given; it only adds no clips.
 - When the person is already in the library, use exactly the name of their folder in
   `{{CARTELLA}}\voci`. A name that differs from a folder only in case or spaces is changed to the

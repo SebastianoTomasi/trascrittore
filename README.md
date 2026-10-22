@@ -55,9 +55,10 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
   clips gets status `over_cap` (exit 0) with a proposal of clips to remove;
 - `remove-clips "<Nome>" <clip.wav> ...` removes the proposed clips once the
   person confirms, and only clips recorded in that person's `clip.json`;
-- `listen <transcript.json> "Persona 2" ... [--clip N]` cuts one clip of each
-  speaker, the best or the N-th, for the person to hear before naming; a speaker
-  without a full window is heard from their longest one;
+- `listen <transcript.json> "Persona 2" [--clip N]` cuts one clip of one
+  speaker, the best or the N-th, for the person to hear before naming; clips
+  opened together cannot be told apart, so it takes one speaker at a time; a
+  speaker without a full window is heard from their longest one;
 - `check` scores the voices a person named (marked `named` in the JSON) against
   the library without the clips cut from the same recording, simulates missing
   voices by removing one person at a time, and suggests a threshold above every

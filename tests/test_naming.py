@@ -372,10 +372,10 @@ def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, t
     (out_dir / "ascolta Persona 3 - 1.wav").write_bytes(b"old")
     (out_dir / "altro.wav").write_bytes(b"not ours")
 
-    summary = naming.prepare_listening(str(transcript), ["Persona 1", "Mario Rossi"], out_dir=str(out_dir))
+    summary = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
 
     assert summary["status"] == "ok"
-    assert summary["speakers"][0] == {
+    assert {key: summary[key] for key in ("label", "file", "clip", "clips", "seconds", "note")} == {
         "label": "Persona 1",
         "file": str(out_dir / "ascolta Persona 1 - 1.wav"),
         "clip": 1,
@@ -383,20 +383,18 @@ def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, t
         "seconds": 10.0,
         "note": None,
     }
-    assert summary["speakers"][1]["file"] == str(out_dir / "ascolta Mario Rossi - 1.wav")
+    assert "Persona 1" in summary["message"]
     assert round(sf.info(out_dir / "ascolta Persona 1 - 1.wav").duration, 2) == 10.0
-    assert sorted(path.name for path in out_dir.iterdir()) == [
-        "altro.wav",
-        "ascolta Mario Rossi - 1.wav",
-        "ascolta Persona 1 - 1.wav",
-    ]
+    assert sorted(path.name for path in out_dir.iterdir()) == ["altro.wav", "ascolta Persona 1 - 1.wav"]
 
-    third = naming.prepare_listening(str(transcript), ["Persona 1"], out_dir=str(out_dir), clip=3)
-    fourth = naming.prepare_listening(str(transcript), ["Persona 1"], out_dir=str(out_dir), clip=4)
+    recognized = naming.prepare_listening(str(transcript), "Mario Rossi", out_dir=str(out_dir))
+    third = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir), clip=3)
+    fourth = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir), clip=4)
 
-    assert third["speakers"][0]["file"] == str(out_dir / "ascolta Persona 1 - 3.wav")
-    assert fourth["speakers"][0]["file"] is None
-    assert "solo 3 clip" in fourth["speakers"][0]["note"]
+    assert recognized["file"] == str(out_dir / "ascolta Mario Rossi - 1.wav")
+    assert third["file"] == str(out_dir / "ascolta Persona 1 - 3.wav")
+    assert fourth["file"] is None
+    assert "solo 3 clip" in fourth["note"]
 
 
 def test_a_speaker_without_a_full_clip_is_heard_from_the_longest_stretch(transcript_and_library, tmp_path):
@@ -405,18 +403,17 @@ def test_a_speaker_without_a_full_clip_is_heard_from_the_longest_stretch(transcr
     payload["speakers"][2]["windows"] = [{"start": 71.0, "end": 73.0}, {"start": 76.0, "end": 80.0}]
     transcript.write_text(json.dumps(payload), encoding="utf-8")
 
-    summary = naming.prepare_listening(str(transcript), ["Persona 2"], out_dir=str(tmp_path))
+    summary = naming.prepare_listening(str(transcript), "Persona 2", out_dir=str(tmp_path))
 
-    speaker = summary["speakers"][0]
-    assert (speaker["clips"], speaker["seconds"]) == (0, 4.0)
-    assert "tratto più lungo" in speaker["note"]
+    assert (summary["clips"], summary["seconds"]) == (0, 4.0)
+    assert "tratto più lungo" in summary["note"]
     assert naming.name_speakers(str(transcript), ["Persona 2=Anna Neri"])["named"][0]["clips_added"] == 0
 
 
 def test_the_unattributed_voice_cannot_be_heard(transcript_and_library, tmp_path):
     transcript, _ = transcript_and_library
 
-    summary = naming.prepare_listening(str(transcript), ["Voce non attribuita"], out_dir=str(tmp_path))
+    summary = naming.prepare_listening(str(transcript), "Voce non attribuita", out_dir=str(tmp_path))
 
     assert summary["status"] == "invalid_arguments"
 

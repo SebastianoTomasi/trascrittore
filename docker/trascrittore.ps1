@@ -40,11 +40,11 @@ Comandi:
       Trascrive un file audio o video. Scrive "<nome> - trascrizione.txt" e ".json" accanto alla
       registrazione, o nella cartella indicata. Una trascrizione alla volta per PC. Dura minuti:
       avvialo in background e aspetta che finisca.
-  listen <trascrizione.json> "Persona 2" [...] [--clip N] [--recording <file>] [--open]
-      Prepara, per ogni voce, una clip da ascoltare: la migliore, o con --clip N la N-esima. Con
-      --open la apre nel lettore predefinito del PC, perche' la persona senta di chi e' la voce
-      prima di darle un nome. Vale anche per le voci riconosciute. Una voce senza clip intere si
-      ascolta dal suo tratto piu' lungo.
+  listen <trascrizione.json> "Persona 2" [--clip N] [--recording <file>] [--open]
+      Prepara una clip della voce da ascoltare: la migliore, o con --clip N la N-esima. Con --open
+      la apre nel lettore predefinito del PC, perche' la persona senta di chi e' la voce prima di
+      darle un nome. Una voce alla volta: la persona risponde prima di ascoltare la prossima. Vale
+      anche per le voci riconosciute. Una voce senza clip intere si ascolta dal suo tratto piu' lungo.
   name <trascrizione.json> "Persona 2=Nome Cognome" [...] [--recording <file>]
       Da' i nomi alle voci "Persona N": riscrive i due file della trascrizione senza trascrivere di
       nuovo, aggiunge le clip di ogni voce nominata alla libreria "voci" e apre la cartella delle
@@ -260,7 +260,7 @@ function Complete-Plan($Plan) {
     # Pass the command's own summary and exit status through, or write one when there is none.
     $summary = Invoke-Summary $Plan
     foreach ($line in $script:RunLines) { [Console]::Out.WriteLine($line) }
-    if ($Plan.Open -and $summary.status -eq 'ok') { Open-ListeningFiles $summary }
+    if ($Plan.Open -and $summary.status -eq 'ok') { Open-ListeningFile $summary }
     if ($Plan.Command -eq 'name') {
         Open-ClipFolders $summary
         Clear-ListeningFiles
@@ -331,6 +331,10 @@ function New-TranscriptPlan([string]$Command, [object[]]$Arguments) {
         $example = if ($Command -eq 'name') { '"Persona 2=Nome Cognome"' } else { '"Persona 2"' }
         Exit-With $Command 'invalid_arguments' "Indica la trascrizione .json e almeno una voce: $Command <trascrizione.json> $example"
     }
+    if ($Command -eq 'listen' -and $labelCount -gt 1) {
+        # Clips opened together cannot be told apart: the person hears one voice and answers before the next.
+        Exit-With $Command 'invalid_arguments' 'Una voce alla volta: listen <trascrizione.json> "Persona 2". La persona la ascolta e risponde prima della prossima.'
+    }
     $transcript = Resolve-HostFile $parsed.Positional[0]
     if (-not $transcript) { Exit-With $Command 'file_not_found' ('Trascrizione non trovata: ' + $parsed.Positional[0]) }
     if ($parsed.Options['--recording']) {
@@ -377,10 +381,8 @@ function New-RemovePlan([object[]]$Arguments) {
     return $plan
 }
 
-function Open-ListeningFiles($Summary) {
-    foreach ($speaker in @($Summary.speakers)) {
-        if ($speaker.file) { Invoke-Item -LiteralPath $speaker.file }
-    }
+function Open-ListeningFile($Summary) {
+    if ($Summary.file) { Invoke-Item -LiteralPath $Summary.file }
 }
 
 function New-CheckPlan([object[]]$Arguments) {
@@ -482,19 +484,18 @@ function Test-VoiceByEar([string]$Transcript, $Item, [object[]]$RecordingOption)
         $plan = New-TranscriptPlan 'listen' (@($Transcript, $Item.Label, '--clip', [string]$clip) + $RecordingOption)
         $listening = Invoke-Summary $plan
         if ($listening.status -ne 'ok') { return $null }
-        $speaker = @($listening.speakers)[0]
-        if ($speaker.file) {
+        if ($listening.file) {
             Write-Line ''
             Write-Line "Si apre il lettore con la voce di $($Item.Label): ascoltala."
-            Invoke-Item -LiteralPath $speaker.file
+            Invoke-Item -LiteralPath $listening.file
         }
         elseif ($clip -eq 1) {
             Write-Line ''
-            Write-Line "$($Item.Label): niente da ascoltare. $($speaker.note)"
+            Write-Line "$($Item.Label): niente da ascoltare. $($listening.note)"
             return $true
         }
         else { Write-Line "Non ci sono altre clip di $($Item.Label)." }
-        $more = $speaker.clips -gt $clip
+        $more = $listening.clips -gt $clip
         $question = "E' la voce di $($Item.Name)? (s = si', n = no" + $(if ($more) { ', a = ascolta un''altra clip)' } else { ')' })
         $answer = Read-Choice $question $(if ($more) { @('s', 'n', 'a') } else { @('s', 'n') })
         if ($answer -eq 's') { return $true }
