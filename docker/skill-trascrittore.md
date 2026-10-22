@@ -88,8 +88,8 @@ would teach the transcriber the wrong voice.
    ```
 
    It rewrites both transcript files with the names, without transcribing again, adds the
-   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`, and opens that folder so
-   the person can listen to the clips and delete bad ones.
+   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`. It opens no window; the
+   speaker's `folder` gives the path.
 
 - If the person says the voice is not that person, do not name it.
 - If `listen` found nothing to play, its `note` says why. The name can still be

@@ -73,7 +73,7 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 transcription. `docker/trascrittore.ps1` is the host launcher that
 `Trascrivi.bat`, `Verifica.bat` and agents all call: it mounts the folders,
 uses the installer's GPU/CPU mode, refuses a second transcription
-with status `busy` (exit 3), opens the folder of added clips after `name`, and
+with status `busy` (exit 3), opens the clip `listen --open` prepares, and
 asks the person's questions for `Trascrivi.bat`. It stays ASCII, because Windows PowerShell 5.1 reads a script
 without a byte order mark in the ANSI code page. The design is in
 [docs/features/agent-cli](docs/features/agent-cli/) and

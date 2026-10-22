@@ -33,7 +33,7 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill deve
 2. Trascina la registrazione sopra `Trascrivi.bat`: audio o video, per esempio l'mp4 di una call su Teams. Un file alla volta, e deve essere sul PC, non "solo online".
 3. Scrivi quante persone parlano, oppure premi solo Invio se non lo sai.
 4. Alla fine, per ogni voce non riconosciuta, ti mostra due frasi di quella persona e ti chiede il nome. Con Invio resta "Persona 1", "Persona 2"…
-5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Poi si apre la cartella con le clip aggiunte.
+5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Alla fine ti dice in quale cartella sono le clip aggiunte.
 6. Se il nome che scrivi somiglia a quello di una persona già nella libreria (per esempio "Marco Rosi" quando c'è "Marco Rossi", "M. Rossi" o solo "Marco"), il programma ti chiede se intendevi lei o una persona nuova, prima di salvare qualsiasi cosa.
 
 Accanto al file trovi:

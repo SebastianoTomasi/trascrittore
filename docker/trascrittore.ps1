@@ -47,8 +47,8 @@ Comandi:
       anche per le voci riconosciute. Una voce senza clip intere si ascolta dal suo tratto piu' lungo.
   name <trascrizione.json> "Persona 2=Nome Cognome" [...] [--recording <file>]
       Da' i nomi alle voci "Persona N": riscrive i due file della trascrizione senza trascrivere di
-      nuovo, aggiunge le clip di ogni voce nominata alla libreria "voci" e apre la cartella delle
-      clip aggiunte. Usa solo nomi che la persona ha confermato o scritto, dopo "listen".
+      nuovo, e aggiunge le clip di ogni voce nominata alla libreria "voci"; il riepilogo dice in
+      quale cartella. Usa solo nomi che la persona ha confermato o scritto, dopo "listen".
       Solo se la persona lo chiede, per una voce riconosciuta:
         --confirm "Nome Cognome"   conferma la voce e aggiunge altre sue clip (ripetibile);
         "Nome Cognome=Altro Nome" --correct   corregge il nome e da' le clip alla persona giusta.
@@ -261,22 +261,8 @@ function Complete-Plan($Plan) {
     $summary = Invoke-Summary $Plan
     foreach ($line in $script:RunLines) { [Console]::Out.WriteLine($line) }
     if ($Plan.Open -and $summary.status -eq 'ok') { Open-ListeningFile $summary }
-    if ($Plan.Command -eq 'name') {
-        Open-ClipFolders $summary
-        Clear-ListeningFiles
-    }
+    if ($Plan.Command -eq 'name') { Clear-ListeningFiles }
     exit $script:RunCode
-}
-
-function Open-ClipFolders($Summary) {
-    # After a naming saves clips, the person reviews them there and deletes the bad ones.
-    if ($Summary.status -notin @('ok', 'over_cap')) { return }
-    $folders = @($Summary.named | Where-Object { $_.clips_added -and $_.folder } | ForEach-Object { $_.folder } | Select-Object -Unique)
-    foreach ($folder in $folders) {
-        if (Test-Path -LiteralPath $folder -PathType Container) {
-            try { Invoke-Item -LiteralPath $folder } catch { Write-Line "Le clip aggiunte sono in $folder" }
-        }
-    }
 }
 
 function ConvertFrom-Summary([object[]]$Lines) {
@@ -530,7 +516,6 @@ function Invoke-Naming([string]$Transcript, [object[]]$Items, [object[]]$Recordi
         }
     }
     Clear-ListeningFiles
-    Open-ClipFolders $named
     foreach ($entry in @($named.over_cap | Where-Object { $_ })) {
         $files = @($entry.remove)
         Write-Line ''
