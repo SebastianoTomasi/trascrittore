@@ -37,6 +37,7 @@ def test_transcribe_passes_its_arguments_and_prints_the_summary(monkeypatch, cap
         ["listen", "Registrazione - trascrizione.json", "Persona 1", "--clip", "0"],
         ["listen", "Registrazione - trascrizione.json", "Persona 1", "Persona 2"],
         ["remove-clips", "Luca Bianchi"],
+        ["trial"],
         ["rinomina"],
         [],
     ],
@@ -69,7 +70,7 @@ def test_name_passes_pairs_and_the_recording(monkeypatch, capsys):
     ]
 
 
-def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
+def test_listen_remove_and_check_reach_their_commands(monkeypatch, capsys):
     calls = []
     ok = {"status": "ok", "message": ""}
     monkeypatch.setattr(
@@ -79,12 +80,11 @@ def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
         or ok,
     )
     monkeypatch.setattr(
-        library, "remove_clips_report", lambda person, clips, selection: calls.append(("remove", person, clips)) or ok
+        library, "remove_clips_report", lambda person, clips: calls.append(("remove", person, clips)) or ok
     )
     monkeypatch.setattr(
         recognition_check, "run_check", lambda pairs, *, missing: calls.append(("check", pairs, missing)) or ok
     )
-    monkeypatch.setattr(library, "trial_report", lambda selection, *, reviewed: calls.append(("trial", reviewed)) or ok)
 
     assert cli.main(["listen", "t.json", "Persona 1", "--out-dir", "/ascolto"]) == 0
     assert cli.main(["listen", "t.json", "Mario Rossi", "--clip", "2"]) == 0
@@ -92,8 +92,6 @@ def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
     assert cli.main(["check", "--pair", "a.json", "a.m4a", "--missing", r"C:\b.json"]) == 0
     assert cli.main(["check", "--missing", r"C:\b.json"]) == 0
     assert cli.main(["check"]) == 0
-    assert cli.main(["trial"]) == 0
-    assert cli.main(["trial", "--reviewed"]) == 0
     assert calls == [
         ("listen", "t.json", "Persona 1", "/ascolto", 1),
         ("listen", "t.json", "Mario Rossi", None, 2),
@@ -102,20 +100,16 @@ def test_listen_check_and_trial_reach_their_commands(monkeypatch, capsys):
         # Only a check given nothing looks for transcripts itself.
         ("check", [], [r"C:\b.json"]),
         ("check", None, []),
-        ("trial", False),
-        ("trial", True),
     ]
 
 
 def test_a_command_that_breaks_still_ends_with_a_summary(monkeypatch, capsys):
-    import src.asr.utils.config as config
-
     def broken_settings():
-        raise RuntimeError("library.keep_clips must be greater than zero.")
+        raise RuntimeError("paths.voice_library_dir is not a folder.")
 
-    monkeypatch.setattr(config, "get_library_settings", broken_settings)
+    monkeypatch.setattr(library, "library_dir", broken_settings)
 
-    assert cli.main(["trial"]) == 1
+    assert cli.main(["remove-clips", "Luca Bianchi", "a.wav"]) == 1
     summary = _last_json(capsys.readouterr().out)
     assert summary["status"] == "error"
-    assert "keep_clips" in summary["message"]
+    assert "voice_library_dir" in summary["message"]

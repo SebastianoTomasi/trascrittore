@@ -111,7 +111,7 @@ class LibrarySettings:
 
     keep_clips: int
     min_consistency: float
-    # The cap on a person's added clips; not part of the selection, so changing it starts no new trial.
+    # The cap on a person's added clips: past it, a naming proposes which ones to remove.
     max_clips: int = 64
 
 

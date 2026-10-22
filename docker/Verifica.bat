@@ -1,6 +1,6 @@
 @echo off
-rem Double-click to check how well this PC's voice library recognizes voices, and how the trial
-rem of the automatic clip selection is going. Transcripts dropped on it are checked too.
+rem Double-click to check how well this PC's voice library recognizes voices.
+rem Transcripts dropped on it are checked too.
 rem Nothing is changed without asking: the suggested threshold is only shown.
 setlocal EnableExtensions
 chcp 65001 >nul <nul

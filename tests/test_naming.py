@@ -122,7 +122,6 @@ def test_naming_rewrites_both_files_and_adds_the_speakers_clips(transcript_and_l
         }
     ]
     assert summary["over_cap"] == []
-    assert summary["trial"] == {"passed": False, "named_speakers": 1, "needed": 10}
     assert "Luca Bianchi" in capsys.readouterr().err
 
 
@@ -183,30 +182,16 @@ def test_a_transcript_from_an_older_version_is_named_without_clips(transcript_an
     assert "trascrivi di nuovo la registrazione" in summary["named"][0]["note"]
 
 
-def test_after_the_trial_only_the_selected_clips_are_saved(transcript_and_library):
+def test_only_the_selected_clips_are_saved_from_the_first_naming(transcript_and_library):
     transcript, library_dir = transcript_and_library
     FakeVoiceprints.outliers = {13.0}
-    selection = naming.get_library_settings()
-    (library_dir / library.TRIAL_RECORD).write_text(
-        json.dumps(
-            {
-                "passed": [
-                    {
-                        "keep_clips": selection.keep_clips,
-                        "min_consistency": selection.min_consistency,
-                        "version": library.SELECTION_VERSION,
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
     pool = library_dir / "Luca Bianchi" / "registrazioni"
     assert sorted(path.name for path in pool.glob("*.wav")) == ["Registrazione 00.00.03.wav", "Registrazione 00.00.23.wav"]
-    assert summary["trial"]["passed"] is True
+    assert summary["named"][0]["clips_added"] == 2
+    assert "prova" not in summary["message"]
 
 
 def test_a_name_already_in_the_library_uses_its_folder(transcript_and_library):
@@ -245,23 +230,6 @@ def test_naming_a_missing_transcript_is_refused(tmp_path):
     summary = naming.name_speakers(str(tmp_path / "manca - trascrizione.json"), ["Persona 1=Luca Bianchi"])
 
     assert summary["status"] == "file_not_found"
-
-
-def _pass_trial(library_dir: Path, selection) -> None:
-    (library_dir / library.TRIAL_RECORD).write_text(
-        json.dumps(
-            {
-                "passed": [
-                    {
-                        "keep_clips": selection.keep_clips,
-                        "min_consistency": selection.min_consistency,
-                        "version": library.SELECTION_VERSION,
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
 
 
 def test_a_recognized_speaker_the_person_confirms_gets_more_clips(transcript_and_library):
@@ -340,14 +308,13 @@ def test_passing_the_cap_proposes_clips_to_remove(transcript_and_library, monkey
             keep_clips=selection.keep_clips, min_consistency=selection.min_consistency, max_clips=4
         ),
     )
-    _pass_trial(library_dir, selection)
     pool = library_dir / "Luca Bianchi" / "registrazioni"
     pool.mkdir(parents=True)
     record = {}
     for second, consistency in ((1, 0.9), (2, 0.8), (3, 0.7), (4, 0.95)):
         name = f"Altra 00.00.0{second}.wav"
         (pool / name).write_bytes(b"clip")
-        record[name] = {"recording_file": "Altra.m4a", "consistency": consistency, "vote": "keep", "trial": False}
+        record[name] = {"recording_file": "Altra.m4a", "consistency": consistency}
     (pool / "clip.json").write_text(json.dumps(record), encoding="utf-8")
     (pool / "a mano.wav").write_bytes(b"placed by hand")
 
@@ -418,12 +385,11 @@ def test_the_unattributed_voice_cannot_be_heard(transcript_and_library, tmp_path
     assert summary["status"] == "invalid_arguments"
 
 
-def test_after_the_trial_a_speaker_whose_clips_are_all_discarded_is_told_why(transcript_and_library, monkeypatch):
+def test_a_speaker_whose_clips_are_all_discarded_is_told_why(transcript_and_library, monkeypatch):
     transcript, library_dir = transcript_and_library
     FakeVoiceprints.outliers = {13.0}
     strict = library.LibrarySettings(keep_clips=8, min_consistency=0.99)
     monkeypatch.setattr(naming, "get_library_settings", lambda: strict)
-    _pass_trial(library_dir, strict)
 
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 

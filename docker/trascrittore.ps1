@@ -63,10 +63,6 @@ Comandi:
       Verifica quanto bene la libreria riconosce le voci a cui una persona ha dato il nome, nelle
       trascrizioni da cui sono state aggiunte clip e in quelle indicate, e suggerisce una soglia.
       Non cambia mai trascrittore.ini.
-  trial [--reviewed]
-      Riporta il periodo di prova della selezione automatica delle clip. Quando "ready" e' vero,
-      chiedi alla persona se ha ascoltato tutte le clip aggiunte e cancellato quelle brutte: solo se
-      risponde di si', ripeti con --reviewed e la selezione iniziera' a scartare da sola.
   help
       Mostra questo testo.
 
@@ -417,17 +413,6 @@ function New-CheckPlan([object[]]$Arguments) {
     return $plan
 }
 
-function New-TrialPlan([object[]]$Arguments) {
-    $parsed = Split-Arguments 'trial' $Arguments @() @('--reviewed')
-    Assert-Docker 'trial'
-    $plan = New-Plan 'trial'
-    # Passing the trial is recorded in the voice library.
-    Add-Mount $plan $Voices '/voci'
-    [void]$plan.Arguments.Add('trial')
-    if ($parsed.Options['--reviewed']) { [void]$plan.Arguments.Add('--reviewed') }
-    return $plan
-}
-
 function Format-Minutes([double]$Seconds) {
     $minutes = [math]::Round($Seconds / 60)
     if ($minutes -ge 1) { return "$minutes min" }
@@ -624,20 +609,10 @@ function Invoke-Interactive([object[]]$Arguments) {
 }
 
 function Invoke-Verify([object[]]$Arguments) {
-    # Verifica.bat: the recognition check, then the trial, which the person closes once they reviewed the clips.
+    # Verifica.bat: the recognition check, for a person.
     $script:Interactive = $true
-    [void](Invoke-Summary (New-CheckPlan $Arguments))
-    Write-Line ''
-    $trial = Invoke-Summary (New-TrialPlan @())
-    if ($trial.status -ne 'ok') { exit (Get-ExitCode $trial.status) }
-    if ($trial.ready) {
-        Write-Line ''
-        if (Read-YesNo 'Hai ascoltato tutte le clip aggiunte alla libreria e cancellato quelle brutte? (s/n)') {
-            $trial = Invoke-Summary (New-TrialPlan @('--reviewed'))
-        }
-        else { Write-Line "Allora ascoltale, cancella quelle brutte e rifai Verifica.bat." }
-    }
-    exit (Get-ExitCode $trial.status)
+    $check = Invoke-Summary (New-CheckPlan $Arguments)
+    exit (Get-ExitCode $check.status)
 }
 
 $SettingsTemplate = @'
@@ -780,7 +755,6 @@ switch ($command) {
     'listen' { Complete-Plan (New-TranscriptPlan 'listen' $rest) }
     'remove-clips' { Complete-Plan (New-RemovePlan $rest) }
     'check' { Complete-Plan (New-CheckPlan $rest) }
-    'trial' { Complete-Plan (New-TrialPlan $rest) }
     'interactive' { Invoke-Interactive $rest }
     'verify' { Invoke-Verify $rest }
     'setup' { Invoke-Setup; exit 0 }

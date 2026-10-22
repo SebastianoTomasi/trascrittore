@@ -107,10 +107,6 @@ would teach the transcriber the wrong voice.
 | `similar_name` | A name looks like a person already in the library (listed in `similar`). Nothing was saved. | Ask whether they meant that person. Run `name` again with the folder's exact name, or, if it really is a new person, add `--new-person "Nome Cognome"`. |
 | `over_cap` | The names are applied and the clips saved, but a person now has more added clips than the cap. `over_cap` lists, for each person, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
 
-During the trial period of the automatic clip selection, the summary of `name` asks the person to
-listen to the added clips and delete the bad ones, those with other voices, laughter or noise.
-Pass that request on.
-
 ## Confirm or correct a recognized voice, only when asked
 
 A voice the transcriber recognized keeps its name. Never propose to confirm or correct it: do it
@@ -127,21 +123,13 @@ era Antonio, era Sebastiano".
      the person to listen to the wrong person's clips and delete those that are not theirs, then
      run the check below; relay it.
 
-## Check recognition and the trial
+## Check recognition
 
 ```
 trascrittore check
-trascrittore trial
 ```
 
-Run them in this order, as `Verifica.bat` does, and suggest it after a few new names.
-
-- `check` measures how well the voice library recognizes the voices a person named in this PC's
-  transcripts, and suggests a threshold. It never changes `trascrittore.ini`: relay the suggestion, and
-  let the person decide whether to write it as `threshold` under `[matching]` in
-  `{{CARTELLA}}\trascrittore.ini`.
-- `trial` reports the trial of the automatic clip selection. When its summary has `"ready": true`,
-  ask the person whether they listened to every clip added to the library and deleted the bad ones.
-  Only if they say yes, run `trascrittore trial --reviewed`: from then on the selection discards
-  the worst clips by itself. If it lists `disagreements`, the selection kept clips the person
-  deleted; tell them to report it to whoever gave them the transcriber.
+It does what `Verifica.bat` does; suggest it after a few new names. It measures how well the voice
+library recognizes the voices a person named in this PC's transcripts, and suggests a threshold. It
+never changes `trascrittore.ini`: relay the suggestion, and let the person decide whether to write it
+as `threshold` under `[matching]` in `{{CARTELLA}}\trascrittore.ini`.

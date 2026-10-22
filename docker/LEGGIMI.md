@@ -73,13 +73,11 @@ Per non riconoscere più una persona, cancella la sua cartella dentro `voci`.
 
 ### Le voci a cui dai un nome
 
-Quando dai un nome a una voce, le sue clip finiscono in `voci\Nome Cognome\registrazioni`. Il nome del file dice da quale registrazione vengono e da che minuto.
+Quando dai un nome a una voce, le sue clip finiscono in `voci\Nome Cognome\registrazioni`. Il nome del file dice da quale registrazione vengono e da che minuto. Il programma tiene solo le clip migliori di ogni voce, al massimo 8 per registrazione, e scarta da solo quelle che somigliano poco alle altre. Se ne trovi una con altre voci, risate o rumori, puoi cancellarla.
 
-All'inizio il programma è in **periodo di prova**: tiene tutte le clip, anche quelle che secondo lui sono brutte. Ascoltale e cancella quelle con altre voci, risate o rumori. Dopo 10 voci con nome fai doppio clic su `Verifica.bat`. Se tra le clip che hai cancellato non ce n'è nessuna che il programma avrebbe tenuto, ti chiede se le hai ascoltate tutte e, se rispondi di sì, da lì in poi scarta da solo le peggiori. Altrimenti ti elenca quelle clip: in quel caso avvisa chi ti ha dato il trascrittore.
+Ogni persona tiene al massimo **64 clip** aggiunte dalle registrazioni (`max_clips` sotto `[library]` in `trascrittore.ini`). Quando una nuova registrazione supera il limite, il programma ti propone quali togliere, prendendole dalle registrazioni con più clip, e le toglie solo se confermi. Le clip che hai messo tu a mano non le tocca mai.
 
-Dopo il periodo di prova ogni persona tiene al massimo **64 clip** aggiunte dalle registrazioni (`max_clips` sotto `[library]` in `trascrittore.ini`). Quando una nuova registrazione supera il limite, il programma ti propone quali togliere, prendendole dalle registrazioni con più clip, e le toglie solo se confermi. Le clip che hai messo tu a mano non le tocca mai.
-
-`Verifica.bat` controlla anche quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia: in quel caso ti mostra la riga da scrivere in `trascrittore.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome.
+`Verifica.bat` controlla quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia: in quel caso ti mostra la riga da scrivere in `trascrittore.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome.
 
 ## Impostazioni
 

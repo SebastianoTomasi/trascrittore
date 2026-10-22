@@ -210,7 +210,7 @@ def _library_clips(library_dir: Path, voiceprints: voices.Voiceprints) -> list[L
 
 def _discover_pairs(library_dir: Path) -> list[tuple[str, str]]:
     pairs: dict[str, str] = {}
-    for _, _, origin in library.clip_records(library_dir):
+    for origin in library.clip_records(library_dir):
         if origin.get("transcript") and origin.get("recording"):
             pairs.setdefault(origin["transcript"], origin["recording"])
     return list(pairs.items())

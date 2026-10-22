@@ -184,8 +184,6 @@ def _grow_library(
             result["note"] = problem
         return
 
-    selection = get_library_settings()
-    trial = not library.trial_passed(library_dir, selection)
     voiceprints = voices.Voiceprints()
     for result in results:
         candidates, result["note"] = _candidates(payload, result["label"], audio, voiceprints)
@@ -196,8 +194,6 @@ def _grow_library(
             result["name"],
             audio,
             candidates,
-            trial=trial,
-            selection=selection,
             origin={
                 "recording": payload.get("recording"),
                 "recording_file": payload["file"],
@@ -261,8 +257,6 @@ def _over_cap(results: list[dict[str, Any]], library_dir: Path | None) -> list[d
     if library_dir is None:
         return []
     selection = get_library_settings()
-    if not library.trial_passed(library_dir, selection):
-        return []
     over = []
     for person in dict.fromkeys(result["name"] for result in results if result["clips_added"]):
         proposal = library.cap_proposal(library_dir, person, selection.max_clips)
@@ -271,9 +265,7 @@ def _over_cap(results: list[dict[str, Any]], library_dir: Path | None) -> list[d
     return over
 
 
-def _naming_lines(
-    results: list[dict[str, Any]], trial: dict[str, Any] | None, over_cap: list[dict[str, Any]]
-) -> list[str]:
+def _naming_lines(results: list[dict[str, Any]], over_cap: list[dict[str, Any]]) -> list[str]:
     lines = []
     for result in results:
         arrow = "confermata" if result["action"] == CONFIRMED else f"→ {result['name']}"
@@ -285,11 +277,6 @@ def _naming_lines(
         else:
             line += f"nessuna clip aggiunta. {result['note']}"
         lines.append(line)
-    if trial and not trial["passed"] and any(result["clips_added"] for result in results):
-        lines.append(
-            "Periodo di prova della selezione delle clip: ascolta le clip aggiunte e cancella quelle con altre "
-            f"voci, risate o rumori. Voci nominate finora: {trial['named_speakers']} su {trial['needed']}."
-        )
     for entry in over_cap:
         lines.append(
             f"{entry['person']} ha più di {entry['cap']} clip aggiunte: propongo di togliere le {len(entry['remove'])} "
@@ -382,13 +369,9 @@ def _name_speakers(
     text_path = _write_transcript(
         transcript_path, rename_speakers(payload, {result["label"]: result["name"] for result in results})
     )
-    trial = None
-    if library_dir is not None:
-        status = library.trial_status(library_dir, get_library_settings())
-        trial = {"passed": status.passed, "named_speakers": status.named_speakers, "needed": library.TRIAL_NAMED_SPEAKERS}
     over_cap = _over_cap(results, library_dir)
 
-    lines = _naming_lines(results, trial, over_cap)
+    lines = _naming_lines(results, over_cap)
     for line in lines:
         say(line)
     return {
@@ -398,7 +381,6 @@ def _name_speakers(
         "transcript_txt": host_path(text_path),
         "transcript_json": host_path(transcript_path),
         "named": results,
-        "trial": trial,
         "over_cap": over_cap,
     }
 
