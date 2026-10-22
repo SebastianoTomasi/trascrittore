@@ -78,9 +78,11 @@ def _parser() -> _Parser:
         help="un nome che la persona conferma come persona nuova, anche se somiglia a uno della libreria; ripetibile",
     )
 
-    listen = commands.add_parser("listen", help="prepara una clip di ogni voce da ascoltare prima di nominarla")
+    listen = commands.add_parser(
+        "listen", help="prepara una clip di una voce da ascoltare prima di nominarla; una voce alla volta"
+    )
     listen.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
-    listen.add_argument("labels", nargs="+", metavar="ETICHETTA", help='per esempio "Persona 2"')
+    listen.add_argument("label", metavar="ETICHETTA", help='per esempio "Persona 2"')
     listen.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     listen.add_argument("--out-dir", default=None, help="cartella delle clip da ascoltare")
     listen.add_argument("--clip", type=_positive_int, default=1, help="quale clip: 1 la migliore, 2 la seconda, ...")
@@ -108,20 +110,6 @@ def _parser() -> _Parser:
         help="una trascrizione .json e la sua registrazione; ripetibile",
     )
     check.add_argument("--missing", action="append", default=[], help="una trascrizione non trovata, da elencare come saltata")
-
-    trial = commands.add_parser(
-        "trial",
-        help="riporta il periodo di prova della selezione delle clip",
-        description=(
-            "Confronta i voti della selezione con le clip che la persona ha cancellato. Dopo 10 voci nominate "
-            "senza disaccordi, e solo con --reviewed, la selezione scarta da sola le clip peggiori."
-        ),
-    )
-    trial.add_argument(
-        "--reviewed",
-        action="store_true",
-        help="la persona conferma di aver ascoltato tutte le clip aggiunte e cancellato quelle brutte",
-    )
     return parser
 
 
@@ -148,15 +136,14 @@ def _listen(args: argparse.Namespace) -> dict[str, Any]:
     from src.transcriber import naming
 
     return naming.prepare_listening(
-        args.transcript, args.labels, recording=args.recording, out_dir=args.out_dir, clip=args.clip
+        args.transcript, args.label, recording=args.recording, out_dir=args.out_dir, clip=args.clip
     )
 
 
 def _remove_clips(args: argparse.Namespace) -> dict[str, Any]:
-    from src.asr.utils.config import get_library_settings
     from src.transcriber import library
 
-    return library.remove_clips_report(args.person, args.clips, get_library_settings())
+    return library.remove_clips_report(args.person, args.clips)
 
 
 def _check(args: argparse.Namespace) -> dict[str, Any]:
@@ -168,25 +155,12 @@ def _check(args: argparse.Namespace) -> dict[str, Any]:
     return recognition_check.run_check(pairs, missing=args.missing)
 
 
-def _trial(args: argparse.Namespace) -> dict[str, Any]:
-    from src.asr.utils.config import get_library_settings
-    from src.transcriber import library
-    from src.transcriber.summary import guarded
-
-    return guarded(
-        "trial",
-        lambda: library.trial_report(get_library_settings(), reviewed=args.reviewed),
-        failed="Il resoconto del periodo di prova non è riuscito",
-    )
-
-
 _COMMANDS = {
     "transcribe": _transcribe,
     "name": _name,
     "listen": _listen,
     "remove-clips": _remove_clips,
     "check": _check,
-    "trial": _trial,
 }
 
 

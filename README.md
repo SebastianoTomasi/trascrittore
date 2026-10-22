@@ -46,33 +46,30 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 
 - `name <transcript.json> "Persona 2=Nome Cognome" ...` rewrites both transcript
   files from the JSON, and cuts clips of each named speaker from the recording
-  into `voci/<Nome>/registrazioni`, with their origin and the clip selection's
-  vote in `clip.json`. Only on the person's request, `--confirm "<Nome>"` adds
+  into `voci/<Nome>/registrazioni`, only those the clip selection keeps
+  (`[library]` in the settings), with their origin in `clip.json`. Only on the
+  person's request, `--confirm "<Nome>"` adds
   clips of a recognized speaker and `--correct` lets a pair replace a recognized
   name. A name similar to a person in the library saves nothing and ends with
   status `similar_name` until it is repeated with the folder's name or with
-  `--new-person`. After the trial, a person past `[library] max_clips` added
+  `--new-person`. A person past `[library] max_clips` added
   clips gets status `over_cap` (exit 0) with a proposal of clips to remove;
 - `remove-clips "<Nome>" <clip.wav> ...` removes the proposed clips once the
   person confirms, and only clips recorded in that person's `clip.json`;
-- `listen <transcript.json> "Persona 2" ... [--clip N]` cuts one clip of each
-  speaker, the best or the N-th, for the person to hear before naming; a speaker
-  without a full window is heard from their longest one;
+- `listen <transcript.json> "Persona 2" [--clip N]` cuts one clip of one
+  speaker, the best or the N-th, for the person to hear before naming; clips
+  opened together cannot be told apart, so it takes one speaker at a time; a
+  speaker without a full window is heard from their longest one;
 - `check` scores the voices a person named (marked `named` in the JSON) against
   the library without the clips cut from the same recording, simulates missing
   voices by removing one person at a time, and suggests a threshold above every
-  wrong name without writing it;
-- `trial` compares the selection's votes with the clips the person deleted;
-  after 10 named speakers without a disagreement, `trial --reviewed` (the person
-  confirms they reviewed the clips) lets the selection discard clips by itself
-  (`[library]` in the settings; raise `SELECTION_VERSION` when the algorithm
-  changes, to start a new trial).
+  wrong name without writing it.
 
 `name`, `listen` and `check` compute voiceprints on the CPU, so they can run beside a
 transcription. `docker/trascrittore.ps1` is the host launcher that
 `Trascrivi.bat`, `Verifica.bat` and agents all call: it mounts the folders,
 uses the installer's GPU/CPU mode, refuses a second transcription
-with status `busy` (exit 3), opens the folder of added clips after `name`, and
+with status `busy` (exit 3), opens the clip `listen --open` prepares, and
 asks the person's questions for `Trascrivi.bat`. It stays ASCII, because Windows PowerShell 5.1 reads a script
 without a byte order mark in the ANSI code page. The design is in
 [docs/features/agent-cli](docs/features/agent-cli/) and

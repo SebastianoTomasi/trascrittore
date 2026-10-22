@@ -75,7 +75,7 @@ def test_a_command_stops_with_the_line_to_correct(tmp_path):
     env.pop("TRANSCRIBER_DEFAULTS", None)
 
     completed = subprocess.run(
-        [sys.executable, "-m", "src.transcriber", "trial"],
+        [sys.executable, "-m", "src.transcriber", "remove-clips", "Luca Bianchi", "a.wav"],
         cwd=ROOT,
         env=env,
         capture_output=True,

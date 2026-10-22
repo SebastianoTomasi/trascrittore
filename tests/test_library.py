@@ -36,7 +36,7 @@ def test_consistency_is_unknown_with_a_single_window():
     assert library.consistency_scores([_unit(1.0, 0.0)]) == [None]
 
 
-def test_selection_keeps_the_most_consistent_full_windows_and_votes_on_the_rest():
+def test_selection_keeps_the_most_consistent_full_windows():
     windows = _windows(0.0, 10.0, 20.0, 30.0) + [{"start": 40.0, "end": 44.0}]
     voiceprints = [
         _unit(1.0, 0.2, 0.0),
@@ -49,11 +49,11 @@ def test_selection_keeps_the_most_consistent_full_windows_and_votes_on_the_rest(
     candidates = library.select_clips(windows, voiceprints, window_sec=10.0, selection=SELECTION)
 
     # The short window at 40 s counts in the others' mean but never becomes a clip.
-    assert [(candidate.start, candidate.vote) for candidate in candidates] == [
-        (0.0, "keep"),
-        (10.0, "keep"),
-        (30.0, "discard"),
-        (20.0, "discard"),
+    assert [(candidate.start, candidate.keep) for candidate in candidates] == [
+        (0.0, True),
+        (10.0, True),
+        (30.0, False),
+        (20.0, False),
     ]
     assert candidates[0].consistency == pytest.approx(0.9458, abs=1e-4)
 
@@ -66,15 +66,13 @@ def test_selection_discards_inconsistent_windows_even_below_the_cap():
         windows, voiceprints, window_sec=10.0, selection=LibrarySettings(keep_clips=8, min_consistency=0.6)
     )
 
-    assert [candidate.vote for candidate in candidates] == ["keep", "keep", "discard"]
+    assert [candidate.keep for candidate in candidates] == [True, True, False]
 
 
 def test_selection_skips_windows_without_a_voiceprint():
     candidates = library.select_clips(_windows(0.0, 10.0), [None, _unit(1.0, 0.0)], window_sec=10.0, selection=SELECTION)
 
-    assert [(candidate.start, candidate.consistency, candidate.vote) for candidate in candidates] == [
-        (10.0, None, "keep")
-    ]
+    assert [(candidate.start, candidate.consistency, candidate.keep) for candidate in candidates] == [(10.0, None, True)]
 
 
 @pytest.mark.parametrize(
@@ -107,162 +105,47 @@ def test_clip_names_carry_the_recording_and_the_time():
     assert library.clip_recording("nota vocale 24.09.2026.m4a") is None
 
 
-def _save(tmp_path, *, trial: bool, label: str = "Persona 2", recording: str = "Registrazione.m4a") -> list[str]:
+def test_only_the_kept_clips_are_saved_with_their_origin(tmp_path):
     audio = np.linspace(-0.5, 0.5, 16000 * 60, dtype=np.float32)
     candidates = [
-        library.Candidate(start=10.0, end=20.0, consistency=0.9, vote="keep"),
-        library.Candidate(start=30.0, end=40.0, consistency=0.4, vote="discard"),
+        library.Candidate(start=10.0, end=20.0, consistency=0.9),
+        library.Candidate(start=30.0, end=40.0, consistency=0.4, keep=False),
     ]
-    return library.save_clips(
+
+    saved = library.save_clips(
         tmp_path,
         "Luca Bianchi",
         audio,
         candidates,
-        trial=trial,
-        selection=SELECTION,
         origin={
-            "recording": f"C:\\Registrazioni\\{recording}",
-            "recording_file": recording,
+            "recording": "C:\\Registrazioni\\Registrazione.m4a",
+            "recording_file": "Registrazione.m4a",
             "recording_duration_sec": 60.0,
-            "transcript": f"C:\\Registrazioni\\{recording} - trascrizione.json",
-            "label": label,
+            "transcript": "C:\\Registrazioni\\Registrazione.m4a - trascrizione.json",
+            "label": "Persona 2",
         },
     )
 
-
-def test_during_the_trial_every_candidate_is_saved_with_its_vote(tmp_path):
-    saved = _save(tmp_path, trial=True)
-
     folder = tmp_path / "Luca Bianchi" / "registrazioni"
-    assert saved == ["Registrazione 00.00.10.wav", "Registrazione 00.00.30.wav"]
+    assert saved == ["Registrazione 00.00.10.wav"]
+    assert sorted(path.name for path in folder.glob("*.wav")) == ["Registrazione 00.00.10.wav"]
     info = sf.info(folder / "Registrazione 00.00.10.wav")
     assert (info.samplerate, round(info.duration, 3)) == (16000, 10.0)
     record = json.loads((folder / "clip.json").read_text(encoding="utf-8"))
-    assert record["Registrazione 00.00.10.wav"]["vote"] == "keep"
-    assert record["Registrazione 00.00.30.wav"] | {"saved": None} == {
+    assert record["Registrazione 00.00.10.wav"] | {"saved": None} == {
         "recording": "C:\\Registrazioni\\Registrazione.m4a",
         "recording_file": "Registrazione.m4a",
         "recording_duration_sec": 60.0,
         "transcript": "C:\\Registrazioni\\Registrazione.m4a - trascrizione.json",
         "label": "Persona 2",
-        "start": 30.0,
-        "end": 40.0,
-        "consistency": 0.4,
-        "vote": "discard",
-        "trial": True,
-        "selection": {"keep_clips": 2, "min_consistency": 0.6, "version": library.SELECTION_VERSION},
+        "start": 10.0,
+        "end": 20.0,
+        "consistency": 0.9,
         "saved": None,
     }
-
-
-def test_after_the_trial_only_the_kept_clips_are_saved(tmp_path):
-    assert _save(tmp_path, trial=False) == ["Registrazione 00.00.10.wav"]
-
-
-def _name_speakers(tmp_path, count: int) -> None:
-    for index in range(count):
-        _save(tmp_path, trial=True, recording=f"Registrazione {index}.m4a")
-
-
-def test_trial_counts_named_speakers_and_passes_after_ten_once_the_person_reviewed(tmp_path):
-    _name_speakers(tmp_path, 9)
-    status = library.trial_status(tmp_path, SELECTION)
-    assert (status.named_speakers, status.passed, status.ready, status.disagreements) == (9, False, False, [])
-
-    _name_speakers(tmp_path, 10)
-    not_reviewed = library.evaluate_trial(tmp_path, SELECTION, reviewed=False)
-    assert not_reviewed.ready and not not_reviewed.passed
-    assert not_reviewed.votes == {"keep": 10, "discard": 10, "discarded_but_kept_by_person": 10}
-
-    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
-
-    assert status.passed and status.named_speakers == 10 and not status.ready
-    assert library.trial_status(tmp_path, SELECTION).passed
-    assert not library.trial_status(tmp_path, LibrarySettings(keep_clips=6, min_consistency=0.6)).passed
-
-
-def test_a_kept_clip_the_person_deleted_stops_the_trial(tmp_path):
-    _name_speakers(tmp_path, 10)
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").unlink()
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.30.wav").unlink()
-
-    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
-
-    assert not status.passed
-    assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Registrazione 3 00.00.10.wav", "consistency": 0.9}]
-    assert not library.trial_status(tmp_path, SELECTION).passed
-
-
-def test_a_clip_moved_elsewhere_in_its_persons_folder_is_not_deleted(tmp_path):
-    _name_speakers(tmp_path, 10)
-    person = tmp_path / "Luca Bianchi"
-    (person / "macchina").mkdir()
-    (person / "registrazioni" / "Registrazione 3 00.00.10.wav").rename(person / "macchina" / "Registrazione 3 00.00.10.wav")
-    (person / "registrazioni" / "Registrazione 4 00.00.30.wav").rename(person / "Registrazione 4 00.00.30.wav")
-
-    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
-
-    assert status.disagreements == []
-    assert status.votes == {"keep": 10, "discard": 10, "discarded_but_kept_by_person": 10}
-    assert status.passed
-
-
-def test_a_clip_moved_into_another_persons_folder_counts_as_deleted(tmp_path):
-    _name_speakers(tmp_path, 10)
-    (tmp_path / "Anna Neri").mkdir()
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").rename(
-        tmp_path / "Anna Neri" / "Registrazione 3 00.00.10.wav"
-    )
-
-    status = library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
-
-    assert not status.passed
-    assert status.disagreements == [{"person": "Luca Bianchi", "clip": "Registrazione 3 00.00.10.wav", "consistency": 0.9}]
-
-
-def test_speakers_named_under_another_selection_start_a_new_trial(tmp_path):
-    _name_speakers(tmp_path, 10)
-
-    assert library.trial_status(tmp_path, LibrarySettings(keep_clips=8, min_consistency=0.5)).named_speakers == 0
-
-
-def test_the_trial_report_says_what_to_do_next(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(library, "library_dir", lambda: tmp_path)
-    _name_speakers(tmp_path, 3)
-
-    summary = library.trial_report(SELECTION)
-
-    assert (summary["status"], summary["passed"], summary["named_speakers"]) == ("ok", False, 3)
-    assert "voci nominate 3 su 10" in capsys.readouterr().err
-
-    _name_speakers(tmp_path, 10)
-    ready = library.trial_report(SELECTION)
-    assert ready["ready"] and not ready["passed"]
-    assert "Se hai ascoltato tutte le clip" in ready["message"]
-    assert library.trial_report(SELECTION, reviewed=True)["message"].startswith("Periodo di prova superato")
-    assert "già superato" in library.trial_report(SELECTION)["message"]
-
-
-def test_a_new_version_of_the_selection_starts_a_new_trial(tmp_path, monkeypatch):
-    _name_speakers(tmp_path, 10)
-    library.evaluate_trial(tmp_path, SELECTION, reviewed=True)
-
-    monkeypatch.setattr(library, "SELECTION_VERSION", library.SELECTION_VERSION + 1)
-
-    status = library.trial_status(tmp_path, SELECTION)
-    assert (status.passed, status.named_speakers) == (False, 0)
-
-
-def test_the_trial_report_lists_the_kept_clips_the_person_deleted(tmp_path, monkeypatch):
-    monkeypatch.setattr(library, "library_dir", lambda: tmp_path)
-    _name_speakers(tmp_path, 10)
-    (tmp_path / "Luca Bianchi" / "registrazioni" / "Registrazione 3 00.00.10.wav").unlink()
-
-    summary = library.trial_report(SELECTION, reviewed=True)
-
-    assert not summary["passed"]
-    assert "va corretta" in summary["message"]
-    assert summary["disagreements"][0]["clip"] == "Registrazione 3 00.00.10.wav"
+    # The record of a deleted clip stays: the recognition check finds its transcript through it.
+    (folder / "Registrazione 00.00.10.wav").unlink()
+    assert [origin["label"] for origin in library.clip_records(tmp_path)] == ["Persona 2"]
 
 
 @pytest.mark.parametrize(
@@ -315,12 +198,12 @@ def test_only_recorded_clips_are_removed(tmp_path):
     assert library.cap_proposal(tmp_path, "Luca Bianchi", 1) == []
 
 
-def test_nothing_is_removed_during_the_trial(tmp_path, monkeypatch):
+def test_the_remove_command_removes_the_confirmed_clips(tmp_path, monkeypatch, capsys):
     pool = _added_pool(tmp_path)
     monkeypatch.setattr(library, "library_dir", lambda: tmp_path)
 
-    summary = library.remove_clips_report("Luca Bianchi", ["Altra 00.00.01.wav"], SELECTION)
+    summary = library.remove_clips_report("Luca Bianchi", ["Altra 00.00.01.wav"])
 
-    assert summary["status"] == "invalid_arguments"
-    assert "periodo di prova" in summary["message"]
-    assert (pool / "Altra 00.00.01.wav").exists()
+    assert (summary["status"], summary["removed"], summary["refused"]) == ("ok", ["Altra 00.00.01.wav"], [])
+    assert not (pool / "Altra 00.00.01.wav").exists()
+    assert "1 clip tolte" in capsys.readouterr().err

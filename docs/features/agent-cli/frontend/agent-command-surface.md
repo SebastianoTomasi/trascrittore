@@ -112,14 +112,16 @@ calling it again:
   added clips proposed for removal. The agent runs the removal only after the
   person confirms.
 
-When the command saves clips, it opens the person's folder of added clips in
-the file manager on the PC when it can; the summary always gives the folder.
+When the command saves clips, the summary gives each person's folder of added
+clips. It opens no window.
 
 ## Listening before naming
 
-The listening command takes a transcript's JSON file and a speaker's label,
+The listening command takes a transcript's JSON file and one speaker's label,
 recognized or not, and plays one clip of that speaker: the best one, or the
-next best when asked for it. A speaker without a full clip is played from their
+next best when asked for it. It refuses more than one speaker: clips opened
+together cannot be told apart, so the person answers for one voice before
+hearing the next. A speaker without a full clip is played from their
 longest stretch of speech, and the summary says how long it lasts. The summary
 also says how many clips the speaker has.
 

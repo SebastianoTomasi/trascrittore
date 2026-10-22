@@ -25,7 +25,7 @@ Architecture, and how it is protected to Security.
 
 ## Data classes
 
-Every class except the settings and the trial result is personal: it holds the
+Every class except the settings is personal: it holds the
 voice or the words of identifiable people, or says in which recordings they
 spoke.
 
@@ -34,12 +34,11 @@ spoke.
 | Recording | The voices and words of its speakers. | Wherever the person keeps it. | The transcriber only reads it: it never moves, changes or deletes it. |
 | Transcript | What each speaker said and when, under a recognized or given name, or as "Persona N". The JSON file also holds, for each speaker, how sure recognition was, including the closest person in the voice library even when that person was not recognized. | Next to the recording, or in the folder the person chooses. | As long as the person keeps it. |
 | Voice clip | The voice of one identifiable person, from which the transcriber learns to recognize them. | In the voice library, inside the transcriber's folder. | Until someone removes it. A clip added by naming may also be removed by the transcriber when the person confirms its proposal to keep that person under the cap on added clips. |
-| Clip record | For each clip added by naming a speaker: the recording and the transcript it came from, with their paths on the PC, the speaker's label in that transcript, the times of the clip and the clip selection's vote. | In the voice library, in the named person's folder. | Until someone removes it, at the latest with that person's folder. The entry of a clip the person deleted stays, because the trial compares the entries with the clips left. |
+| Clip record | For each clip added by naming a speaker: the recording and the transcript it came from, with their paths on the PC, the speaker's label in that transcript, the times of the clip and how much it resembles the rest of the speaker's voice. | In the voice library, in the named person's folder. | Until someone removes it, at the latest with that person's folder. The entry of a clip the person deleted stays, because the recognition check finds the named transcripts through the entries. |
 | Voiceprint | What the transcriber derives from a person's voice clips to recognize their voice: biometric data. | In a cache on the PC, outside the voice library. | Recomputed when that person's clips change; no longer used once the person leaves the library. |
 | Listening file | One speaker's voice: one of their best clips from a recording, or their longest stretch of speech when they have no full clip, which the person hears before naming them. | In the transcriber's data folder on the PC, outside the voice library. | Until the naming ends or the next listening starts. A file still open in the player is deleted the time after. |
 | Working files | A 16 kHz copy of the recording and the intermediate steps of one run. | Inside the container of that run. | Deleted when the run ends. |
 | Settings | Recognition thresholds and processing options. Not personal. | The person's changes in `trascrittore.ini`, next to the transcriber's scripts; everything else inside the transcriber. | The person's changes stay until they change them; the rest can change with any update. |
-| Trial result | Which settings of the clip selection passed its trial, and when. Not personal. | In the voice library, outside every person's folder. | Until someone removes it. |
 
 ## Where the files end up
 
@@ -47,8 +46,7 @@ The person's files — recordings, transcripts and the voice library — stay
 wherever the person puts them. If that place is synchronized with a cloud
 service, for example a `Documenti` folder backed up by OneDrive, they follow it:
 that is the person's choice, as [No use policy](transcriber-promise.md#no-use-policy)
-says. The clip records and the trial result sit in the voice library, so they
-follow it too. The transcriber itself places only its internal data:
+says. The clip records sit in the voice library, so they follow it too. The transcriber itself places only its internal data:
 voiceprints, listening files and working files.
 
 Removing a person's folder from the voice library is enough for the transcriber

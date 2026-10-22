@@ -13,7 +13,7 @@ the library:
 
 - the listening check;
 - the warning for similar names;
-- the trial period that decides when automatic clip selection can be trusted;
+- the automatic selection of the clips to keep;
 - the cap on each person's added clips;
 - the recognition check that must exist first.
 
@@ -41,9 +41,8 @@ Other concerns live elsewhere:
 - [Parity between people and agents](../../agent-cli/product/transcribing-through-an-agent.md#parity-between-people-and-agents)
   — every step below exists both for a person and as a command for an agent.
 - [Data classes](../../../product/personal-data-and-obligations.md#data-classes)
-  — the voice clips, clip records, listening files and trial result this
-  feature produces are declared there, with where they live and how long they
-  stay.
+  — the voice clips, clip records and listening files this feature produces
+  are declared there, with where they live and how long they stay.
 
 ## Capability
 
@@ -97,36 +96,23 @@ transcript and the new clips to the right person.
   speaker's best clip and confirms that the voice is that person's. When unsure,
   they ask for the next best, one clip at a time. A speaker without any full
   10-second clip can still be heard from their longest stretch of speech, but
-  gets no clips. This check stays after the trial, because no automatic
-  selection can tell that a whole speaker is the wrong person.
-- **The clips are the person's to review.** After a naming saves clips, the
-  transcriber opens that person's folder of added clips when it can, so the
-  person can listen to them and delete bad ones; otherwise the message gives
-  the folder.
+  gets no clips. The automatic selection does not replace this check, because
+  no automatic selection can tell that a whole speaker is the wrong person.
+- **Only the selected clips are saved.** From the first naming, the
+  transcriber keeps up to 8 full 10-second clips per speaker and recording, the
+  ones that most resemble the rest of that speaker's voice, and discards the
+  others by itself. There is no trial period before the selection is trusted:
+  the reasons, and the price of a bad clip reaching the library unseen, are in
+  [ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md).
+- **The added clips stay within reach.** The result of a naming gives each
+  person's folder of added clips, where the person may listen to them and
+  delete a bad one. The transcriber opens no window.
 - **Cap on added clips.** A person keeps at most 64 clips added from recordings,
   a setting a person can change in `trascrittore.ini`. When a naming passes the
   cap, the transcriber proposes which added clips to remove and removes them
   only after the person confirms. It proposes clips of the recording with the
   most clips first, least consistent first, so that different rooms and
-  microphones stay. Clips the person placed by hand are never proposed. Nothing
-  is proposed during the trial.
-- **Trial period.**
-  - Every candidate clip is saved together with the selection's vote (keep or
-    discard). Nothing is discarded automatically.
-  - The person deletes the clips they judge bad. They do not see the votes
-    while judging: deletions that followed the votes would prove nothing.
-  - Moving a clip elsewhere in the same person's folder, such as into a
-    condition folder, does not count as deleting it.
-  - A speaker confirmed or corrected on request counts as a named speaker,
-    since their clips go through the same selection and listening check.
-  - After 10 named speakers, if the selection never kept a clip the person
-    deleted, the person is asked whether they listened to the added clips and
-    deleted the bad ones. Only when they confirm does the selection start
-    discarding by itself. It then keeps up to 8 full 10-second clips per
-    recording. Without that review, the absence of disagreements proves
-    nothing.
-  - If it kept even one such clip, the cause is examined, the selection is
-    corrected and the trial starts again.
+  microphones stay. Clips the person placed by hand are never proposed.
 - **Recognition check first.** A repeatable check of recognition against the
   PC's own library must exist before this feature ships.
   - It reports how many wrong names and missed recognitions the current
@@ -136,17 +122,16 @@ transcript and the new clips to the right person.
   - A person applies the suggestion in `trascrittore.ini`; the check never changes it
     by itself.
   - It runs on each PC, since each PC has its own library.
-  - It runs again after a number of additions and before the trial ends. For
-    now the person runs it now and then; the number of additions is
+  - It runs again after a number of additions. For now the person runs it now
+    and then; the number of additions is
     [deferred](../../../deferred/recognition-check-cadence.md).
 
 ## Actors
 
-- **A person** names speakers, listens, confirms, deletes bad clips and applies
-  the threshold.
-- **An agent** proposes names for anonymous speakers, runs the commands,
-  reports the trial's results, and opens clips in the player on the person's
-  PC. It asks the person before answering a similar name or a proposal to
+- **A person** names speakers, listens, confirms, may delete bad clips and
+  applies the threshold.
+- **An agent** proposes names for anonymous speakers, runs the commands, and
+  opens clips in the player on the person's PC, one speaker at a time. It asks the person before answering a similar name or a proposal to
   remove clips, and it confirms or corrects a recognized speaker only when the
   person asked. It cannot judge a voice by ear.
 - **The maintainer** may help a person run the recognition check, as the
@@ -156,8 +141,7 @@ transcript and the new clips to the right person.
 
 The feature handles voice clips cut from the person's own recordings. Voice
 clips are an existing term in `GLOSSARY.md`. It also keeps a record of where
-each added clip came from, prepares listening files, and records the trial's
-result. The recognition check reads named transcripts and their recordings.
+each added clip came from and prepares listening files. The recognition check reads named transcripts and their recordings.
 Nothing leaves the PC.
 
 ## Preconditions
@@ -198,13 +182,15 @@ describes, and postponed
 [automatic condition pools for added clips](../../../deferred/automatic-pools-for-added-clips.md).
 On 2026-09-29 the user settled the similar-name warning, the cap, listening one
 clip at a time, and confirming or correcting recognized speakers, which had
-been postponed too.
+been postponed too. On 2026-10-22 the user dropped the trial period and the
+folder that naming opened, as
+[ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md) records.
 
 ## Security screening
 
 `security-new-subject-or-data`: this feature adds no actor, but it adds data.
 Voice clips now also enter the library by naming, and the feature adds clip
-records, listening files and the trial result. The project-wide
+records and listening files. The project-wide
 [Data classes](../../../product/personal-data-and-obligations.md#data-classes)
 were amended on 2026-09-25 to declare them, with where each lives and how long
 it stays.

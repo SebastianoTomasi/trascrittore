@@ -5,24 +5,23 @@
 ## Scope
 
 This artifact states how candidate clips are ranked and selected, how similar
-names and clips over the cap are found, how the trial
-compares the selection with the person's choices, and how the recognition check
-measures the threshold and margin without fooling itself. The contracts these
+names and clips over the cap are found, and how the recognition check measures
+the threshold and margin without fooling itself. The contracts these
 mechanics satisfy are in
 [the architecture](../architecture/library-growth-architecture.md).
 
 ## Dependencies
 
-- [Rules](../product/naming-grows-the-library.md#rules) — the trial's
-  criterion, the number of clips kept, listening one clip at a time, what
-  counts as a similar name, the cap and its order of removal, and what the
-  recognition check reports.
+- [Rules](../product/naming-grows-the-library.md#rules) — the number of clips
+  kept from the first naming, listening one clip at a time, what counts as a
+  similar name, the cap and its order of removal, and what the recognition
+  check reports.
 - [Where added clips go](../architecture/library-growth-architecture.md#where-added-clips-go),
   [Clip record](../architecture/library-growth-architecture.md#clip-record),
   [Clips over the cap](../architecture/library-growth-architecture.md#clips-over-the-cap) and
   [Recognition check](../architecture/library-growth-architecture.md#recognition-check)
-  — the pool layout, how a recorded clip is identified, which clips may be
-  removed, and the check's inputs.
+  — the pool layout, what a clip record holds, which clips may be removed, and
+  the check's inputs.
 
 ## How recognition scores today
 
@@ -54,20 +53,22 @@ numbers.
 - **Consistency score.** Each window's embedding is compared with the mean of
   the same speaker's other windows. A window that does not resemble the rest
   usually contains another voice, laughter or noise.
-- **The selection's vote.** The selection votes to keep at most
-  `library.keep_clips` windows per speaker and recording (8 today), best first,
-  and none whose consistency score is below `library.min_consistency` (0.60
-  today, a first guess for the trial to confirm). With a single window there is
-  nothing to compare, so that window is kept. Every other window is voted
-  discard.
-- **What is kept.** After the trial, only the windows voted keep are saved as
-  clips. Their file names carry the recording and the window's time.
+- **The selection.** The selection keeps at most `library.keep_clips` windows
+  per speaker and recording (8 today), best first, and none whose consistency
+  score is below `library.min_consistency` (0.60 today, a first guess that no
+  review has confirmed, as
+  [ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md)
+  accepts). With a single window there is nothing to compare, so that window is
+  kept. Every other window is discarded.
+- **What is kept.** From the first naming, only the windows the selection keeps
+  are saved as clips. Their file names carry the recording and the window's
+  time, and their clip record the consistency score.
 - **The listening check.** The person hears one clip at a time, ranked by the
   same score: the first listening plays the best, and each further request the
   next one. A speaker with no full-length window is played from their longest
   recorded window, down to `matching.min_window_sec`; that window is only
   heard, never saved. For an agent, opening a clip means starting the default
-  player on the person's PC.
+  player on the person's PC, for one speaker at a time.
 
 ## Similar names
 
@@ -85,22 +86,7 @@ After a naming saves clips, the person's clips in `registrazioni` that have a
 clip record are counted against `library.max_clips` (64). When they are more,
 the proposal takes them from the recording with the most such clips, lowest
 consistency first (the consistency is in the clip record), recounting after
-each, until the count is back at the cap. During the trial nothing is proposed.
-
-## Trial bookkeeping
-
-Each saved clip's vote is written to the clip record, `clip.json` in the
-person's `registrazioni` folder, when the clip is saved. To find a recorded
-clip, the trial looks for its file name anywhere in that person's folder. A
-clip the person deleted is simply missing from the whole folder. A
-named speaker counts once for each person, recording and label.
-
-After 10 named speakers, a command reports where the votes and the person's
-deletions disagree. The only disagreement that matters is a clip the selection
-kept and the person deleted. With none, the trial ends only when the person
-confirms the review: `Verifica.bat` asks, and an agent runs `trial --reviewed`
-after asking. A change to the selection algorithm raises `SELECTION_VERSION` in
-the code, which starts a new trial.
+each, until the count is back at the cap.
 
 ## Recognition check
 
@@ -137,8 +123,8 @@ itself may be wrong.
 
 On 2026-09-25 the user confirmed the values above (8 clips, the 0.60 floor, the
 0.03 slack and the 10 missing voices); on 2026-09-29 listening one clip at a
-time replaced the two clips joined in one file, and the cap was settled. Still
-postponed:
+time replaced the two clips joined in one file, and the cap was settled. On
+2026-10-22 the trial bookkeeping was dropped with the trial. Still postponed:
 
 - [how many additions trigger a new run of the check](../../../deferred/recognition-check-cadence.md);
 - [score normalization](../../../deferred/recognition-score-normalization.md),

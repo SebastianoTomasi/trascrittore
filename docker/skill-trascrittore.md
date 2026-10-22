@@ -68,17 +68,19 @@ also adds it to this PC's voice library, so later recordings recognize that pers
 would teach the transcriber the wrong voice.
 
 1. Propose names to the person, quoting the lines that suggest them.
-2. For each name the person confirms, let them hear the voice first:
+2. For each name the person confirms, let them hear the voice first, one speaker at a time:
 
    ```
-   trascrittore listen "<transcript.json>" "Persona 2" [...] --open
+   trascrittore listen "<transcript.json>" "Persona 2" --open
    ```
 
    It opens, in the person's default player, one 10-second clip of that speaker: the best one.
-   You cannot judge a voice by ear: ask the person whether it is really that person. If they are
-   unsure, play the next one with `--clip 2`, then `--clip 3`, one at a time; the summary's
-   `clips` says how many there are. A speaker without any full clip is played from their longest
-   stretch (`seconds`), which serves only to recognize the voice.
+   Clips opened together cannot be told apart, so `listen` takes one speaker only. Tell the person
+   whose voice is playing and the name it would get, for example "this is Persona 2: is it Luca
+   Bianchi?", and wait for the answer before playing the next speaker. You cannot judge a voice by
+   ear. If the person is unsure, play the same speaker's next clip with `--clip 2`, then
+   `--clip 3`; the summary's `clips` says how many there are. A speaker without any full clip is
+   played from their longest stretch (`seconds`), which serves only to recognize the voice.
 3. Only for the voices the person confirmed:
 
    ```
@@ -86,11 +88,11 @@ would teach the transcriber the wrong voice.
    ```
 
    It rewrites both transcript files with the names, without transcribing again, adds the
-   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`, and opens that folder so
-   the person can listen to the clips and delete bad ones.
+   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`. It opens no window; the
+   speaker's `folder` gives the path.
 
 - If the person says the voice is not that person, do not name it.
-- If `listen` found nothing to play for a speaker, its `note` says why. The name can still be
+- If `listen` found nothing to play, its `note` says why. The name can still be
   given; it only adds no clips.
 - When the person is already in the library, use exactly the name of their folder in
   `{{CARTELLA}}\voci`. A name that differs from a folder only in case or spaces is changed to the
@@ -104,10 +106,6 @@ would teach the transcriber the wrong voice.
 |---|---|---|
 | `similar_name` | A name looks like a person already in the library (listed in `similar`). Nothing was saved. | Ask whether they meant that person. Run `name` again with the folder's exact name, or, if it really is a new person, add `--new-person "Nome Cognome"`. |
 | `over_cap` | The names are applied and the clips saved, but a person now has more added clips than the cap. `over_cap` lists, for each person, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
-
-During the trial period of the automatic clip selection, the summary of `name` asks the person to
-listen to the added clips and delete the bad ones, those with other voices, laughter or noise.
-Pass that request on.
 
 ## Confirm or correct a recognized voice, only when asked
 
@@ -125,21 +123,13 @@ era Antonio, era Sebastiano".
      the person to listen to the wrong person's clips and delete those that are not theirs, then
      run the check below; relay it.
 
-## Check recognition and the trial
+## Check recognition
 
 ```
 trascrittore check
-trascrittore trial
 ```
 
-Run them in this order, as `Verifica.bat` does, and suggest it after a few new names.
-
-- `check` measures how well the voice library recognizes the voices a person named in this PC's
-  transcripts, and suggests a threshold. It never changes `trascrittore.ini`: relay the suggestion, and
-  let the person decide whether to write it as `threshold` under `[matching]` in
-  `{{CARTELLA}}\trascrittore.ini`.
-- `trial` reports the trial of the automatic clip selection. When its summary has `"ready": true`,
-  ask the person whether they listened to every clip added to the library and deleted the bad ones.
-  Only if they say yes, run `trascrittore trial --reviewed`: from then on the selection discards
-  the worst clips by itself. If it lists `disagreements`, the selection kept clips the person
-  deleted; tell them to report it to whoever gave them the transcriber.
+It does what `Verifica.bat` does; suggest it after a few new names. It measures how well the voice
+library recognizes the voices a person named in this PC's transcripts, and suggests a threshold. It
+never changes `trascrittore.ini`: relay the suggestion, and let the person decide whether to write it
+as `threshold` under `[matching]` in `{{CARTELLA}}\trascrittore.ini`.

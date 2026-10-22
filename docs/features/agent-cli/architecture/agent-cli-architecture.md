@@ -54,9 +54,9 @@ get a command line and a skill instead of an MCP server is in
 
   `Trascrivi.bat`, `Verifica.bat` and agents all go through the launcher.
 - **The person's layer.** The launcher's interactive modes, used by
-  `Trascrivi.bat` and `Verifica.bat`, ask the person the questions, including
-  the naming questions at the end of a run, and then call the same commands an
-  agent calls. They implement no capability of their own.
+  `Trascrivi.bat` and `Verifica.bat`, show the person what happens and ask any
+  questions, such as the naming questions at the end of a run, and then call
+  the same commands an agent calls. They implement no capability of their own.
 - **Skill.** It describes the launcher's commands, the result summary, running a
   transcription in the background, and the rule that only a person gives a
   name. It always ships with the image of the same version.
