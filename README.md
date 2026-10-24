@@ -6,8 +6,9 @@ spoke, when, and what they said. A person drags the recording onto
 CPU, with a clear warning), recognizes the voices in the `voci` library next to
 the script, and writes `<name> - trascrizione.txt` and `.json` next to the
 recording. An agent such as Claude Code or Codex runs the same commands through
-the skill that `Installa.bat` installs. Naming a voice that was not recognized,
-or confirming or correcting a recognized one on request, adds its clips to the
+the skill that `Installa.bat` installs; a second skill lets it correct misheard
+words in the transcript's text. Naming a voice that was not recognized, or
+confirming or correcting a recognized one on request, adds its clips to the
 library. Everything runs on the PC and works offline.
 
 It is a personal tool for people close to the maintainer, on Windows only. The
@@ -84,7 +85,7 @@ without a byte order mark in the ANSI code page. The design is in
 | `docker/LICENZE.md` | credits and license texts of the models the image carries |
 | `docker/trascrittore.ps1` | host launcher for people and agents |
 | `docker/Trascrivi.bat`, `docker/Verifica.bat`, `docker/Installa.bat`, `docker/LEGGIMI.md` | what users get |
-| `docker/skill-trascrittore.md` | the agent skill, installed by `Installa.bat` |
+| `docker/skill-trascrittore.md`, `docker/skill-fix-transcript.md` | the agent skills `trascrittore` and `fix-transcript`, installed by `Installa.bat` |
 | `docker/build.ps1` | builds the image and exports the files users download |
 
 ## Development
@@ -121,13 +122,15 @@ powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\ex
 - The image works offline (`HF_HUB_OFFLINE=1`). It is about 20 GB in Docker,
   7 GB as a `.tar`.
 - `-Export` writes `trascrittore-cu128.tar`, the `.bat` files, `trascrittore.ps1`,
-  the skill, `LEGGIMI.md`, `LICENZE.md` and the `voci` folder. It writes no
+  the skills, `LEGGIMI.md`, `LICENZE.md` and the `voci` folder. It writes no
   settings file: `Installa.bat` creates `trascrittore.ini` once, for the
   person's own changes, and no update replaces it.
 - Users download these files, run `Installa.bat` once and again after each
-  update; it checks the GPU and image, then installs the skill for Claude Code
+  update; it checks the GPU and image, then installs the skills for Claude Code
   (`%USERPROFILE%\.claude\skills`) and Codex (`%USERPROFILE%\.agents\skills`),
-  with the transcriber's folder written in.
+  with the transcriber's folder written in. A new skill `<name>` is a
+  `docker/skill-<name>.md` file, added to `$SkillNames` in `trascrittore.ps1`
+  and to the files `build.ps1` exports.
 
 Before distributing an update, run the test suite, build the image, and check
 that the TAR is complete and named correctly. On each target GPU, run
@@ -149,9 +152,9 @@ release folder.
    drive on Claror's Google Drive, and give the person access to it:
    `trascrittore-cu128.tar`, `Installa.bat`,
    `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`,
-   `skill-trascrittore.md`, `LEGGIMI.md` and `LICENZE.md`. If the
-   destination PC has an older NVIDIA GPU, the installer will explain that it
-   is unsupported.
+   `skill-trascrittore.md`, `skill-fix-transcript.md`, `LEGGIMI.md` and
+   `LICENZE.md`. If the destination PC has an older NVIDIA GPU, the installer
+   will explain that it is unsupported.
    `LICENZE.md` is required: the models' licenses ask for their credits in every
    distribution. The `.tar` is about 7 GB, too big for an agent's Drive
    connector, which passes file contents through the conversation.

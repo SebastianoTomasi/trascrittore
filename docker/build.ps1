@@ -56,7 +56,7 @@ try {
 
         New-Item -ItemType Directory -Force -Path (Join-Path $Export 'voci') | Out-Null
         foreach ($name in @('Trascrivi.bat', 'Verifica.bat', 'Installa.bat', 'trascrittore.ps1',
-                            'skill-trascrittore.md', 'LEGGIMI.md', 'LICENZE.md')) {
+                            'skill-trascrittore.md', 'skill-fix-transcript.md', 'LEGGIMI.md', 'LICENZE.md')) {
             Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $Export -Force
         }
         Write-Host "Cartella pronta: $Export"
