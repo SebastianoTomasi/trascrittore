@@ -16,16 +16,16 @@ Tutto gira sul tuo PC: il trascrittore non manda niente a nessuno e funziona anc
 ## Installazione (una volta sola)
 
 1. Installa [Docker Desktop](https://www.docker.com/products/docker-desktop/) con le impostazioni predefinite. Riavvia il PC, apri Docker Desktop e aspetta che sia pronto. Al primo avvio accetta le condizioni d'uso e, se ti chiede di installare o aggiornare WSL, accetta. Se ti chiede di accedere, puoi saltare.
-2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `LICENZE.md` e questo `LEGGIMI.md`.
+2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `skill-fix-transcript.md`, `LICENZE.md` e questo `LEGGIMI.md`.
    - Meglio una cartella che OneDrive non sincronizza: se `Documenti` o il Desktop sono sincronizzati, OneDrive caricherebbe sul cloud gli archivi e poi la cartella `voci`.
    - Scaricali uno per uno: se scarichi tutta la cartella, Drive la divide in più file zip.
    - Per il file grande Google avvisa che non può controllarlo per i virus: scegli "Scarica comunque".
    - Se il browser dice che i file `.bat` o `.ps1` possono essere pericolosi, scegli "Mantieni".
-3. Fai doppio clic su `Installa.bat`. Controlla che la GPU NVIDIA sia supportata, carica l'archivio e prova i calcoli GPU prima di attivarlo. Se il controllo fallisce, la versione già installata resta disponibile. Installa anche la skill che permette a Claude Code e Codex di usare il trascrittore, e crea `trascrittore.ini`, il file delle tue impostazioni.
+3. Fai doppio clic su `Installa.bat`. Controlla che la GPU NVIDIA sia supportata, carica l'archivio e prova i calcoli GPU prima di attivarlo. Se il controllo fallisce, la versione già installata resta disponibile. Installa anche le skill che permettono a Claude Code e Codex di usare il trascrittore e di correggere le trascrizioni, e crea `trascrittore.ini`, il file delle tue impostazioni.
    - Se Windows mostra "PC protetto da Windows", clicca "Ulteriori informazioni" e poi "Esegui comunque". Può succedere di nuovo la prima volta che usi `Trascrivi.bat` e `Verifica.bat`.
 4. Finita l'installazione puoi cancellare `trascrittore-cu128.tar` e recuperare spazio.
 
-Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill deve sapere dove si trova il trascrittore.
+Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill per trascrivere deve sapere dove si trova il trascrittore.
 
 ## Uso
 
@@ -57,6 +57,8 @@ Alla fine di una trascrizione questa domanda non compare: si fa solo quando lo c
 Dopo l'installazione puoi chiedere al tuo agente, per esempio: "trascrivi la registrazione che ho appena salvato con OBS" e poi "chi è Persona 2?". L'agente usa lo stesso trascrittore sul tuo PC, e la trascrizione non esce dal PC, a meno che l'agente non la legga per risponderti.
 
 Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce. Una voce già riconosciuta la conferma o la corregge solo se glielo chiedi tu, per esempio "vorrei aggiungere delle clip di Sebastiano".
+
+L'agente può anche correggere le parole che il trascrittore ha capito male, come nomi e termini tecnici. Chiedi per esempio "correggi la trascrizione, si parlava di Docker e PyTorch" oppure "sistema i termini nei sottotitoli, il copione è in copione.md". L'agente ricava la parola giusta dal contesto e, se la registrazione è un video, guardandone alcuni fotogrammi: come la trascrizione, anche quello che guarda arriva al servizio dell'agente. Non cambia quello che è stato detto, né i tempi, né i nomi di chi parla. Corregge il `.txt` e i sottotitoli `.srt`, mentre il `.json` resta com'è. Alla fine ti dice quante correzioni ha fatto e ti chiede dei punti dubbi. Dai prima i nomi alle voci: dare un nome dopo riscrive il `.txt` e cancella le correzioni.
 
 ## Voci da riconoscere
 

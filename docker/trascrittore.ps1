@@ -1,5 +1,5 @@
 <#
-Host launcher of the transcriber: the only place that knows how to run its Docker image.
+Host launcher of the transcriber: the only place that knows how to run its commands in the Docker image.
 Installa.bat, Trascrivi.bat, Verifica.bat and agents all go through it.
 
   powershell -NoProfile -ExecutionPolicy Bypass -File trascrittore.ps1 <command> [arguments]
@@ -25,8 +25,8 @@ $GpuModeFile = Join-Path $DataDir 'gpu-mode.txt'
 $GpuMode = if (Test-Path -LiteralPath $GpuModeFile) { (Get-Content -LiteralPath $GpuModeFile -Raw).Trim() } else { 'gpu' }
 if ($GpuMode -notin @('gpu', 'cpu')) { $GpuMode = 'gpu' }
 $ListenDir = Join-Path $DataDir 'ascolto'
-$SkillSource = Join-Path $Here 'skill-trascrittore.md'
-$SkillName = 'trascrittore'
+# Each agent skill <name> ships as skill-<name>.md next to this script.
+$SkillNames = @('trascrittore', 'fix-transcript')
 # In the interactive mode used by Trascrivi.bat, a person reads the lines and no summary is printed.
 $script:Interactive = $false
 
@@ -626,20 +626,22 @@ $SettingsTemplate = @'
 ; Le righe che iniziano con ; sono solo note.
 '@
 
-function Install-SettingsAndSkill {
+function Install-SettingsAndSkills {
     # Setup creates the settings file once; it holds the person's changes.
     if (-not (Test-Path -LiteralPath $Config)) {
         $lines = $SettingsTemplate.Replace("`r`n", "`n").Replace("`n", "`r`n") + "`r`n"
         [IO.File]::WriteAllText($Config, $lines, (New-Object System.Text.UTF8Encoding $false))
     }
-    # The skill always comes with the image of the same version, so it is installed every time.
-    $text = [IO.File]::ReadAllText($SkillSource, [Text.Encoding]::UTF8).Replace('{{CARTELLA}}', $Here)
-    foreach ($root in @((Join-Path $env:USERPROFILE '.claude\skills'), (Join-Path $env:USERPROFILE '.agents\skills'))) {
-        $folder = Join-Path $root $SkillName
-        New-Item -ItemType Directory -Force -Path $folder | Out-Null
-        [IO.File]::WriteAllText((Join-Path $folder 'SKILL.md'), $text, (New-Object System.Text.UTF8Encoding $false))
+    # The skills always come with the image of the same version, so they are installed every time.
+    foreach ($name in $SkillNames) {
+        $text = [IO.File]::ReadAllText((Join-Path $Here "skill-$name.md"), [Text.Encoding]::UTF8).Replace('{{CARTELLA}}', $Here)
+        foreach ($root in @((Join-Path $env:USERPROFILE '.claude\skills'), (Join-Path $env:USERPROFILE '.agents\skills'))) {
+            $folder = Join-Path $root $name
+            New-Item -ItemType Directory -Force -Path $folder | Out-Null
+            [IO.File]::WriteAllText((Join-Path $folder 'SKILL.md'), $text, (New-Object System.Text.UTF8Encoding $false))
+        }
     }
-    Write-Line 'Skill per Claude Code e Codex installata: puoi chiedere al tuo agente di trascrivere una registrazione.'
+    Write-Line 'Skill per Claude Code e Codex installate: puoi chiedere al tuo agente di trascrivere una registrazione e di correggerne la trascrizione.'
 }
 
 
@@ -664,8 +666,10 @@ function Invoke-Setup {
     }
 
     try {
-        if (-not (Test-Path -LiteralPath $SkillSource -PathType Leaf)) {
-            throw "Non trovo skill-trascrittore.md accanto a Installa.bat."
+        foreach ($name in $SkillNames) {
+            if (-not (Test-Path -LiteralPath (Join-Path $Here "skill-$name.md") -PathType Leaf)) {
+                throw "Non trovo skill-$name.md accanto a Installa.bat."
+            }
         }
         & docker info *> $null
         if ($LASTEXITCODE -ne 0) { throw "Docker Desktop non e' avviato. Aprilo, aspetta che sia pronto e riprova." }
@@ -722,7 +726,7 @@ function Invoke-Setup {
             if ($LASTEXITCODE -ne 0) { throw "Non riesco ad attivare l'immagine verificata." }
             $promoted = $true
 
-            Install-SettingsAndSkill
+            Install-SettingsAndSkills
             New-Item -ItemType Directory -Force -Path $Cache | Out-Null
             [IO.File]::WriteAllText($GpuModeFile, $gpuMode + "`n", [Text.Encoding]::ASCII)
             if ($oldId -and $oldId -ne $candidateId) {

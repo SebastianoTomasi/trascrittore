@@ -79,8 +79,8 @@ error. It ends with a result summary with these fields:
   long they spoke.
 
 A transcription can last longer than one command may run in an agent: Claude
-Code, for example, stops a command after 10 minutes. The skill tells the agent
-to start it in the background and wait for it to end.
+Code, for example, stops a command after 10 minutes. The `trascrittore` skill
+tells the agent to start it in the background and wait for it to end.
 
 When another transcription is already running on the PC, the command ends
 immediately. Its status says so, and its message tells the person to wait.
@@ -93,7 +93,7 @@ transcript files with the new names, without transcribing again. It ends with
 the same kind of result summary.
 
 An agent calls it only with names the person has confirmed or written. The
-skill states this rule.
+`trascrittore` skill states this rule.
 
 A label that already holds a recognized name is accepted only in a form that
 states the person's intent: confirming the name, or correcting it to another.

@@ -35,7 +35,7 @@ The installer reads each NVIDIA GPU's compute capability with
 It rejects capabilities outside 7.0–12.x with a clear error. If no NVIDIA GPU
 is present, the image may be installed for CPU processing under the Product
 promise. The release folder needs only `trascrittore-cu128.tar` and the shared
-scripts, guide, licenses and skill.
+scripts, guide, licenses and skills.
 
 After loading the image under a candidate tag, installation runs PyTorch and
 CTranslate2 GPU operations that exercise real kernels. Only a successful check

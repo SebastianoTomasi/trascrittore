@@ -11,7 +11,7 @@ the rule that keeps people and agents at the same capability. The commands are
 in [the command surface](../frontend/agent-command-surface.md), their
 components and file guarantees in
 [the architecture](../architecture/agent-cli-architecture.md), and how the
-skill reaches a PC in [skill delivery](../deployment/skill-delivery.md). Adding
+skills reach a PC in [skill delivery](../deployment/skill-delivery.md). Adding
 a named speaker's voice clips to the voice library belongs to
 [voice library growth](../../voice-library-growth/product/naming-grows-the-library.md).
 
@@ -29,11 +29,11 @@ a named speaker's voice clips to the voice library belongs to
   — the result reports CPU use only for a PC without an NVIDIA GPU; a GPU
   failure is an error rather than a successful mixed-device run.
 - [No use policy](../../../product/transcriber-promise.md#no-use-policy) —
-  whether a transcript reaches an agent's model provider is the person's
-  choice. The transcriber neither performs nor blocks it.
+  whether a transcript, or what an agent sees of a recording, reaches an
+  agent's model provider is the person's choice. The transcriber neither performs nor blocks it.
 - [Non-goals](../../../product/transcriber-promise.md#non-goals) — the
-  commands keep one transcription at a time and leave minutes and summaries to
-  the agent.
+  commands keep one transcription at a time and leave minutes, summaries and
+  the correction of misheard words to the agent.
 - [Rules](../../voice-library-growth/product/naming-grows-the-library.md#rules)
   of voice library growth — naming later confirms or corrects a recognized
   speaker only on the person's request, and stops on a name similar to a person
@@ -80,7 +80,8 @@ no new class of data.
 
 ## Preconditions
 
-- The transcriber and its skill are installed on the PC, at the same version.
+- The transcriber and its `trascrittore` skill are installed on the PC, at the
+  same version.
 - Docker Desktop is running.
 - The recording is on the PC, not only in an online folder.
 - No other transcription is running on the same PC.
@@ -130,5 +131,6 @@ the library.
 declared in [Who acts](../../../product/transcriber-promise.md#who-acts), and
 the speaker windows are times inside the transcript, a class already declared
 in [Data classes](../../../product/personal-data-and-obligations.md#data-classes).
-Whether a transcript reaches an agent's model provider is left to the person by
+Whether a transcript, or what an agent sees of a recording, reaches an agent's
+model provider is left to the person by
 [No use policy](../../../product/transcriber-promise.md#no-use-policy).

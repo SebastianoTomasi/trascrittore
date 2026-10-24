@@ -12,7 +12,7 @@ capabilities, and the guarantees they rely on:
 - the rule of one transcription at a time.
 
 What the commands print is in
-[the command surface](../frontend/agent-command-surface.md). How the skill is
+[the command surface](../frontend/agent-command-surface.md). How the skills are
 delivered is in [skill delivery](../deployment/skill-delivery.md). Why agents
 get a command line and a skill instead of an MCP server is in
 [ADR 0003](../../../adr/0003-agents-use-a-command-line-and-a-skill.md).
@@ -33,6 +33,9 @@ get a command line and a skill instead of an MCP server is in
   guarantee below covers only what this feature adds.
 - [Installation and update](../../../deployment/gpu-installation.md#installation-and-update)
   — the launcher uses the active image selected and checked by the installer.
+- [Non-goals](../../../product/transcriber-promise.md#non-goals) — correcting
+  misheard words is the agent's work on the text, so the skill for it adds no
+  command and no capability.
 
 ## Components
 
@@ -52,14 +55,21 @@ get a command line and a skill instead of an MCP server is in
     NVIDIA GPU, the same commands remain available on CPU with a warning;
   - the one-transcription-at-a-time check.
 
-  `Trascrivi.bat`, `Verifica.bat` and agents all go through the launcher.
+  `Trascrivi.bat`, `Verifica.bat` and agents all go through the launcher for
+  every command of the transcriber. The only other use of the image is the
+  `fix-transcript` skill's: it may run the image's ffmpeg to take frames from a
+  video, which uses none of the transcriber's commands, data or settings.
 - **The person's layer.** The launcher's interactive modes, used by
   `Trascrivi.bat` and `Verifica.bat`, show the person what happens and ask any
   questions, such as the naming questions at the end of a run, and then call
   the same commands an agent calls. They implement no capability of their own.
-- **Skill.** It describes the launcher's commands, the result summary, running a
-  transcription in the background, and the rule that only a person gives a
-  name. It always ships with the image of the same version.
+- **Skills.** The `trascrittore` skill describes the launcher's commands, the
+  result summary, running a transcription in the background, and the rule that
+  only a person gives a name. The `fix-transcript` skill tells an agent how to
+  correct misheard words in a transcript's text file and in subtitles made from
+  it, leaving the JSON file as it is, as
+  [ADR 0007](../../../adr/0007-agents-correct-misheard-words-in-the-text.md)
+  records. Both always ship with the image of the same version.
 
 ## Guarantees
 
