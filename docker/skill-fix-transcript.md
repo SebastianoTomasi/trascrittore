@@ -34,11 +34,16 @@ Work it out from the context:
 Write no vocabulary file of your own.
 
 To extract frames, use ffmpeg if the PC has it. Otherwise use the one in the transcriber's image,
-from PowerShell, with a temporary folder of your own for the frames:
+with a temporary folder of your own for the frames. Write both folders as Windows paths, such as
+`C:\Users\...` or `C:/Users/...`. From PowerShell:
 
 ```
 docker run --rm -v "<video folder>:/video:ro" -v "<frames folder>:/frames" --entrypoint ffmpeg trascrittore:latest -ss <second> -i "/video/<video file>" -frames:v 1 /frames/<second>.png
 ```
+
+From Git Bash, put `MSYS_NO_PATHCONV=1` in front of the same line. Without it, Git Bash rewrites
+`/video` and `/frames` into folders of its own, and ffmpeg finds no file. With it, a folder written
+as `/c/Users/...` does not reach Docker as a Windows path either, so write the folders as above.
 
 If neither works, for example because Docker Desktop is not running, tell the person that you
 could not see the screen.
