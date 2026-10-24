@@ -46,6 +46,11 @@ person asks for it, confirming or correcting the name recognition gave.
 Words the transcriber heard but could not assign to any speaker, shown in the
 transcript as "Voce non attribuita".
 
+**Misheard word**  
+A word the transcriber wrote as another that sounds alike, often a name or a
+technical term.  
+_Avoid_: recognition error
+
 **Voice library**  
 The people the transcriber can recognize by name on one PC, each represented by
 voice clips of their own.  

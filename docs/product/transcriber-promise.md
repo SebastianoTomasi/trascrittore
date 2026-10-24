@@ -55,7 +55,9 @@ every case.
 AI coding agents, namely Claude Code and Codex, are primary users as well: a
 person can ask their agent to transcribe a recording. The transcriber therefore
 offers a command-line interface that an agent can use on its own and a skill
-that tells the agent how to use it.
+that tells the agent how to use it. A second skill tells the agent how to
+correct misheard words in a transcript, which is the agent's work on the text,
+as [Non-goals](#non-goals) state.
 [Transcribing through an agent](../features/agent-cli/product/transcribing-through-an-agent.md)
 details what an agent can do with them.
 
@@ -111,9 +113,9 @@ no shared library.
 The transcriber imposes no consent step and no other rule of use: it
 recognizes whoever has voice clips in the library of the PC where it runs.
 Whoever uses it answers for how they use it: which recordings they transcribe,
-whose voices they put in the library, and where transcripts go afterwards,
-including to the model provider of an agent that reads them. The reasons and
-the rejected alternatives are in
+whose voices they put in the library, and where transcripts, and what an agent
+sees of a recording, go afterwards, including to that agent's model provider.
+The reasons and the rejected alternatives are in
 [ADR 0002](../adr/0002-personal-tool-without-use-policy.md).
 
 ## Capabilities
@@ -175,8 +177,14 @@ details links to it.
   [ADR 0001](../adr/0001-transcription-stays-on-the-pc.md) records.
 - **Live transcription.** The transcriber works on recordings that already
   exist, not on speech as it happens.
-- **Work on the text.** Minutes, summaries and action items are the work of an
-  agent or of the person, done on the transcript, not the transcriber's.
+- **Work on the text.** Minutes, summaries, action items and the correction of
+  misheard words are the work of an agent or of the person, done on the
+  transcript, not the transcriber's. The transcriber only ships the skill that
+  tells an agent how to correct misheard words, as
+  [ADR 0007](../adr/0007-agents-correct-misheard-words-in-the-text.md) records.
+  Correcting is not a capability of the transcriber, so
+  [parity](#parity-between-people-and-agents) does not apply to it: a person
+  corrects the text by hand.
 - **More than one transcription at a time on a PC.** Recordings are transcribed
   one after another.
 - **A shared voice library**, as [One voice library per PC](#one-voice-library-per-pc)
@@ -211,9 +219,9 @@ reinstall; a change that breaks something listed is a breaking change.
   not change. When the file holds a line the new version does not understand,
   the transcriber says which line to correct instead of stopping without
   explanation.
-- **Commands and skill together.** The skill always ships with the transcriber
-  of the same version, so changing a command is ordinary when the skill changes
-  with it.
+- **Commands and skills together.** The skills always ship with the
+  transcriber of the same version, so changing a command is ordinary when the
+  skill that describes it changes with it.
 
 For example, any update may change the layout of the text file, the fields of
 the JSON file, and whatever the transcriber keeps for itself and can rebuild,
