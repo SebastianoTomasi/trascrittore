@@ -83,6 +83,8 @@ Ogni persona tiene al massimo **64 clip** aggiunte dalle registrazioni (`max_cli
 
 `Verifica.bat` controlla quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia: in quel caso ti mostra la riga da scrivere in `trascrittore.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome.
 
+Una voce conta per la verifica solo quando le hai dato il nome, o l'hai confermata, in almeno due registrazioni: la verifica controlla ogni registrazione senza le clip prese da quella, quindi chi ha clip di una sola registrazione lì risulta assente dalla libreria. Una voce che il programma ha riconosciuto da solo, senza la tua conferma, non conta. Se la verifica dice che non c'è ancora niente da misurare, è per questo.
+
 ## Impostazioni
 
 Le impostazioni stanno in `trascrittore.ini`, accanto a `Trascrivi.bat`: aprilo con Blocco note. Il file contiene solo quello che hai cambiato tu, ognuno sotto la sua sezione, per esempio:
