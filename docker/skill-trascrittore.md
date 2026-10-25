@@ -120,14 +120,14 @@ would teach the transcriber the wrong voice.
 
 A voice the transcriber recognized keeps its name. Never propose to confirm or correct it: do it
 only when the person asks, for example "vorrei aggiungere delle clip di Sebastiano" or "quella non
-era Antonio, era Sebastiano".
+era Luca, era Sebastiano".
 
 1. Let the person hear it, as above: `trascrittore listen "<transcript.json>" "Sebastiano Tomasi" --open`.
 2. Only after they confirm the voice:
    - **the name is right, add clips**: `trascrittore name "<transcript.json>" --confirm "Sebastiano Tomasi"`.
      The speaker's `note` says whether new clips help much (recognition was close to the
      threshold) or little; relay it.
-   - **the name is wrong**: `trascrittore name "<transcript.json>" "Antonio Gassner=Sebastiano Tomasi" --correct`.
+   - **the name is wrong**: `trascrittore name "<transcript.json>" "Luca Bianchi=Sebastiano Tomasi" --correct`.
      The transcript takes the right name and the clips go to the right person. The `note` tells
      the person to listen to the wrong person's clips and delete those that are not theirs, then
      run the check below; relay it.

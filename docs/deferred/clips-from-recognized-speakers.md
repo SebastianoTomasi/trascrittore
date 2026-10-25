@@ -50,7 +50,7 @@ Questions to settle:
 - **The command.** A confirmation that reads clearly, for example
   `name <transcript.json> --conferma "Sebastiano Tomasi"` or a command of its
   own, rather than `"Sebastiano Tomasi=Sebastiano Tomasi"`. A pair such as
-  `"Sebastiano Tomasi=Antonio Gassner"` on a recognized label is the case of
+  `"Sebastiano Tomasi=Luca Bianchi"` on a recognized label is the case of
   [correcting a wrongly recognized name](correcting-a-recognized-name.md), so
   one syntax should serve both.
 - **When it is worth it.** Clips from a recording where the person was already
