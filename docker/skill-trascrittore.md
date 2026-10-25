@@ -135,6 +135,14 @@ trascrittore check
 ```
 
 It does what `Verifica.bat` does; suggest it after a few new names. It measures how well the voice
-library recognizes the voices a person named in this PC's transcripts, and suggests a threshold. It
-never changes `trascrittore.ini`: relay the suggestion, and let the person decide whether to write it
+library recognizes the voices a person named or confirmed in this PC's transcripts, and suggests a
+threshold.
+
+A voice counts only once a person has named or confirmed it in at least two recordings. The check
+scores each recording without the clips cut from it, so a person whose clips all come from one
+recording is missing from the library there. A name the transcriber gave by itself never counts.
+When the report says there is nothing to measure yet, tell the person this condition. It is no
+reason to propose confirming a recognized voice.
+
+It never changes `trascrittore.ini`: relay the suggestion, and let the person decide whether to write it
 as `threshold` under `[matching]` in `{{CARTELLA}}\trascrittore.ini`.
