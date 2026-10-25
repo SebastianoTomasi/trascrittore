@@ -5,17 +5,88 @@ spoke, when, and what they said. A person drags the recording onto
 `Trascrivi.bat`; a Docker container transcribes it on the NVIDIA GPU (or the
 CPU, with a clear warning), recognizes the voices in the `voci` library next to
 the script, and writes `<name> - trascrizione.txt` and `.json` next to the
-recording. An agent such as Claude Code or Codex runs the same commands through
-the skill that `Installa.bat` installs; a second skill lets it correct misheard
-words in the transcript's text. Naming a voice that was not recognized, or
-confirming or correcting a recognized one on request, adds its clips to the
-library. Everything runs on the PC and works offline.
+recording. Everything runs on the PC and works offline.
 
 It is a personal tool for people close to the maintainer, on Windows only. The
 user guide, in Italian, is [docker/LEGGIMI.md](docker/LEGGIMI.md). Product
 decisions live under [docs/](docs/), starting from
 [the product promise](docs/product/transcriber-promise.md), and
 [GLOSSARY.md](GLOSSARY.md) holds the vocabulary.
+
+## Features
+
+- **Transcription.** Any audio or video file that ffmpeg reads, in Italian.
+  The `.txt` opens with the recording's name, its duration, the device used and
+  who speaks, then one `[HH:MM:SS] Name: text` line per turn. The `.json` holds
+  the same turns for programs, each split into segments, one per sentence and
+  again at pauses of a second or more, with their start and end.
+- **Speaker separation.** The voices are told apart automatically; the person
+  can give the exact number of speakers to help.
+- **Speaker recognition.** Speakers with voice clips in the `voci` library
+  appear under their name. When recognition is not sure enough the speaker
+  stays "Persona N", because a wrong name is worse than none; words that no
+  speaker can be given appear as "Voce non attribuita".
+- **Naming.** Right after a transcription, or later by dropping its `.json` on
+  `Trascrivi.bat`, the person names each "Persona N" after seeing two of their
+  sentences and hearing a 10-second clip of the voice. Naming rewrites both
+  transcript files without transcribing again and adds the speaker's best clips
+  to the library, so later recordings recognize them. A name similar to someone
+  already in the library is asked about before anything is saved; past
+  `max_clips` (64) added clips, the transcriber proposes which to remove. Only
+  when the person asks, a recognized voice can be confirmed, which adds more of
+  its clips, or corrected.
+- **Recognition check.** `Verifica.bat` replays the recordings the person named
+  against the library, reports wrong and missing names, and suggests a
+  threshold without changing any setting.
+- **Agents.** `Installa.bat` installs two skills for Claude Code and Codex:
+  `trascrittore`, which runs every command above without questions, and
+  `fix-transcript`, which corrects misheard words, such as names and technical
+  terms, in a transcript's `.txt` or in subtitles made from it.
+- **GPU or CPU.** On a supported NVIDIA GPU every phase runs on the GPU. A PC
+  without one transcribes on the CPU, much more slowly, with a warning on
+  screen and in the transcript. The installer tests the GPU before activating a
+  new version, and keeps the previous one when the test fails.
+- **Settings without a new version.** `trascrittore.ini`, next to the scripts,
+  holds only what the person changed; everything else comes from
+  `docker/defaults.ini` inside the image.
+- **Plain messages.** Every problem a person can fix, such as Docker Desktop
+  not running, an unreadable recording or GPU memory running out, ends with a
+  message in Italian saying what to do.
+
+## Requirements
+
+To use the transcriber:
+
+- Windows 10 or 11, 64-bit. Linux and macOS are not supported, and an agent
+  that uses the transcriber must run on Windows, not inside WSL.
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with its
+  default WSL 2 backend. Installing it needs administrator rights, and it needs
+  hardware virtualization enabled in the firmware. Docker Desktop is free for
+  personal use and small businesses; larger companies need a paid subscription.
+- About 30 GB of free disk space: the image takes about 20 GB in Docker, and
+  `trascrittore-cu128.tar` about 7 GB until it is deleted after installation.
+- For speed, an NVIDIA GPU with compute capability 7.0–12.x (Volta and newer,
+  for example GeForce GTX 16 and RTX 20, 30, 40 and 50 series) and an
+  up-to-date NVIDIA driver. The installer refuses older NVIDIA GPUs, such as
+  the GTX 10 series and the MX230, instead of falling back to the CPU: on the
+  MX230 transcription was too slow to be useful. Without an NVIDIA GPU,
+  including PCs with only AMD or Intel graphics, everything runs on the CPU and
+  can take longer than the recording itself.
+- Recordings in Italian, and a person who reads Italian: messages and guide are
+  in Italian.
+- Internet only to download Docker Desktop and the release files. Transcribing
+  needs no connection.
+
+To build the image, also:
+
+- a [Hugging Face](https://huggingface.co) read token whose account has
+  accepted the conditions of
+  [pyannote/speaker-diarization-community-1](https://huggingface.co/pyannote/speaker-diarization-community-1)
+  and [pyannote/embedding](https://huggingface.co/pyannote/embedding);
+- room for the build cache beside the image, and 7 GB more for each export.
+
+To develop: Python 3.12, [uv](https://docs.astral.sh/uv/) and ffmpeg on `PATH`;
+see [Development](#development).
 
 ## How it works
 
@@ -28,50 +99,54 @@ four steps on a 16 kHz copy of the recording:
 4. speaker recognition: pyannote/embedding voiceprints of fixed windows, overlapped
    speech excluded, matched against the voice library with a threshold and a margin.
 
-Unrecognized voices become "Persona 1..N". The installer accepts NVIDIA GPUs
-with compute capability 7.0–12.x and tests the CUDA 12.8 image's PyTorch and
-CTranslate2 kernels before activation. Older GPUs, including the MX230, are
-unsupported because transcription on the MX230 was too slow to be useful.
+Unrecognized voices become "Persona 1..N". The installer reads each NVIDIA
+GPU's compute capability with `nvidia-smi`, accepts 7.0–12.x, and tests the
+CUDA 12.8 image's PyTorch and CTranslate2 kernels before activation.
 `device = auto` uses the GPU for every transcription phase on a GPU
 installation. `compute_type = auto` uses float16 where CTranslate2 supports it,
-another supported precision otherwise, and int8 on a PC without NVIDIA. A GPU
-failure stops the run with an error.
-The JSON records, for each speaker, the windows used to recognize the voice,
-and, in each turn, its segments: one per sentence, split again at pauses of a
-second or more, each with its start, end and text.
+another supported precision otherwise, and int8 on a PC without NVIDIA. The
+Whisper batch size drops to 4 on GPUs with up to 6 GB of memory and to 1 with
+4 GB or less. A GPU failure stops the run with an error.
+The JSON records, for each speaker, the windows used to recognize the voice
+and how sure recognition was, and, in each turn, its segments: one per
+sentence, split again at pauses of a second or more, each with its start, end
+and text.
 
 No command asks a question: each prints lines for people on stderr and ends
 with one JSON result summary on stdout, and exits with 0 on success, 2 for
 invalid arguments, 130 when interrupted and 1 otherwise, including a wrong
 line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 
-- `name <transcript.json> "Persona 2=Nome Cognome" ...` rewrites both transcript
-  files from the JSON, and cuts clips of each named speaker from the recording
-  into `voci/<Nome>/registrazioni`, only those the clip selection keeps
-  (`[library]` in the settings), with their origin in `clip.json`. Only on the
-  person's request, `--confirm "<Nome>"` adds
-  clips of a recognized speaker and `--correct` lets a pair replace a recognized
+- `name <transcript.json> "Persona 2=Nome Cognome" ... [--recording <file>]`
+  rewrites both transcript files from the JSON, and cuts clips of each named
+  speaker from the recording into `voci/<Nome>/registrazioni`, only those the
+  clip selection keeps (`[library]` in the settings), with their origin in
+  `clip.json`. Only on the person's request, `--confirm "<Nome>"` adds clips
+  of a recognized speaker and `--correct` lets a pair replace a recognized
   name. A name similar to a person in the library saves nothing and ends with
   status `similar_name` until it is repeated with the folder's name or with
   `--new-person`. A person past `[library] max_clips` added
   clips gets status `over_cap` (exit 0) with a proposal of clips to remove;
 - `remove-clips "<Nome>" <clip.wav> ...` removes the proposed clips once the
   person confirms, and only clips recorded in that person's `clip.json`;
-- `listen <transcript.json> "Persona 2" [--clip N]` cuts one clip of one
-  speaker, the best or the N-th, for the person to hear before naming; clips
-  opened together cannot be told apart, so it takes one speaker at a time; a
-  speaker without a full window is heard from their longest one;
+- `listen <transcript.json> "Persona 2" [--clip N] [--recording <file>]` cuts
+  one clip of one speaker, the best or the N-th, for the person to hear before
+  naming; clips opened together cannot be told apart, so it takes one speaker
+  at a time; a speaker without a full window is heard from their longest one;
 - `check` scores the voices a person named (marked `named` in the JSON) against
   the library without the clips cut from the same recording, simulates missing
   voices by removing one person at a time, and suggests a threshold above every
   wrong name without writing it.
 
+`--recording` gives the recording when it has moved since the transcription.
 `name`, `listen` and `check` compute voiceprints on the CPU, so they can run beside a
 transcription. `docker/trascrittore.ps1` is the host launcher that
 `Trascrivi.bat`, `Verifica.bat` and agents all call: it mounts the folders,
 uses the installer's GPU/CPU mode, refuses a second transcription
-with status `busy` (exit 3), opens the clip `listen --open` prepares, and
-asks the person's questions for `Trascrivi.bat`. It stays ASCII, because Windows PowerShell 5.1 reads a script
+with status `busy` (exit 3), opens the clip `listen --open` prepares, finds
+for `check` the transcripts the library's clips came from (plus any given as
+arguments), and asks the person's questions for `Trascrivi.bat`.
+`trascrittore.ps1 help` prints its reference. The launcher stays ASCII, because Windows PowerShell 5.1 reads a script
 without a byte order mark in the ANSI code page. The design is in
 [docs/features/agent-cli](docs/features/agent-cli/) and
 [docs/features/voice-library-growth](docs/features/voice-library-growth/).
@@ -88,9 +163,26 @@ without a byte order mark in the ANSI code page. The design is in
 | `docker/skill-trascrittore.md`, `docker/skill-fix-transcript.md` | the agent skills `trascrittore` and `fix-transcript`, installed by `Installa.bat` |
 | `docker/build.ps1` | builds the image and exports the files users download |
 
-## Development
+## Where the data lives
 
-Requirements: Python 3.12, uv, ffmpeg on `PATH`, an NVIDIA GPU for fast runs.
+| What | Where |
+|---|---|
+| Transcripts | Next to the recording, or in `--out-dir`. |
+| Voice library | `voci\` next to the scripts, one folder per person; clips added by naming in `voci\<Nome>\registrazioni`, with `clip.json`. |
+| The person's settings | `trascrittore.ini` next to the scripts. |
+| Voiceprint cache, GPU/CPU mode, clips to listen to | `%LOCALAPPDATA%\Trascrittore\` (`cache\`, `gpu-mode.txt`, `ascolto\`). |
+| Working files | Inside the container of each run, deleted when it ends. |
+| Image | Docker: `trascrittore:latest` is the active image, `trascrittore:cu128` the last one loaded. |
+| Skills | `%USERPROFILE%\.claude\skills\<name>` and `%USERPROFILE%\.agents\skills\<name>`. |
+
+Voice clips, clip records and voiceprints are biometric personal data; the
+classes, and how long each stays, are in
+[Personal data and external obligations](docs/product/personal-data-and-obligations.md).
+To uninstall, remove the two images, the transcriber's folder,
+`%LOCALAPPDATA%\Trascrittore` and the two skill folders; the guide gives the
+steps.
+
+## Development
 
 ```powershell
 uv sync
@@ -100,6 +192,8 @@ copy .env.example .env               # set HF_TOKEN
 .venv\Scripts\python -m pytest -q
 ```
 
+Outside Docker the models download from Hugging Face on first use, so
+`HF_TOKEN` must be set, and a run without an NVIDIA GPU uses the CPU.
 The settings are `docker/defaults.ini` with the lines of the file named by
 `TRANSCRIBER_SETTINGS` on top; that file may hold only settings the defaults
 know, with values of the same kind. The tests always use the defaults alone and
@@ -131,6 +225,9 @@ powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\ex
   with the transcriber's folder written in. A new skill `<name>` is a
   `docker/skill-<name>.md` file, added to `$SkillNames` in `trascrittore.ps1`
   and to the files `build.ps1` exports.
+- To install from source on your own PC, export into a folder of its own and
+  follow [docker/LEGGIMI.md](docker/LEGGIMI.md) from that folder, starting at
+  `Installa.bat`.
 
 Before distributing an update, run the test suite, build the image, and check
 that the TAR is complete and named correctly. On each target GPU, run
@@ -167,8 +264,8 @@ release folder.
      own; they go into `voci\<Nome Cognome>` on the other PC.
 4. The person follows [docker/LEGGIMI.md](docker/LEGGIMI.md): install Docker
    Desktop, download the files one by one (Drive splits a whole folder into
-   several zips), and run `Installa.bat`. They need Windows 10 or 11, about
-   30 GB free and, for speed, an NVIDIA GPU.
+   several zips), and run `Installa.bat`. Their PC must meet the
+   [requirements](#requirements).
 
 For an update, export again and replace on Drive the files that changed, including
 `trascrittore-cu128.tar`, and tell the person which ones. They put them in the
