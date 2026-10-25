@@ -29,14 +29,17 @@ trascrittore transcribe "<recording>" [--speakers N] [--out-dir "<folder>"]
 - A transcription takes minutes, and on a CPU longer than the recording itself. Start it in the
   background and wait until it ends; do not hold a foreground command open. If your environment
   cannot run commands in the background, give the command a timeout longer than the recording.
-- Pass `--speakers N` only when the person knows the exact number of people who speak.
+- Do not ask how many people speak. Pass `--speakers N` when the person states it: an exact number
+  separates the voices a little better, a wrong one worse.
 - The recording must be on the PC. A file that is only online in OneDrive or Google Drive must be
   downloaded first.
 - The transcript's `.txt` and `.json` files appear next to the recording, or in `--out-dir`.
 
 On success the summary gives `transcript_txt`, `transcript_json`, `duration_sec`, `elapsed_sec`,
 `device`, `warnings`, and `speakers`: for each one its `label`, whether it was `recognized`, and
-its `speech_sec`. When `warnings` is not empty, the transcription ran on the CPU: tell the person
+its `speech_sec`. Say how many speakers were found. If that looks wrong, for example a speaker with
+only a few seconds of speech or fewer speakers than the person expects, propose transcribing again
+with `--speakers N`. When `warnings` is not empty, the transcription ran on the CPU: tell the person
 why. Read `transcript_txt` for the content. Minutes, summaries and action items are your own work
 on that text.
 
@@ -67,7 +70,9 @@ address them by name, but use it only after the person confirms it or writes ano
 also adds it to this PC's voice library, so later recordings recognize that person: a wrong name
 would teach the transcriber the wrong voice.
 
-1. Propose names to the person, quoting the lines that suggest them.
+1. Propose names to the person, quoting the lines that suggest them. Naming is the answer you
+   recommend: when you ask with answer buttons, the one that names the voices comes first and
+   leaving them unnamed second. Naming still goes through the steps below.
 2. For each name the person confirms, let them hear the voice first, one speaker at a time:
 
    ```

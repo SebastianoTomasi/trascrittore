@@ -31,7 +31,7 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill per 
 
 1. Apri Docker Desktop, se non è già aperto.
 2. Trascina la registrazione sopra `Trascrivi.bat`: audio o video, per esempio l'mp4 di una call su Teams. Un file alla volta, e deve essere sul PC, non "solo online".
-3. Scrivi quante persone parlano, oppure premi solo Invio se non lo sai.
+3. Scrivi quante persone parlano, oppure premi solo Invio se non lo sai. Scrivilo solo se ne sei sicuro, contando anche chi dice poche parole: il numero esatto separa le voci un po' meglio, uno sbagliato peggio.
 4. Alla fine, per ogni voce non riconosciuta, ti mostra due frasi di quella persona e ti chiede il nome. Con Invio resta "Persona 1", "Persona 2"…
 5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Alla fine ti dice in quale cartella sono le clip aggiunte.
 6. Se il nome che scrivi somiglia a quello di una persona già nella libreria (per esempio "Marco Rosi" quando c'è "Marco Rossi", "M. Rossi" o solo "Marco"), il programma ti chiede se intendevi lei o una persona nuova, prima di salvare qualsiasi cosa.
@@ -55,6 +55,8 @@ Alla fine di una trascrizione questa domanda non compare: si fa solo quando lo c
 ## Con Claude Code o Codex
 
 Dopo l'installazione puoi chiedere al tuo agente, per esempio: "trascrivi la registrazione che ho appena salvato con OBS" e poi "chi è Persona 2?". L'agente usa lo stesso trascrittore sul tuo PC, e la trascrizione non esce dal PC, a meno che l'agente non la legga per risponderti.
+
+L'agente non ti chiede quante persone parlano. Se ne sei sicuro, diglielo nella richiesta, per esempio "trascrivi la call, parlano in tre": come con `Trascrivi.bat`, il numero esatto aiuta un po', uno sbagliato peggiora.
 
 Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce. Una voce già riconosciuta la conferma o la corregge solo se glielo chiedi tu, per esempio "vorrei aggiungere delle clip di Sebastiano".
 
