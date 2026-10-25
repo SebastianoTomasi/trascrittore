@@ -43,6 +43,10 @@ with `--speakers N`. When `warnings` is not empty, the transcription ran on the 
 why. Read `transcript_txt` for the content. Minutes, summaries and action items are your own work
 on that text.
 
+Then propose correcting the transcript's misheard words with the `fix-transcript` skill. When
+speakers are left as "Persona N", propose it once naming is over instead: `name` rewrites the `.txt`
+and would undo the corrections.
+
 For times inside a turn, for example to cut a video, read `transcript_json`. Each of its `turns` has
 `segments`: one per sentence, split again where the speaker pauses for a second or more, each with
 `start_sec`, `end_sec` and `text`. A gap between two segments is a pause. Use them instead of
