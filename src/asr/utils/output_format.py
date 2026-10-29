@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, NamedTuple, Tuple
 
-from src.asr.transcript_cleaning import clean_transcript_turns
+from src.asr.transcript_cleaning import clean_transcript_turns, is_obvious_transcript_noise
 from src.asr.utils.config import config
 
 
@@ -61,14 +61,51 @@ def _turn(speaker: str, words: list[Word]) -> SpeakerTurn:
     return SpeakerTurn(speaker, words[0].start, max(word.end for word in words), words)
 
 
+def _word_count(words: list[Word]) -> int:
+    # Speech whisperX could not align is one Word holding all its words.
+    return sum(len(word.text.split()) for word in words)
+
+
+def _is_unaligned(seg: Dict[str, Any]) -> bool:
+    # whisperX keeps a Whisper segment it cannot align, with its text and times but without words.
+    return not seg.get("words") and bool((seg.get("text") or "").strip())
+
+
+def _segment_times(seg: Dict[str, Any]) -> tuple[float, float]:
+    start = float(seg.get("start", 0.0))
+    return start, float(seg.get("end", start))
+
+
+def unaligned_stretches(result: Dict[str, Any]) -> list[dict[str, float]]:
+    """
+    List the start and end of each Whisper segment whisperX could not align, when cleaning leaves speech in it.
+
+    Its text reaches the transcript as one block with the times and speaker of the whole segment,
+    so where its words fall and who said them are approximate.
+    """
+    stretches: list[dict[str, float]] = []
+    for seg in result.get("segments", []):
+        if _is_unaligned(seg) and not is_obvious_transcript_noise(seg["text"]):
+            start, end = _segment_times(seg)
+            stretches.append({"start_sec": round(start, 3), "end_sec": round(end, 3)})
+    return stretches
+
+
 def _iter_words_with_speakers(result: Dict[str, Any]) -> Iterable[Tuple[str, str, float, float]]:
     """
     Yield normalized (word, speaker_label, word_start_sec, word_end_sec) tuples from WhisperX output.
+
+    A Whisper segment whisperX could not align yields its whole text as one item, over the segment's times.
     """
     previous_end = 0.0
     for seg in result.get("segments", []):
         segment_speaker = seg.get("speaker") or "UNATTRIBUTED"
         segment_start = float(seg.get("start", 0.0))
+        if _is_unaligned(seg):
+            start, end = _segment_times(seg)
+            previous_end = max(previous_end, end)
+            yield " ".join(seg["text"].split()), segment_speaker, start, end
+            continue
         for w in seg.get("words", []):
             word = (w.get("word") or "").strip()
             if not word:
@@ -111,7 +148,7 @@ def _smooth_short_turns(
         while i < len(smoothed):
             if (
                 0 < i < len(smoothed) - 1
-                and len(smoothed[i].words) <= max_words
+                and _word_count(smoothed[i].words) <= max_words
                 and smoothed[i - 1].speaker == smoothed[i + 1].speaker
                 and smoothed[i].speaker != smoothed[i - 1].speaker
             ):
@@ -160,7 +197,7 @@ def _sentence_end_at_start(earlier: SpeakerTurn, later: SpeakerTurn) -> int:
         return 0
     for count, word in enumerate(later.words[:_MAX_EDGE_WORDS], start=1):
         if _ends_sentence(word):
-            return count
+            return count if _word_count(later.words[:count]) <= _MAX_EDGE_WORDS else 0
     return 0
 
 
@@ -171,10 +208,10 @@ def _sentence_start_at_end(earlier: SpeakerTurn, later: SpeakerTurn) -> int:
     if not _starts_lowercase(later.words[0]):
         return 0
     last_end = max((i for i, word in enumerate(earlier.words) if _ends_sentence(word)), default=-1)
-    count = len(earlier.words) - last_end - 1
-    if not 0 < count <= _MAX_EDGE_WORDS or not _first_letter(earlier.words[-count]).isupper():
+    edge = earlier.words[last_end + 1:]
+    if not 0 < _word_count(edge) <= _MAX_EDGE_WORDS or not _first_letter(edge[0]).isupper():
         return 0
-    return count
+    return len(edge)
 
 
 def _move_sentence_edges(turns: list[SpeakerTurn]) -> list[SpeakerTurn]:

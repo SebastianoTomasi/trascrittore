@@ -174,6 +174,7 @@ Le trascrizioni restano dove sono. Se Docker Desktop non ti serve per altro, puo
 | Un'altra trascrizione è in corso su questo PC | Aspetta che finisca e riprova. |
 | Non riesco a leggere la registrazione | Controlla che sia un file audio o video e che sia sul PC: se è "solo online" su OneDrive o Google Drive, scaricalo prima. |
 | ATTENZIONE: nessuna GPU disponibile, elaboro su CPU | Il PC è stato installato senza GPU NVIDIA. Funziona lo stesso, ma più lentamente. |
+| ATTENZIONE: in alcuni tratti il parlato non si è potuto allineare parola per parola (in cima alla trascrizione) | Il testo di quei tratti c'è, ma l'orario e chi parla possono essere imprecisi. Se contano, riascolta quei punti della registrazione. |
 | Il controllo GPU è fallito | Durante l'installazione: aggiorna il driver NVIDIA, riavvia Docker Desktop e ripeti `Installa.bat`. Intanto la versione già installata resta attiva. |
 | La GPU NVIDIA non funziona | Aggiorna il driver NVIDIA, riavvia Docker Desktop e riprova. |
 | Docker non riesce a usare la GPU NVIDIA | Aggiorna il driver NVIDIA, riavvia Docker Desktop e riprova. |

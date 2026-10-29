@@ -154,6 +154,7 @@ def test_diarized_transcript_accepts_free_form_filenames(tmp_path):
     transcript = json.loads(Path(transcript_path).read_text(encoding="utf-8"))
     assert Path(transcript_path).name == "Registrazione di prova è.json"
     assert transcript["date"] is None
+    assert transcript["unaligned"] == []
     assert transcript["turns"] == [
         {
             "speaker": "Alice",

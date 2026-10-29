@@ -187,12 +187,13 @@ def save_diarized_transcript(
     """
     Persist the diarized transcript as a JSON file with one entry per speaker turn.
     """
-    from src.asr.utils.output_format import _parse_recording_start, build_transcript_turns
+    from src.asr.utils.output_format import _parse_recording_start, build_transcript_turns, unaligned_stretches
 
     recording_start = _parse_recording_start(input_path)
     transcript = {
         "date": recording_start.strftime("%Y-%m-%d") if recording_start else None,
         "turns": build_transcript_turns(result, input_path, mapping),
+        "unaligned": unaligned_stretches(result),
     }
 
     os.makedirs(out_dir, exist_ok=True)

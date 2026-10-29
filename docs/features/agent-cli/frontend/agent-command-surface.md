@@ -86,6 +86,9 @@ these fields:
 - where the recording is now, and whether it moved;
 - the recording's duration and the elapsed time;
 - the device used, with a CPU warning on a PC without an NVIDIA GPU;
+- a warning listing the stretches of speech that could not be aligned word by
+  word: their text is in the transcript, but their times and speaker are
+  approximate. The text file's header shows the same warnings;
 - for each speaker, the displayed label, whether it was recognized, and how
   long they spoke.
 
