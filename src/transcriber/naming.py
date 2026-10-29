@@ -581,7 +581,14 @@ def _seconds(at: str) -> float:
             f"Tempo non valido: '{at}'. Scrivilo come HH:MM:SS, MM:SS o in secondi, per esempio 00:04:09.62.",
         )
     sign, hours, minutes, seconds = match.groups()
-    total = int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds.replace(",", "."))
+    seconds_value = float(seconds.replace(",", "."))
+    # Past the first field, minutes and seconds stay under 60: "4:75" is a mistyped time, not 5:15.
+    if (minutes is not None and seconds_value >= 60) or (hours is not None and int(minutes) >= 60):
+        raise CommandError(
+            INVALID_ARGUMENTS,
+            f"Tempo non valido: '{at}'. Minuti e secondi vanno da 00 a 59, per esempio 00:04:09.62.",
+        )
+    total = int(hours or 0) * 3600 + int(minutes or 0) * 60 + seconds_value
     return -total if sign else total
 
 
@@ -595,6 +602,12 @@ def _passage(payload: dict[str, Any], seconds: float) -> dict[str, Any] | None:
         key=lambda segment: max(float(segment["start_sec"]) - seconds, seconds - float(segment["end_sec"]), 0.0),
         default=None,
     )
+
+
+def _passage_name(start: float) -> str:
+    # To the millisecond: two segments can start in the same second, and a file still open is played again.
+    milliseconds = round(start * 1000)
+    return f"{format_offset(milliseconds // 1000).replace(':', '-')}.{milliseconds % 1000:03d}"
 
 
 def _prepare_listening_at(transcript: str, at: str, recording: str | None, out_dir: str | None) -> dict[str, Any]:
@@ -625,7 +638,7 @@ def _prepare_listening_at(transcript: str, at: str, recording: str | None, out_d
         if audio is not None:
             start = max(0.0, float(segment["start_sec"]) - _PASSAGE_MARGIN_SEC)
             end = min(len(audio) / voices.SAMPLE_RATE, float(segment["end_sec"]) + _PASSAGE_MARGIN_SEC)
-            path = folder / f"{prefix}{format_offset(float(segment['start_sec'])).replace(':', '-')}.wav"
+            path = folder / f"{prefix}{_passage_name(float(segment['start_sec']))}.wav"
             # Still there after clearing: the same passage is open in the player, and its file holds it already.
             if not path.exists():
                 sf.write(path, voices.cut(audio, start, end), voices.SAMPLE_RATE, subtype="PCM_16")
