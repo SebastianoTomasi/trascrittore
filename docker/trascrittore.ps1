@@ -48,6 +48,11 @@ Comandi:
       la apre nel lettore predefinito del PC, perche' la persona senta di chi e' la voce prima di
       darle un nome. Una voce alla volta: la persona risponde prima di ascoltare la prossima. Vale
       anche per le voci riconosciute. Una voce senza clip intere si ascolta dal suo tratto piu' lungo.
+  listen <trascrizione.json> --at <tempo> [--recording <file>] [--open]
+      Prepara il passaggio della trascrizione a quel tempo (HH:MM:SS, MM:SS o secondi, anche con
+      decimali): il segmento che lo contiene, o il piu' vicino, con un secondo prima e dopo. Con
+      --open lo apre nel lettore. Il riepilogo da' "start", "end" e il "text" del segmento: serve a
+      sentire un passaggio dubbio prima di scegliere la correzione. Un passaggio alla volta.
   name <trascrizione.json> "Persona 2=Nome Cognome" [...] [--recording <file>]
       Da' i nomi alle voci "Persona N": riscrive i due file della trascrizione senza trascrivere di
       nuovo, e aggiunge le clip di ogni voce nominata alla libreria "voci"; il riepilogo dice in
@@ -317,12 +322,17 @@ function New-TranscribePlan([object[]]$Arguments) {
 function New-TranscriptPlan([string]$Command, [object[]]$Arguments) {
     # name and listen: a transcript, its labels, and the recording the clips are cut from.
     if ($Command -eq 'name') { $parsed = Split-Arguments $Command $Arguments @('--recording') @('--correct') @('--confirm', '--new-person') }
-    else { $parsed = Split-Arguments $Command $Arguments @('--recording', '--clip') @('--open') }
+    else { $parsed = Split-Arguments $Command $Arguments @('--recording', '--clip', '--at') @('--open') }
     $labelCount = $parsed.Positional.Count - 1
     if ($Command -eq 'name') { $labelCount += $parsed.Options['--confirm'].Count }
-    if ($parsed.Positional.Count -lt 1 -or $labelCount -lt 1) {
-        $example = if ($Command -eq 'name') { '"Persona 2=Nome Cognome"' } else { '"Persona 2"' }
+    # listen --at plays the passage at a time, in place of a voice.
+    $atTime = [bool]$parsed.Options['--at']
+    if ($parsed.Positional.Count -lt 1 -or ($labelCount -lt 1 -and -not $atTime)) {
+        $example = if ($Command -eq 'name') { '"Persona 2=Nome Cognome"' } else { '"Persona 2" (oppure --at HH:MM:SS)' }
         Exit-With $Command 'invalid_arguments' "Indica la trascrizione .json e almeno una voce: $Command <trascrizione.json> $example"
+    }
+    if ($atTime -and $labelCount -gt 0) {
+        Exit-With $Command 'invalid_arguments' 'Una voce oppure --at, non tutti e due: listen <trascrizione.json> "Persona 2", oppure listen <trascrizione.json> --at HH:MM:SS.'
     }
     if ($Command -eq 'listen' -and $labelCount -gt 1) {
         # Clips opened together cannot be told apart: the person hears one voice and answers before the next.
@@ -358,6 +368,7 @@ function New-TranscriptPlan([string]$Command, [object[]]$Arguments) {
         Add-Mount $plan $ListenDir '/ascolto'
         [void]$plan.Arguments.AddRange(@('--out-dir', '/ascolto'))
         if ($parsed.Options['--clip']) { [void]$plan.Arguments.AddRange(@('--clip', $parsed.Options['--clip'])) }
+        if ($atTime) { [void]$plan.Arguments.AddRange(@('--at', $parsed.Options['--at'])) }
     }
     return $plan
 }

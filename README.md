@@ -148,7 +148,12 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 - `listen <transcript.json> "Persona 2" [--clip N] [--recording <file>]` cuts
   one clip of one speaker, the best or the N-th, for the person to hear before
   naming; clips opened together cannot be told apart, so it takes one speaker
-  at a time; a speaker without a full window is heard from their longest one.
+  at a time; a speaker without a full window is heard from their longest one;
+- `listen <transcript.json> --at <time> [--recording <file>]` cuts, in place of
+  a speaker's clip, the segment of the transcript that holds the time (or the
+  nearest one) with a second on each side, and gives its `start`, `end` and
+  `text`, so the person hears a doubtful passage before choosing its correction.
+  The time is `HH:MM:SS`, `MM:SS` or seconds, with optional decimals.
 
 `--recording` gives the recording when it has moved since the transcription.
 `name` and `listen` compute voiceprints on the CPU, so they can run beside a

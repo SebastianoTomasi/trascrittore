@@ -71,6 +71,11 @@ start of its subtitle), the text as heard and the text you propose, for example
 `[00:04:09] "pai torch" -> "PyTorch"`. List the passages without a guess separately, after the
 others, with the text as heard and no proposed text.
 
+The time of a line in the `.txt` is the start of its whole turn, which can last minutes. So for each
+doubtful passage, find in the `.json` the segment that holds the doubtful words (`turns[].segments[]`,
+each with `start_sec`, `end_sec` and `text`) and keep its exact `start_sec`. After the list, add one
+line saying that the person can hear any passage: they say which one.
+
 When at least one passage has a guess, ask one question whose recommended answer, given first, is
 to apply all your guesses. When you ask with answer buttons, the button that applies them comes
 first; the other answer is that the person writes their own corrections. When no passage has a
@@ -80,6 +85,11 @@ guess, ask the person what was said.
 - When they write corrections for some passages, apply those, and your guesses for the rest, except
   the passages they say to leave as they are.
 - A passage without a guess changes only when the person writes what was said.
+- When the person asks to hear a passage, play it through the transcriber's launcher, as the
+  trascrittore skill runs its commands: `trascrittore listen "<transcript.json>" --at <start_sec>
+  --open`. Check that the summary's `text` holds the doubtful words. Play one passage at a time: the
+  person answers for it before hearing the next, since clips opened together cannot be told apart.
+  When the summary has no `file`, tell the person its `note`.
 
 Apply the answers in the same way as your other corrections. Then give the final count, with the
 corrections you were sure of, the guesses the person accepted and the corrections they wrote

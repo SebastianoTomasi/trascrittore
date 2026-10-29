@@ -12,6 +12,7 @@ adds clips, `correct` allows a pair that replaces the name. Neither is ever offe
 from __future__ import annotations
 
 import json
+import re
 import tempfile
 import time
 from pathlib import Path, PureWindowsPath
@@ -21,6 +22,7 @@ import numpy as np
 import soundfile as sf
 
 from src.asr.utils.config import get_library_settings, get_matching_settings
+from src.asr.utils.output_format import format_offset
 from src.transcriber import library, voices
 from src.transcriber.summary import (
     FILE_NOT_FOUND,
@@ -53,6 +55,10 @@ _DURATION_TOLERANCE_SEC = 1.0
 _CLOSE_TO_THRESHOLD = 0.05
 # Listening clips that a session left behind, for example because it stopped before naming, go after a day.
 _FORGOTTEN_CLIP_AGE_SEC = 24 * 3600
+# HH:MM:SS, MM:SS or seconds; a minus sign only so that a time before the recording is refused as such.
+_TIME_RE = re.compile(r"(-)?(?:(?:(\d+):)?(\d+):)?(\d+(?:[.,]\d+)?)")
+# A passage is heard with a second of what comes before and after it.
+_PASSAGE_MARGIN_SEC = 1.0
 
 
 def _clean(text: str) -> str:
@@ -498,6 +504,12 @@ def _listening_piece(
     )
 
 
+def _listening_folder(out_dir: str | None) -> Path:
+    folder = Path(out_dir) if out_dir else Path(tempfile.gettempdir()) / "trascrittore-ascolto"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
+
+
 def _prepare_listening(
     transcript: str, label: str, recording: str | None, out_dir: str | None, clip: int
 ) -> dict[str, Any]:
@@ -509,8 +521,7 @@ def _prepare_listening(
     transcript_path = Path(transcript)
     payload = load_transcript(transcript_path)
     _check_known(payload, [label])
-    folder = Path(out_dir) if out_dir else Path(tempfile.gettempdir()) / "trascrittore-ascolto"
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = _listening_folder(out_dir)
     prefix = _listening_prefix(transcript_path)
     _clear_listening_clips(folder, prefix)
 
@@ -556,4 +567,95 @@ def prepare_listening(
         LISTEN_COMMAND,
         lambda: _prepare_listening(transcript, label, recording, out_dir, clip),
         failed="Non sono riuscito a preparare la clip da ascoltare",
+    )
+
+
+def _seconds(time: str) -> float:
+    """
+    Read a time written as HH:MM:SS, MM:SS or seconds, with decimals after a point or, as in an .srt, a comma.
+    """
+    match = _TIME_RE.fullmatch(time.strip())
+    if match is None:
+        raise CommandError(
+            INVALID_ARGUMENTS,
+            f"Tempo non valido: '{time}'. Scrivilo come HH:MM:SS, MM:SS o in secondi, per esempio 00:04:09.62.",
+        )
+    sign, hours, minutes, seconds = match.groups()
+    total = int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds.replace(",", "."))
+    return -total if sign else total
+
+
+def _passage(payload: dict[str, Any], at: float) -> dict[str, Any] | None:
+    """
+    Return the segment that holds the time or, when the time falls in a pause, the nearest one.
+    """
+    segments = [segment for turn in payload["turns"] for segment in turn.get("segments", [])]
+    return min(
+        segments,
+        key=lambda segment: max(float(segment["start_sec"]) - at, at - float(segment["end_sec"]), 0.0),
+        default=None,
+    )
+
+
+def _prepare_listening_at(transcript: str, time: str, recording: str | None, out_dir: str | None) -> dict[str, Any]:
+    at = _seconds(time)
+    transcript_path = Path(transcript)
+    payload = load_transcript(transcript_path)
+    duration = float(payload["duration_sec"])
+    if not 0 <= at <= duration:
+        raise CommandError(
+            INVALID_ARGUMENTS, f"Il tempo {time} è fuori dalla registrazione, che dura {format_offset(duration)}."
+        )
+    folder = _listening_folder(out_dir)
+    prefix = _listening_prefix(transcript_path)
+    _clear_listening_clips(folder, prefix)
+
+    heard: dict[str, Any] = {"file": None, "start": None, "end": None, "text": None, "note": None}
+    segment = _passage(payload, at)
+    if segment is None:
+        heard["note"] = (
+            "La trascrizione è di una versione precedente, senza i tempi delle frasi: "
+            "per sentire il passaggio, apri la registrazione a quel punto."
+            if payload["turns"]
+            else "Nella trascrizione non c'è parlato da ascoltare."
+        )
+    else:
+        heard["text"] = segment["text"]
+        audio, heard["note"] = open_recording(payload, transcript_path, recording)
+        if audio is not None:
+            start = max(0.0, float(segment["start_sec"]) - _PASSAGE_MARGIN_SEC)
+            end = min(len(audio) / voices.SAMPLE_RATE, float(segment["end_sec"]) + _PASSAGE_MARGIN_SEC)
+            path = folder / f"{prefix}{format_offset(float(segment['start_sec'])).replace(':', '-')}.wav"
+            # Still there after clearing: the same passage is open in the player, and its file holds it already.
+            if not path.exists():
+                sf.write(path, voices.cut(audio, start, end), voices.SAMPLE_RATE, subtype="PCM_16")
+            heard.update(file=host_path(path), start=round(start, 1), end=round(end, 1))
+
+    if heard["file"]:
+        say(f"Passaggio {format_offset(heard['start'])}–{format_offset(heard['end'])}: da ascoltare in {heard['file']}")
+        say(f"  \"{heard['text']}\"")
+        message = "Passaggio pronto: la persona lo ascolta prima di scegliere la correzione."
+    else:
+        message = f"Niente da ascoltare. {heard['note']}"
+        say(message)
+    return {"command": LISTEN_COMMAND, "status": OK, "message": message, **heard}
+
+
+def prepare_listening_at(
+    transcript: str,
+    time: str,
+    *,
+    recording: str | None = None,
+    out_dir: str | None = None,
+) -> dict[str, Any]:
+    """
+    Cut the segment of the transcript at a time, with a second on each side, so the person hears a passage.
+
+    A time in a pause between segments plays the nearest segment. The summary gives the segment's text,
+    so the agent can check that it holds the words in doubt.
+    """
+    return guarded(
+        LISTEN_COMMAND,
+        lambda: _prepare_listening_at(transcript, time, recording, out_dir),
+        failed="Non sono riuscito a preparare il passaggio da ascoltare",
     )
