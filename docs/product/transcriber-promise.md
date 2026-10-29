@@ -63,9 +63,15 @@ details what an agent can do with them.
 
 #### Parity between people and agents
 
-Every capability of the transcriber is available both to a person, without a
-command line, and to an agent, through commands that ask no questions. A
-capability is not finished until both exist.
+A person and an agent use the same commands, which ask no questions: the
+person's scripts, such as `Trascrivi.bat`, call the commands an agent calls,
+and someone at ease with a command line can call them directly. Transcribing a
+recording and naming speakers also have a path without a command line, and
+neither is finished until that path exists. Anything
+else may exist for agents only: work that needs an agent's judgment, such as
+correcting misheard words or choosing the frames of a video, and commands that
+no script of the person exposes. The reasons are in
+[ADR 0008](../adr/0008-agents-may-do-what-a-person-s-path-does-not.md).
 
 ### What users are assumed to have
 
@@ -124,9 +130,10 @@ What someone can observe the transcriber doing. A capability that a feature
 details links to it.
 
 - **Transcribe a recording.** Given one recording in a common audio or video
-  format, the transcriber writes a transcript in Italian next to it: a text to
-  read and a JSON file for programs. Each turn carries the time from the start
-  of the recording and who spoke.
+  format, the transcriber writes a transcript in Italian, a text to read and a
+  JSON file for programs, in a folder of its own next to the recording, and
+  moves the recording into it. Each turn carries the time from the start of the
+  recording and who spoke.
 - **Tell speakers apart.** It separates the voices by itself; the person can
   state the exact number of speakers to help it.
 - **Recognize known voices.** Speakers who are in the PC's voice library appear
@@ -182,9 +189,9 @@ details links to it.
   transcript, not the transcriber's. The transcriber only ships the skill that
   tells an agent how to correct misheard words, as
   [ADR 0007](../adr/0007-agents-correct-misheard-words-in-the-text.md) records.
-  Correcting is not a capability of the transcriber, so
-  [parity](#parity-between-people-and-agents) does not apply to it: a person
-  corrects the text by hand.
+  Correcting is agent work that a person's path does not offer, as
+  [parity](#parity-between-people-and-agents) allows: a person corrects the
+  text by hand.
 - **More than one transcription at a time on a PC.** Recordings are transcribed
   one after another.
 - **A shared voice library**, as [One voice library per PC](#one-voice-library-per-pc)
@@ -210,9 +217,20 @@ reinstall; a change that breaks something listed is a breaking change.
   cannot do all its work on an older transcript, for example adding a named
   speaker's voice clips to the voice library, it says what it could not do and
   suggests transcribing the recording again.
-- **Where transcripts go.** A transcript is written as `<recording name> -
-  trascrizione.txt` and `.json`, next to the recording unless the person
-  chooses another folder.
+- **Where transcripts go.** The transcriber writes the names of what it
+  creates without spaces: lowercase, without accents, with a hyphen in place of
+  every run of other characters, so the recording `2026-10-29 14-30-12.mkv`
+  gives `2026-10-29-14-30-12`. A transcript is written as
+  `<name>-trascrizione.txt` and `.json` in a folder `<name>`, where `<name>` is
+  the recording's name written that way, next to the recording unless the
+  person chooses another place for it. At the end of a successful transcription
+  the recording moves into that folder as `<name>` with its extension, unless
+  the person chose another place; transcribing it again there writes in the
+  same folder. An agent may give the folder another name, written the same way,
+  as
+  [Frames of a video](../features/video-frames/product/frames-of-a-video.md#the-transcripts-folder)
+  states; the files inside keep theirs. The reasons for moving the recording
+  are in [ADR 0009](../adr/0009-the-recording-moves-into-its-transcript-s-folder.md).
 - **The person's settings.** `trascrittore.ini` holds only what the person
   changed; everything else comes from the transcriber itself. No update changes
   that file, and each update brings new defaults for everything the person did
@@ -233,14 +251,13 @@ Each check can be made from outside, without reading the code.
 
 - **Nothing leaves the PC.** With the PC disconnected from the internet, a
   transcription succeeds and gives the same transcript as when it is connected.
-- **No wrong names.** Replaying a PC's named recordings against its own voice
-  library, at the settings in use there, shows no speaker under someone else's
-  name, and voices missing from the library stay "Persona N". This is the
-  recognition check that
+- **No wrong names.** On recordings whose speakers the person knows, the list
+  of who spoke after each transcription, which
   [Naming a speaker grows the voice library](../features/voice-library-growth/product/naming-grows-the-library.md#rules)
-  requires, and the test the maintainer made by hand when calibrating the
-  settings on 2026-09-24.
+  requires, shows no one under someone else's name, and voices missing from the
+  library stay "Persona N". The maintainer made this test by hand when
+  calibrating the settings on 2026-09-24.
 - **Easy without help.** Someone who is not technical installs the transcriber
   and transcribes a recording by following only its guide.
-- **Parity.** For every capability, a person without a command line and an
-  agent using commands that ask no questions reach the same result.
+- **Parity.** For transcribing and naming speakers, a person without a command
+  line and an agent using commands that ask no questions reach the same result.

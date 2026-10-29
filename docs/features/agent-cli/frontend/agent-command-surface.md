@@ -25,8 +25,11 @@ and flag names are left to the code.
   behavior.
 - [Rules](../../voice-library-growth/product/naming-grows-the-library.md#rules)
   of voice library growth — confirming or correcting a recognized speaker on
-  request, similar names, the cap, and listening one clip at a time decide what
-  naming and listening accept and where they stop for the person.
+  request, similar names, the pools and their caps, listening one clip at a
+  time and the list of who spoke decide what naming and listening accept, where
+  they stop for the person, and what follows a transcription.
+- [Where transcripts go](../../../product/transcriber-promise.md#what-an-update-must-not-break)
+  — what transcribing writes, and where the recording goes.
 
 ## Commands ask nothing
 
@@ -65,14 +68,22 @@ The launcher's `help` lists every command and flag, and stays complete.
 ## Transcribing
 
 The command takes the recording, optionally the exact number of speakers and
-optionally an output folder. The defaults are the same as today: speaker count
-detected automatically, and the output written next to the recording.
+optionally an output folder. By default the speaker count is detected
+automatically, and the transcript goes in a folder of its own next to the
+recording, into which the recording moves, as [Where transcripts go](../../../product/transcriber-promise.md#what-an-update-must-not-break) states. With an
+output folder, the transcript's folder goes there and the recording stays where
+it is.
 
-While it runs, it prints the same Italian progress lines as today, on standard
-error. It ends with a result summary with these fields:
+While it runs, it prints Italian progress lines on standard error. Its closing
+lines list who spoke, longest first, with the minutes each spoke, and say that
+a wrong name can be corrected; they also say where the transcript's folder is
+and whether the recording moved into it. It ends with a result summary with
+these fields:
 
-- the status (success or the kind of failure) and an Italian message;
-- the paths of the transcript's text and JSON files;
+- the status (success or the kind of failure) and an Italian message, which
+  also lists who spoke;
+- the paths of the transcript's folder and of its text and JSON files;
+- where the recording is now, and whether it moved;
 - the recording's duration and the elapsed time;
 - the device used, with a CPU warning on a PC without an NVIDIA GPU;
 - for each speaker, the displayed label, whether it was recognized, and how
@@ -84,6 +95,15 @@ tells the agent to start it in the background and wait for it to end.
 
 When another transcription is already running on the PC, the command ends
 immediately. Its status says so, and its message tells the person to wait.
+
+### The list of who spoke
+
+After every transcription the `trascrittore` skill has the agent show the
+person who spoke: one bullet per speaker, the name in bold and the minutes,
+longest first, recognized names and "Persona N" alike, and then ask whether the
+names are right. The message has no buttons. A "yes", or no answer, changes
+nothing; a name the person says is wrong leads to
+[naming speakers later](#naming-speakers-later), which corrects it.
 
 ## Naming speakers later
 
@@ -108,12 +128,15 @@ calling it again:
 - **A similar name.** Nothing is saved. The summary lists the people in the
   library whose names are similar. The agent calls the command again with the
   person the person meant, or with an option confirming a new person.
-- **Clips over the cap.** The new clips are saved, and the summary lists the
-  added clips proposed for removal. The agent runs the removal only after the
-  person confirms.
+- **Clips over a pool's cap.** The new clips are saved, and the summary lists,
+  for each pool past its cap, the added clips proposed for removal. The agent
+  runs the removal only after the person confirms.
 
-When the command saves clips, the summary gives each person's folder of added
-clips. It opens no window.
+The pool a naming fills follows the voice library growth rules. The command
+needs no option for it: it tells a miss from the labels and from the people
+already in the library. When the command saves clips, the summary gives the
+folder where each person's clips went, a new pool included. It opens no
+window.
 
 ## Listening before naming
 
@@ -136,3 +159,10 @@ recognized speaker; the questions at the end of a run do not. When a command
 stops on a similar name or proposes clips to remove, `Trascrivi.bat` asks the
 person the same question the agent would. It collects the answers and passes
 them to the same commands an agent uses, so the two paths never drift apart.
+
+At the end of a run, `Trascrivi.bat` shows the same list of who spoke and says
+that dropping the JSON file on it corrects a wrong name. There is no
+`Verifica.bat`. Keeping a video's frames and correcting misheard words have no
+path for a person, as
+[parity](../../../product/transcriber-promise.md#parity-between-people-and-agents)
+allows.

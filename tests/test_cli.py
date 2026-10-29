@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.transcriber import cli, library, naming, recognition_check, runner
+from src.transcriber import cli, library, naming, runner
 
 
 def _last_json(stdout: str) -> dict[str, object]:
@@ -33,9 +33,9 @@ def test_transcribe_passes_its_arguments_and_prints_the_summary(monkeypatch, cap
         ["transcribe", "Registrazione.m4a", "--speakers", "0"],
         ["transcribe", "Registrazione.m4a", "--ask-names"],
         ["transcribe"],
-        ["listen", "Registrazione - trascrizione.json"],
-        ["listen", "Registrazione - trascrizione.json", "Persona 1", "--clip", "0"],
-        ["listen", "Registrazione - trascrizione.json", "Persona 1", "Persona 2"],
+        ["listen", "registrazione-trascrizione.json"],
+        ["listen", "registrazione-trascrizione.json", "Persona 1", "--clip", "0"],
+        ["listen", "registrazione-trascrizione.json", "Persona 1", "Persona 2"],
         ["remove-clips", "Luca Bianchi"],
         ["trial"],
         ["rinomina"],
@@ -70,7 +70,7 @@ def test_name_passes_pairs_and_the_recording(monkeypatch, capsys):
     ]
 
 
-def test_listen_remove_and_check_reach_their_commands(monkeypatch, capsys):
+def test_listen_and_remove_reach_their_commands(monkeypatch, capsys):
     calls = []
     ok = {"status": "ok", "message": ""}
     monkeypatch.setattr(
@@ -82,25 +82,22 @@ def test_listen_remove_and_check_reach_their_commands(monkeypatch, capsys):
     monkeypatch.setattr(
         library, "remove_clips_report", lambda person, clips: calls.append(("remove", person, clips)) or ok
     )
-    monkeypatch.setattr(
-        recognition_check, "run_check", lambda pairs, *, missing: calls.append(("check", pairs, missing)) or ok
-    )
 
     assert cli.main(["listen", "t.json", "Persona 1", "--out-dir", "/ascolto"]) == 0
     assert cli.main(["listen", "t.json", "Mario Rossi", "--clip", "2"]) == 0
     assert cli.main(["remove-clips", "Luca Bianchi", "a.wav", "b.wav"]) == 0
-    assert cli.main(["check", "--pair", "a.json", "a.m4a", "--missing", r"C:\b.json"]) == 0
-    assert cli.main(["check", "--missing", r"C:\b.json"]) == 0
-    assert cli.main(["check"]) == 0
     assert calls == [
         ("listen", "t.json", "Persona 1", "/ascolto", 1),
         ("listen", "t.json", "Mario Rossi", None, 2),
         ("remove", "Luca Bianchi", ["a.wav", "b.wav"]),
-        ("check", [("a.json", "a.m4a")], [r"C:\b.json"]),
-        # Only a check given nothing looks for transcripts itself.
-        ("check", [], [r"C:\b.json"]),
-        ("check", None, []),
     ]
+
+
+def test_there_is_no_recognition_check(capsys):
+    assert cli.main(["check"]) == 2
+    summary = _last_json(capsys.readouterr().out)
+    assert summary["status"] == "invalid_arguments"
+    assert "invalid choice: 'check'" in summary["message"]
 
 
 def test_a_command_that_breaks_still_ends_with_a_summary(monkeypatch, capsys):

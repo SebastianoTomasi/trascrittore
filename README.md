@@ -4,8 +4,10 @@ Turns a recording, audio or video, into an Italian transcript that says who
 spoke, when, and what they said. A person drags the recording onto
 `Trascrivi.bat`; a Docker container transcribes it on the NVIDIA GPU (or the
 CPU, with a clear warning), recognizes the voices in the `voci` library next to
-the script, and writes `<name> - trascrizione.txt` and `.json` next to the
-recording. Everything runs on the PC and works offline.
+the script, and writes `<name>-trascrizione.txt` and `.json` into a folder
+`<name>` next to the recording, then moves the recording into it; `<name>` is
+the recording's name without spaces. Everything runs on the PC and works
+offline.
 
 It is a personal tool for people close to the maintainer, on Windows only. The
 user guide, in Italian, is [docker/LEGGIMI.md](docker/LEGGIMI.md). Product
@@ -31,15 +33,18 @@ decisions live under [docs/](docs/), starting from
   sentences and hearing a 10-second clip of the voice. Naming rewrites both
   transcript files without transcribing again and adds the speaker's best clips
   to the library, so later recordings recognize them. A name similar to someone
-  already in the library is asked about before anything is saved; past
-  `max_clips` (64) added clips, the transcriber proposes which to remove. Only
-  when the person asks, a recognized voice can be confirmed, which adds more of
-  its clips, or corrected.
-- **Recognition check.** `Verifica.bat` replays the recordings the person named
-  against the library, reports wrong and missing names, and suggests a
-  threshold without changing any setting.
+  already in the library is asked about before anything is saved. Added clips
+  form pools in the person's folder: a known voice that recognition missed
+  starts a new pool, up to `max_pools` (8) per person, and past `max_clips`
+  (16) clips in a pool, the transcriber proposes which to remove. Only when the
+  person asks, a recognized voice can be confirmed, which adds more of its
+  clips, or corrected.
+- **Who spoke.** Every transcription ends with who spoke and for how many
+  minutes, longest first, so the person sees a wrong name at once.
 - **Agents.** `Installa.bat` installs two skills for Claude Code and Codex:
-  `trascrittore`, which runs every command above without questions, and
+  `trascrittore`, which runs every command above without questions and, for a
+  video, titles the transcript's folder and keeps the frames that matter in
+  `fotogrammi`, and
   `fix-transcript`, which corrects misheard words, such as names and technical
   terms, in a transcript's `.txt` or in subtitles made from it.
 - **GPU or CPU.** On a supported NVIDIA GPU every phase runs on the GPU. A PC
@@ -99,7 +104,13 @@ four steps on a 16 kHz copy of the recording:
 4. speaker recognition: pyannote/embedding voiceprints of fixed windows, overlapped
    speech excluded, matched against the voice library with a threshold and a margin.
 
-Unrecognized voices become "Persona 1..N". The installer reads each NVIDIA
+Unrecognized voices become "Persona 1..N". The transcript goes into a folder
+next to the recording named after its slug: no accents, lowercase, each run of
+other characters one hyphen. Once both files are written, the recording moves
+into it as `<slug>.<ext>`, and the JSON is rewritten with its new place; a
+recording already in its transcript's folder is transcribed there again. With
+`--out-dir` the folder goes there and the recording stays where it is. The
+installer reads each NVIDIA
 GPU's compute capability with `nvidia-smi`, accepts 7.0–12.x, and tests the
 CUDA 12.8 image's PyTorch and CTranslate2 kernels before activation.
 `device = auto` uses the GPU for every transcription phase on a GPU
@@ -119,33 +130,33 @@ line in `trascrittore.ini` (status `invalid_settings`). The other commands:
 
 - `name <transcript.json> "Persona 2=Nome Cognome" ... [--recording <file>]`
   rewrites both transcript files from the JSON, and cuts clips of each named
-  speaker from the recording into `voci/<Nome>/registrazioni`, only those the
-  clip selection keeps (`[library]` in the settings), with their origin in
-  `clip.json`. Only on the person's request, `--confirm "<Nome>"` adds clips
-  of a recognized speaker and `--correct` lets a pair replace a recognized
-  name. A name similar to a person in the library saves nothing and ends with
-  status `similar_name` until it is repeated with the folder's name or with
-  `--new-person`. A person past `[library] max_clips` added
-  clips gets status `over_cap` (exit 0) with a proposal of clips to remove;
+  speaker from the recording into a pool, a subfolder of `voci/<Nome>`, only
+  those the clip selection keeps (`[library]` in the settings), with their
+  origin in the pool's `clip.json`. A person new to the library gets
+  `registrazioni`; a known person the library missed gets a new pool named
+  after the transcript's folder, with at least 3 kept clips and fewer than
+  `[library] max_pools` added pools, and the closest added pool otherwise.
+  Only on the person's request, `--confirm "<Nome>"` adds clips of a
+  recognized speaker to the closest pool and `--correct` lets a pair replace a
+  recognized name. A name similar to a person in the library saves nothing and
+  ends with status `similar_name` until it is repeated with the folder's name
+  or with `--new-person`. A pool past `[library] max_clips` clips gives status
+  `over_cap` (exit 0) with a proposal of clips to remove from it;
 - `remove-clips "<Nome>" <clip.wav> ...` removes the proposed clips once the
-  person confirms, and only clips recorded in that person's `clip.json`;
+  person confirms, and only clips recorded in a `clip.json` of that person's
+  pools;
 - `listen <transcript.json> "Persona 2" [--clip N] [--recording <file>]` cuts
   one clip of one speaker, the best or the N-th, for the person to hear before
   naming; clips opened together cannot be told apart, so it takes one speaker
-  at a time; a speaker without a full window is heard from their longest one;
-- `check` scores the voices a person named (marked `named` in the JSON) against
-  the library without the clips cut from the same recording, simulates missing
-  voices by removing one person at a time, and suggests a threshold above every
-  wrong name without writing it.
+  at a time; a speaker without a full window is heard from their longest one.
 
 `--recording` gives the recording when it has moved since the transcription.
-`name`, `listen` and `check` compute voiceprints on the CPU, so they can run beside a
+`name` and `listen` compute voiceprints on the CPU, so they can run beside a
 transcription. `docker/trascrittore.ps1` is the host launcher that
-`Trascrivi.bat`, `Verifica.bat` and agents all call: it mounts the folders,
-uses the installer's GPU/CPU mode, refuses a second transcription
-with status `busy` (exit 3), opens the clip `listen --open` prepares, finds
-for `check` the transcripts the library's clips came from (plus any given as
-arguments), and asks the person's questions for `Trascrivi.bat`.
+`Trascrivi.bat` and agents call: it mounts the folders, uses the installer's
+GPU/CPU mode, refuses a second transcription with status `busy` (exit 3),
+opens the clip `listen --open` prepares, and asks the person's questions for
+`Trascrivi.bat`.
 `trascrittore.ps1 help` prints its reference. The launcher stays ASCII, because Windows PowerShell 5.1 reads a script
 without a byte order mark in the ANSI code page. The design is in
 [docs/features/agent-cli](docs/features/agent-cli/) and
@@ -153,13 +164,13 @@ without a byte order mark in the ANSI code page. The design is in
 
 | Path | Content |
 |---|---|
-| `src/transcriber/` | commands, runner, text and JSON output, naming, library growth, recognition check |
+| `src/transcriber/` | commands, runner, text and JSON output, naming, library growth |
 | `src/asr/` | transcription, alignment, diarization, voiceprints and matching |
 | `src/settings.py` | the default settings with the person's `trascrittore.ini` on top |
 | `docker/defaults.ini` | the default settings, inside the image |
 | `docker/LICENZE.md` | credits and license texts of the models the image carries |
 | `docker/trascrittore.ps1` | host launcher for people and agents |
-| `docker/Trascrivi.bat`, `docker/Verifica.bat`, `docker/Installa.bat`, `docker/LEGGIMI.md` | what users get |
+| `docker/Trascrivi.bat`, `docker/Installa.bat`, `docker/LEGGIMI.md` | what users get |
 | `docker/skill-trascrittore.md`, `docker/skill-fix-transcript.md` | the agent skills `trascrittore` and `fix-transcript`, installed by `Installa.bat` |
 | `docker/build.ps1` | builds the image and exports the files users download |
 
@@ -167,8 +178,8 @@ without a byte order mark in the ANSI code page. The design is in
 
 | What | Where |
 |---|---|
-| Transcripts | Next to the recording, or in `--out-dir`. |
-| Voice library | `voci\` next to the scripts, one folder per person; clips added by naming in `voci\<Nome>\registrazioni`, with `clip.json`. |
+| Transcripts | A folder of their own next to the recording, which moves into it, or in `--out-dir`; the frames an agent keeps go in its `fotogrammi` subfolder. |
+| Voice library | `voci\` next to the scripts, one folder per person; clips added by naming in pools, subfolders of `voci\<Nome>` such as `registrazioni`, each with `clip.json`. |
 | The person's settings | `trascrittore.ini` next to the scripts. |
 | Voiceprint cache, GPU/CPU mode, clips to listen to | `%LOCALAPPDATA%\Trascrittore\` (`cache\`, `gpu-mode.txt`, `ascolto\`). |
 | Working files | Inside the container of each run, deleted when it ends. |
@@ -248,7 +259,7 @@ release folder.
 2. Drag the release files, from the browser, into the `trascrittore` shared
    drive on Claror's Google Drive, and give the person access to it:
    `trascrittore-cu128.tar`, `Installa.bat`,
-   `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`,
+   `Trascrivi.bat`, `trascrittore.ps1`,
    `skill-trascrittore.md`, `skill-fix-transcript.md`, `LEGGIMI.md` and
    `LICENZE.md`. If the destination PC has an older NVIDIA GPU, the installer
    will explain that it is unsupported.
@@ -259,7 +270,7 @@ release folder.
    - `trascrittore.ini`: `Installa.bat` creates one on their PC;
    - `voci`: each PC has its own library, and the launcher creates an empty one.
      Yours holds other people's voices, which are biometric data, and each
-     `registrazioni/clip.json` holds paths of your recordings. As a starting
+     `clip.json` holds paths of your recordings. As a starting
      point, send separately only the clips of people who agree, such as your
      own; they go into `voci\<Nome Cognome>` on the other PC.
 4. The person follows [docker/LEGGIMI.md](docker/LEGGIMI.md): install Docker
@@ -275,9 +286,10 @@ stay as they are.
 ## Calibration
 
 `[matching]` uses threshold 0.575 and margin 0.10, calibrated on 2026-09-24 by
-leave-one-out on four recordings. A wrong name is worse than "Persona N", so
-recheck both values with `Verifica.bat` (the `check` command) as the library
-grows. It suggests a threshold only from at least 10 simulated missing voices.
+leave-one-out on four recordings. A wrong name is worse than "Persona N".
+Nothing on a PC suggests new values: the maintainer tunes them by hand when
+people report wrong names, which the list of who spoke after each
+transcription brings to light.
 
 ## Origin
 

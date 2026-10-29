@@ -1,9 +1,10 @@
 """
-Growing the voice library from named speakers: which clips to keep, where they go, and the cap.
+Growing the voice library from named speakers: which clips to keep, which pool they go to, and the caps.
 
-A person's clips taken from recordings form one pool, `voci/<Nome>/registrazioni/`. One pool per
-person, rather than one per recording, keeps the calibrated threshold meaningful: recognition keeps
-the best score over a person's pools, so every extra pool would be one more chance to reach it.
+A person's clips taken from recordings go to added pools, subfolders of `voci/<Nome>/` that hold a clip
+record: `registrazioni` first, then one pool for each recognition the person says was missed, named after
+the transcript's folder. Recognition keeps the best score over a person's pools, so every extra pool is one
+more chance to reach the threshold: pools start only from misses, and a person has at most `max_pools`.
 
 Only the clips the selection keeps are saved: the most consistent full-length windows of the speaker.
 """
@@ -12,17 +13,18 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import soundfile as sf
 
 from src.asr.utils.config import LibrarySettings, get_paths_settings
 from src.asr.utils.output_format import format_offset
+from src.asr.voice_library import AUDIO_EXTS
+from src.paths import slug
 from src.transcriber import voices
 from src.transcriber.summary import INVALID_ARGUMENTS, OK, CommandError, guarded, say
 from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
@@ -31,14 +33,16 @@ from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous
 REMOVE_COMMAND = "remove-clips"
 CLIPS_FOLDER = "registrazioni"
 CLIPS_RECORD = "clip.json"
+# What a naming is to the library: a person new to it, a confirmation, or a recognition that was missed.
+NEW, CONFIRM, MISS = "new", "confirm", "miss"
+# A pool of one or two clips proved noisy, so a miss with fewer kept clips starts no pool.
+MIN_NEW_POOL_CLIPS = 3
 
 # A window this much shorter than matching.window_sec still counts as full length (float noise).
 _FULL_LENGTH_TOLERANCE_SEC = 0.01
 _MAX_NAME_LENGTH = 80
 _FOLDER_FORBIDDEN_CHARS = set('<>:"/\\|?*')
 _WINDOWS_RESERVED_NAMES = {"CON", "PRN", "AUX", "NUL"} | {f"{device}{n}" for device in ("COM", "LPT") for n in range(1, 10)}
-# The recording's name and the window's time that start a clip's file name, as clip_filename writes them.
-_CLIP_NAME_RE = re.compile(r"(?P<recording>.+) \d{2,}\.\d{2}\.\d{2}(?!\d)")
 
 
 @dataclass
@@ -47,6 +51,7 @@ class Candidate:
     end: float
     consistency: float | None
     keep: bool = True
+    voiceprint: np.ndarray | None = None
 
 
 def _unit(vector: np.ndarray) -> np.ndarray:
@@ -84,8 +89,8 @@ def select_clips(
     measured = [(window, voiceprint) for window, voiceprint in zip(windows, voiceprints) if voiceprint is not None]
     scores = consistency_scores([voiceprint for _, voiceprint in measured])
     candidates = [
-        Candidate(start=float(window["start"]), end=float(window["end"]), consistency=score)
-        for (window, _), score in zip(measured, scores)
+        Candidate(start=float(window["start"]), end=float(window["end"]), consistency=score, voiceprint=voiceprint)
+        for (window, voiceprint), score in zip(measured, scores)
         if float(window["end"]) - float(window["start"]) >= window_sec - _FULL_LENGTH_TOLERANCE_SEC
     ]
     candidates.sort(key=lambda candidate: (-(candidate.consistency or 0.0), candidate.start))
@@ -188,31 +193,98 @@ def library_dir() -> Path | None:
     return Path(configured).resolve() if configured else None
 
 
-def recording_name(recording_file: str) -> str:
-    """
-    Return the name that starts the file names of the clips cut from a recording.
-    """
-    return Path(recording_file).stem
-
-
 def clip_filename(recording_file: str, start: float) -> str:
+    """
+    Name a clip after its recording and the window's start, without spaces: "riunione-00-12-34.wav".
+    """
     # A speaker's windows never overlap and last at least matching.min_window_sec, so seconds are enough.
-    return f"{recording_name(recording_file)} {format_offset(start).replace(':', '.')}.wav"
+    return f"{slug(Path(recording_file).stem)}-{format_offset(start).replace(':', '-')}.wav"
 
 
-def clip_recording(clip_file: str | os.PathLike[str]) -> str | None:
+def is_added_pool(folder: Path) -> bool:
     """
-    Return the name of the recording a clip was cut from: the part of its file name before the window's time.
-
-    The name stays when the clip is moved, loses its record, or is copied with a suffix such as " - Copia".
-    A clip placed by hand has none.
+    Tell a pool of clips added by naming, known by its clip record, from a folder made by hand.
     """
-    match = _CLIP_NAME_RE.match(Path(clip_file).stem)
-    return match["recording"] if match else None
+    return folder.is_dir() and (folder.name == CLIPS_FOLDER or (folder / CLIPS_RECORD).is_file())
 
 
-def clips_folder(library_dir: str | os.PathLike[str], person: str) -> Path:
-    return Path(library_dir) / person / CLIPS_FOLDER
+def added_pools(person_dir: Path) -> list[Path]:
+    if not person_dir.is_dir():
+        return []
+    return sorted(entry for entry in person_dir.iterdir() if is_added_pool(entry))
+
+
+def _audio_files(folder: Path, *, recursive: bool) -> list[Path]:
+    files = folder.rglob("*") if recursive else folder.iterdir()
+    return sorted(path for path in files if path.is_file() and path.suffix.lower() in AUDIO_EXTS)
+
+
+def pool_clips(person_dir: Path) -> dict[Path, list[Path]]:
+    """
+    Return the person's pools as recognition reads them: the clips directly in the folder, and each subfolder.
+    """
+    if not person_dir.is_dir():
+        return {}
+    pools = {person_dir: _audio_files(person_dir, recursive=False)}
+    pools |= {entry: _audio_files(entry, recursive=True) for entry in sorted(person_dir.iterdir()) if entry.is_dir()}
+    return {pool: clips for pool, clips in pools.items() if clips}
+
+
+def choose_pool(
+    person_dir: Path,
+    *,
+    kind: str,
+    kept: int,
+    transcript_folder: str,
+    max_pools: int,
+    similarity: Callable[[Path], float],
+) -> Path:
+    """
+    Return the pool a naming puts its clips in.
+
+    A person new to the library starts `registrazioni`. A confirmation joins the pool closest to the speaker,
+    or `registrazioni` when that pool was made by hand. A miss starts a pool named after the transcript's
+    folder, unless it kept fewer than MIN_NEW_POOL_CLIPS clips or the person has max_pools added pools: then
+    it joins the closest added pool. `similarity` scores a pool against the speaker's kept clips.
+    """
+    first = person_dir / CLIPS_FOLDER
+    if kind == NEW:
+        return first
+    if kind == CONFIRM:
+        pools = list(pool_clips(person_dir))
+        closest = max(pools, key=similarity) if pools else first
+        return closest if closest != person_dir and is_added_pool(closest) else first
+    added = added_pools(person_dir)
+    name = slug(transcript_folder)
+    folder, count = person_dir / name, 1
+    while folder.exists() and not is_added_pool(folder):
+        count += 1
+        folder = person_dir / f"{name}-{count}"
+    if folder in added or (kept >= MIN_NEW_POOL_CLIPS and len(added) < max_pools):
+        return folder
+    return max(added, key=similarity) if added else first
+
+
+def similarity_to(
+    kept: list[Candidate], person_dir: Path, voiceprint_of: Callable[[Path], np.ndarray]
+) -> Callable[[Path], float]:
+    """
+    Score a pool of the person against the speaker's kept clips: the cosine of the two normalized means.
+
+    Each pool's voiceprints are computed only when it is scored, and once.
+    """
+    speaker = _unit(np.mean([candidate.voiceprint for candidate in kept if candidate.voiceprint is not None], axis=0))
+    clips = pool_clips(person_dir)
+    scores: dict[Path, float] = {}
+
+    def similarity(pool: Path) -> float:
+        if pool not in scores:
+            files = clips.get(pool)
+            pool_voiceprint = _unit(np.mean([voiceprint_of(path) for path in files], axis=0)) if files else None
+            scores[pool] = float(np.dot(speaker, pool_voiceprint)) if pool_voiceprint is not None else -1.0
+        return scores[pool]
+
+    return similarity
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -227,26 +299,29 @@ def _write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def save_clips(
-    library_dir: str | os.PathLike[str],
-    person: str,
-    audio: np.ndarray,
-    candidates: list[Candidate],
-    *,
-    origin: dict[str, Any],
-) -> list[str]:
+def _present_record(folder: Path) -> tuple[dict[str, Any], dict[str, str]]:
     """
-    Cut the kept candidates from the recording into the person's pool and record where each came from.
+    Return the pool's clip record without the entries of deleted clips, and {record key: file name} of its clips.
+    """
+    record = _read_json(folder / CLIPS_RECORD, {})
+    present = {path.name.casefold(): path.name for path in folder.glob("*") if path.is_file()} if folder.is_dir() else {}
+    record = {key: origin for key, origin in record.items() if key.casefold() in present}
+    return record, {key: present[key.casefold()] for key in record}
 
-    `origin` describes the recording, the transcript and the label the clips came from.
+
+def save_clips(folder: Path, audio: np.ndarray, candidates: list[Candidate], *, origin: dict[str, Any]) -> list[str]:
+    """
+    Cut the kept candidates from the recording into a pool and record where each came from.
+
+    `origin` describes the recording, the transcript and the label the clips came from. Writing the record
+    drops the entries of clips the person deleted.
     """
     candidates = [candidate for candidate in candidates if candidate.keep]
     if not candidates:
         return []
-    folder = clips_folder(library_dir, person)
     folder.mkdir(parents=True, exist_ok=True)
     record_path = folder / CLIPS_RECORD
-    record = _read_json(record_path, {})
+    record, _ = _present_record(folder)
     saved: list[str] = []
     for candidate in candidates:
         clip = voices.cut(audio, candidate.start, candidate.end)
@@ -266,47 +341,20 @@ def save_clips(
     return saved
 
 
-def clip_records(library_dir: str | os.PathLike[str]) -> list[dict[str, Any]]:
+def cap_proposal(folder: Path, cap: int) -> list[str]:
     """
-    Return the origin of every clip ever saved from a recording, deleted or not.
+    Propose which clips of an added pool to remove to get it back to `cap`.
 
-    The record of a deleted clip stays, so the recognition check still finds the transcript it came from.
+    Clips go from the recording that has the most of them in the pool, least consistent first, so different
+    recordings stay. Only clips the transcriber added count; clips placed by hand never do.
     """
-    folder = Path(library_dir)
-    if not folder.is_dir():
-        return []
-    return [
-        origin
-        for person_dir in sorted(entry for entry in folder.iterdir() if entry.is_dir())
-        for origin in _read_json(person_dir / CLIPS_FOLDER / CLIPS_RECORD, {}).values()
-    ]
-
-
-def _added_clips(library_dir: str | os.PathLike[str], person: str) -> tuple[Path, dict[str, Any], dict[str, str]]:
-    """
-    Return the person's pool folder, its clip record, and {record key: file name} for the recorded clips still in it.
-    """
-    folder = clips_folder(library_dir, person)
-    record = _read_json(folder / CLIPS_RECORD, {})
-    present = {path.name.casefold(): path.name for path in folder.glob("*") if path.is_file()} if folder.is_dir() else {}
-    return folder, record, {key: present[key.casefold()] for key in record if key.casefold() in present}
-
-
-def cap_proposal(library_dir: str | os.PathLike[str], person: str, cap: int) -> list[str]:
-    """
-    Propose which of the person's added clips to remove to get back to `cap`.
-
-    Clips go from the recording that has the most of them, least consistent first, so rooms and microphones stay
-    varied. Only clips the transcriber added and still in `registrazioni` count; clips placed by hand never do.
-    """
-    _, record, present = _added_clips(library_dir, person)
+    record, present = _present_record(folder)
     excess = len(present) - cap
     if excess <= 0:
         return []
     by_recording: dict[str, list[str]] = {}
     for key in present:
-        recording = clip_recording(key) or str(record[key].get("recording_file"))
-        by_recording.setdefault(recording, []).append(key)
+        by_recording.setdefault(str(record[key].get("recording_file")), []).append(key)
     for keys in by_recording.values():
         # A clip without a consistency score was the only window of its speaker: keep it for last.
         keys.sort(key=lambda key: (record[key].get("consistency") is None, record[key].get("consistency") or 0.0, key), reverse=True)
@@ -319,23 +367,31 @@ def cap_proposal(library_dir: str | os.PathLike[str], person: str, cap: int) -> 
 
 def remove_clips(library_dir: str | os.PathLike[str], person: str, filenames: list[str]) -> tuple[list[str], list[dict[str, str]]]:
     """
-    Delete the given added clips of a person, as the person confirmed, and mark them removed in the clip record.
+    Delete the given added clips of a person, as the person confirmed, and drop them from their clip records.
 
-    A file that is not a recorded clip in the person's `registrazioni` folder is refused, never deleted.
+    A file that is not a recorded clip in one of the person's added pools is refused, never deleted, and so is
+    one whose name is in more than one pool, since the person could not tell which they confirmed.
     """
-    folder, record, present = _added_clips(library_dir, person)
-    keys = {key.casefold(): key for key in present}
-    removed, refused = [], []
+    pools = {folder: _present_record(folder) for folder in added_pools(Path(library_dir) / person)}
+    removed, refused, changed = [], [], set()
     for filename in filenames:
-        key = keys.get(Path(filename).name.casefold())
-        if key is None:
-            refused.append({"clip": filename, "reason": "non è una clip aggiunta dal trascrittore in questa cartella"})
+        wanted = Path(filename).name.casefold()
+        found = [(folder, key) for folder, (_, present) in pools.items() for key in present if key.casefold() == wanted]
+        if not found:
+            refused.append({"clip": filename, "reason": "non è una clip aggiunta dal trascrittore per questa persona"})
             continue
-        (folder / present[key]).unlink()
-        record[key]["removed"] = datetime.now().isoformat(timespec="seconds")
-        removed.append(present[key])
-    if removed:
-        _write_json(folder / CLIPS_RECORD, record)
+        if len(found) > 1:
+            refused.append({"clip": filename, "reason": "è in più di un gruppo di clip: cancellala a mano da quello giusto"})
+            continue
+        folder, key = found[0]
+        record, present = pools[folder]
+        clip = present.pop(key)
+        (folder / clip).unlink()
+        del record[key]
+        removed.append(clip)
+        changed.add(folder)
+    for folder in changed:
+        _write_json(folder / CLIPS_RECORD, pools[folder][0])
     return removed, refused
 
 

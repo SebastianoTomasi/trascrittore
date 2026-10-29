@@ -1,6 +1,6 @@
 # Trascrittore
 
-Trascini una registrazione, audio o video, su `Trascrivi.bat` e, accanto al file, ottieni il testo con chi ha parlato e quando:
+Trascini una registrazione, audio o video, su `Trascrivi.bat` e, in una cartella accanto al file, ottieni il testo con chi ha parlato e quando:
 
 ```
 [00:12:34] Mario Rossi: allora partiamo dal budget
@@ -14,8 +14,8 @@ Tutto gira sul tuo PC: il trascrittore non manda niente a nessuno e funziona anc
 - Separa le voci di chi parla e, per ogni intervento, scrive quando è iniziato, contando dall'inizio della registrazione.
 - Riconosce le persone che hai messo nella libreria `voci` e scrive il loro nome. Chi non riconosce resta "Persona 1", "Persona 2"…
 - Ti fa dare un nome alle voci non riconosciute, subito o più tardi, dopo che hai ascoltato la loro voce. Così la volta dopo le riconosce.
-- Con `Verifica.bat` controlla quanto bene riconosce le voci.
-- Si può usare da Claude Code o Codex, che sanno anche correggere le parole capite male.
+- Alla fine di ogni trascrizione ti dice chi ha parlato e per quanto, così vedi subito se un nome è sbagliato.
+- Si può usare da Claude Code o Codex, che sanno anche correggere le parole capite male e, da un video, tenere le immagini dei momenti che contano.
 
 ## Cosa serve
 
@@ -34,13 +34,13 @@ Tutto gira sul tuo PC: il trascrittore non manda niente a nessuno e funziona anc
 ## Installazione (una volta sola)
 
 1. Installa [Docker Desktop](https://www.docker.com/products/docker-desktop/) con le impostazioni predefinite. Riavvia il PC, apri Docker Desktop e aspetta che sia pronto. Al primo avvio accetta le condizioni d'uso e, se ti chiede di installare o aggiornare WSL, accetta. Se ti chiede di accedere, puoi saltare.
-2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `Verifica.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `skill-fix-transcript.md`, `LICENZE.md` e questo `LEGGIMI.md`.
+2. Crea una cartella sul PC, per esempio `C:\Trascrittore`, e scaricaci i file dal link di Google Drive che hai ricevuto: `trascrittore-cu128.tar`, `Installa.bat`, `Trascrivi.bat`, `trascrittore.ps1`, `skill-trascrittore.md`, `skill-fix-transcript.md`, `LICENZE.md` e questo `LEGGIMI.md`.
    - Meglio una cartella che OneDrive non sincronizza: se `Documenti` o il Desktop sono sincronizzati, OneDrive caricherebbe sul cloud gli archivi e poi la cartella `voci`.
    - Scaricali uno per uno: se scarichi tutta la cartella, Drive la divide in più file zip.
    - Per il file grande Google avvisa che non può controllarlo per i virus: scegli "Scarica comunque".
    - Se il browser dice che i file `.bat` o `.ps1` possono essere pericolosi, scegli "Mantieni".
 3. Con Docker Desktop aperto, fai doppio clic su `Installa.bat`. Controlla che la GPU NVIDIA sia supportata, carica l'archivio, che richiede qualche minuto, e prova i calcoli GPU prima di attivarlo. Se il controllo fallisce, la versione già installata resta disponibile. Installa anche le skill che permettono a Claude Code e Codex di usare il trascrittore e di correggere le trascrizioni, e crea `trascrittore.ini`, il file delle tue impostazioni. Alla fine scrive "Installazione completata".
-   - Se Windows mostra "PC protetto da Windows", clicca "Ulteriori informazioni" e poi "Esegui comunque". Può succedere di nuovo la prima volta che usi `Trascrivi.bat` e `Verifica.bat`.
+   - Se Windows mostra "PC protetto da Windows", clicca "Ulteriori informazioni" e poi "Esegui comunque". Può succedere di nuovo la prima volta che usi `Trascrivi.bat`.
 4. Finita l'installazione puoi cancellare `trascrittore-cu128.tar` e recuperare spazio.
 
 Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill per trascrivere deve sapere dove si trova il trascrittore.
@@ -54,19 +54,24 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill per 
 5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Alla fine ti dice in quale cartella sono le clip aggiunte.
 6. Se il nome che scrivi somiglia a quello di una persona già nella libreria (per esempio "Marco Rosi" quando c'è "Marco Rossi", "M. Rossi" o solo "Marco"), il programma ti chiede se intendevi lei o una persona nuova, prima di salvare qualsiasi cosa.
 
-Accanto al file trovi:
+Accanto alla registrazione trovi una cartella con il suo nome, scritto senza spazi, accenti e maiuscole, con un trattino al posto di ogni gruppo di spazi o segni e nessun trattino all'inizio o alla fine: per esempio `2026-10-29 14-30-12.mkv` diventa `2026-10-29-14-30-12`. Dentro ci sono:
 
-- `<nome file> - trascrizione.txt`: il testo da leggere. In cima ci sono il nome della registrazione, la durata, se è stata elaborata su GPU o CPU e chi parla; poi una riga per ogni intervento, con l'ora e il nome. Le parole che il programma non riesce ad attribuire a nessuno compaiono come "Voce non attribuita";
-- `<nome file> - trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce e l'inizio e la fine di ogni frase.
+- `<nome>-trascrizione.txt`: il testo da leggere. In cima ci sono il nome della registrazione, la durata, se è stata elaborata su GPU o CPU e chi parla; poi una riga per ogni intervento, con l'ora e il nome. Le parole che il programma non riesce ad attribuire a nessuno compaiono come "Voce non attribuita";
+- `<nome>-trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce e l'inizio e la fine di ogni frase;
+- la registrazione, spostata lì con lo stesso nome, per esempio `2026-10-29-14-30-12.mkv`. Il trascrittore non la modifica e non la cancella. Se non riesce a spostarla, per esempio perché è aperta in un altro programma, la lascia dov'era e te lo dice.
+
+Alla fine il programma ti dice chi ha parlato e per quanti minuti, a partire da chi ha parlato di più. Se un nome è sbagliato, correggilo come spiegato sotto, in "Confermare o correggere una voce riconosciuta".
+
+Puoi rinominare la cartella come vuoi, per esempio con la data e l'argomento: i file dentro restano gli stessi. Se trascini di nuovo una registrazione che è già nella sua cartella, la nuova trascrizione prende il posto di quella vecchia, nella stessa cartella.
 
 Con una GPU NVIDIA recente un'ora di registrazione richiede pochi minuti. Una GPU meno recente può impiegare di più, pur usando la GPU per tutte le fasi della trascrizione. Solo sulla CPU può volerci più della durata della registrazione. Si fa una trascrizione alla volta: se ne è già in corso una, aspetta che finisca.
 
-**Dare i nomi più tardi.** Trascina il file `<nome file> - trascrizione.json` sopra `Trascrivi.bat`: ti fa le stesse domande sui nomi, senza trascrivere di nuovo. Se nel frattempo hai spostato la registrazione, ti chiede di trascinarla nella finestra.
+**Dare i nomi più tardi.** Trascina il file `<nome>-trascrizione.json` sopra `Trascrivi.bat`: ti fa le stesse domande sui nomi, senza trascrivere di nuovo. Se nel frattempo hai spostato la registrazione, ti chiede di trascinarla nella finestra.
 
 **Confermare o correggere una voce riconosciuta.** Sempre trascinando il file `.json`, il programma ti chiede anche se vuoi confermare o correggere una voce che ha riconosciuto da solo. Scegli la voce dall'elenco, poi:
 
 - premi solo Invio se è davvero quella persona: dopo l'ascolto aggiunge altre sue clip alla libreria, e ti dice se servono molto (il riconoscimento era incerto) o poco;
-- scrivi il nome giusto se l'ha scambiata per un'altra: dopo l'ascolto corregge la trascrizione e dà le clip alla persona giusta. Le clip della persona sbagliata restano dove sono: ascoltale, cancella quelle che non sono sue e fai `Verifica.bat`.
+- scrivi il nome giusto se l'ha scambiata per un'altra: dopo l'ascolto corregge la trascrizione e dà le clip alla persona giusta. Le clip della persona sbagliata restano dove sono: ascoltale e cancella quelle che non sono sue.
 
 Alla fine di una trascrizione questa domanda non compare: si fa solo quando lo chiedi tu.
 
@@ -79,6 +84,14 @@ L'agente non ti chiede quante persone parlano. Se ne sei sicuro, diglielo nella 
 Un agente può proporti un nome, ma lo usa solo dopo che l'hai confermato, e prima ti fa ascoltare la voce. Una voce già riconosciuta la conferma o la corregge solo se glielo chiedi tu, per esempio "vorrei aggiungere delle clip di Sebastiano".
 
 L'agente può anche correggere le parole che il trascrittore ha capito male, come nomi e termini tecnici. Chiedi per esempio "correggi la trascrizione, si parlava di Docker e PyTorch" oppure "sistema i termini nei sottotitoli, il copione è in copione.md". L'agente ricava la parola giusta dal contesto e, se la registrazione è un video, guardandone alcuni fotogrammi: come la trascrizione, anche quello che guarda arriva al servizio dell'agente. Non cambia quello che è stato detto, né i tempi, né i nomi di chi parla. Corregge il `.txt` e i sottotitoli `.srt`, mentre il `.json` resta com'è. Alla fine ti dice quante correzioni ha fatto e ti chiede dei punti dubbi. Dai prima i nomi alle voci: dare un nome dopo riscrive il `.txt` e cancella le correzioni.
+
+Quando trascrive un video, l'agente fa anche questo, senza chiedertelo:
+
+- dà alla cartella della trascrizione la data e un titolo, per esempio `2026-10-29-demo-prodotto-acme`;
+- tiene, nella cartella `fotogrammi` lì dentro, le immagini dei momenti che contano: quello che chi parla mostra, come un prodotto o una slide, e quello che sullo schermo non viene detto, come nomi e numeri. Ogni immagine ha il nome del minuto in cui compare, per esempio `00-12-34.jpg`. Se sullo schermo non c'è niente da tenere, non crea la cartella e te lo dice. Puoi chiedergli di guardare lo schermo più o meno spesso;
+- ti propone i nomi delle voci, anche da quelli che compaiono sullo schermo.
+
+Così puoi tenere la trascrizione e i fotogrammi al posto del video, che occupa molto più spazio. Né il trascrittore né l'agente cancellano il video: se vuoi cancellarlo, dai prima i nomi alle voci, perché per dare un nome il programma ritaglia le clip dalla registrazione. Come la trascrizione, anche le immagini che l'agente guarda arrivano al servizio dell'agente. Per un video trascritto con una versione precedente, che non ha una cartella sua, l'agente ti propone di trascriverlo di nuovo: i nomi che hai già dato non si perdono, perché quelle voci sono nella libreria.
 
 ## Voci da riconoscere
 
@@ -95,15 +108,15 @@ Per non riconoscere più una persona, cancella la sua cartella dentro `voci`.
 
 ### Le voci a cui dai un nome
 
-Quando dai un nome a una voce, le sue clip finiscono in `voci\Nome Cognome\registrazioni`. Il nome del file dice da quale registrazione vengono e da che minuto. Il programma tiene solo le clip migliori di ogni voce, al massimo 8 per registrazione, e scarta da solo quelle che somigliano poco alle altre. Se ne trovi una con altre voci, risate o rumori, puoi cancellarla.
+Quando dai un nome a una voce, le sue clip finiscono in un gruppo, una cartella dentro `voci\Nome Cognome`:
 
-Ogni persona tiene al massimo **64 clip** aggiunte dalle registrazioni (`max_clips` sotto `[library]` in `trascrittore.ini`). Quando una nuova registrazione supera il limite, il programma ti propone quali togliere, prendendole dalle registrazioni con più clip, e le toglie solo se confermi. Le clip che hai messo tu a mano non le tocca mai.
+- per una persona nuova nella libreria il gruppo è `registrazioni`;
+- se dai il nome di una persona già nella libreria a una voce che il programma non aveva riconosciuto, di solito è perché la registrazione suona diversa: un altro microfono, un'altra stanza, una call. Le sue clip formano un gruppo nuovo, che ha il nome della cartella della trascrizione, e il programma te lo dice. Con meno di 3 clip, o quando la persona ha già 8 gruppi, vanno invece nel gruppo che somiglia di più;
+- quando confermi una voce riconosciuta, le clip vanno nel gruppo che le somiglia di più.
 
-### Verificare il riconoscimento
+Puoi rinominare un gruppo, per esempio in `macchina`. Il nome di ogni clip dice da quale registrazione viene e da che minuto. Il programma tiene solo le clip migliori di ogni voce, al massimo 8 per registrazione, e scarta da solo quelle che somigliano poco alle altre. Se ne trovi una con altre voci, risate o rumori, puoi cancellarla.
 
-Fai doppio clic su `Verifica.bat`, con Docker Desktop aperto. Controlla quanto bene vengono riconosciute le voci a cui hai dato un nome, e ti dice se conviene cambiare la soglia: in quel caso ti mostra la riga da scrivere in `trascrittore.ini`. Non la cambia mai da solo. Usalo ogni tanto, dopo aver dato qualche nome. Trova da solo le trascrizioni da cui vengono le clip della libreria; per controllarne anche altre, trascinale sopra `Verifica.bat`.
-
-Una voce conta per la verifica solo quando le hai dato il nome, o l'hai confermata, in almeno due registrazioni: la verifica controlla ogni registrazione senza le clip prese da quella, quindi chi ha clip di una sola registrazione lì risulta assente dalla libreria. Una voce che il programma ha riconosciuto da solo, senza la tua conferma, non conta. Se la verifica dice che non c'è ancora niente da misurare, è per questo.
+Ogni gruppo tiene al massimo **16 clip** aggiunte dalle registrazioni (`max_clips` sotto `[library]` in `trascrittore.ini`), e ogni persona al massimo **8 gruppi** (`max_pools`). Quando una nuova registrazione porta un gruppo oltre il limite, il programma ti propone quali clip togliere da quel gruppo, prendendole dalle registrazioni con più clip, e le toglie solo se confermi. Le clip e le cartelle che hai messo tu a mano non le tocca mai, e le tue cartelle non contano negli 8 gruppi.
 
 ## Impostazioni
 
@@ -123,15 +136,15 @@ Le GPU AMD e Intel non usano CUDA: il trascrittore funziona sulla CPU.
 
 Tutto resta sul tuo PC:
 
-- le trascrizioni, accanto alla registrazione;
+- le trascrizioni, ognuna nella sua cartella accanto a dove c'era la registrazione, con la registrazione e, per un video trascritto con un agente, i fotogrammi;
 - la libreria `voci` e le tue impostazioni `trascrittore.ini`, nella cartella del trascrittore;
 - i dati di lavoro del trascrittore, cioè le impronte vocali calcolate dalle clip e la clip da ascoltare prima di dare un nome, in `%LOCALAPPDATA%\Trascrittore`.
 
-Le registrazioni non vengono mai spostate né modificate.
+Il trascrittore sposta la registrazione nella cartella della sua trascrizione, ma non la modifica e non la cancella mai.
 
 ## Aggiornamenti
 
-Quando esce una versione nuova, chi ti ha dato il trascrittore ti avvisa e ti dice quali file riscaricare: `trascrittore-cu128.tar` e, quando cambiano, anche gli script. Mettili nella stessa cartella e fai di nuovo doppio clic su `Installa.bat`. L'installazione verifica la nuova immagine prima di sostituire quella attiva. La cartella `voci` e il tuo `trascrittore.ini` restano come sono.
+Quando esce una versione nuova, chi ti ha dato il trascrittore ti avvisa e ti dice quali file riscaricare: `trascrittore-cu128.tar` e, quando cambiano, anche gli script. Mettili nella stessa cartella e fai di nuovo doppio clic su `Installa.bat`. L'installazione verifica la nuova immagine prima di sostituire quella attiva. La cartella `voci` e il tuo `trascrittore.ini` restano come sono. Se nella cartella c'è ancora `Verifica.bat` di una versione precedente, cancellalo: non serve più.
 
 ## Disinstallare
 

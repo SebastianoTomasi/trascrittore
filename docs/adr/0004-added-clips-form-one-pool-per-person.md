@@ -1,5 +1,9 @@
 # Clips added by naming form one pool per person
 
+Replaced in part on 2026-10-29 by
+[ADR 0011](0011-a-missed-recognition-starts-a-new-pool.md): the clips of a
+recognition the person says was missed start a pool of their own.
+
 When a person names a speaker, the clips cut from the recording go into one
 subfolder of that person's folder, `voci/<Nome>/registrazioni/`, which
 recognition treats as a single pool beside any condition folders the person

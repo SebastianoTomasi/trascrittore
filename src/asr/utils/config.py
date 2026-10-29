@@ -111,8 +111,10 @@ class LibrarySettings:
 
     keep_clips: int
     min_consistency: float
-    # The cap on a person's added clips: past it, a naming proposes which ones to remove.
-    max_clips: int = 64
+    # The cap on the clips of one added pool: past it, a naming proposes which ones to remove.
+    max_clips: int = 16
+    # The most added pools a person has: past it, a missed recognition joins the closest one.
+    max_pools: int = 8
 
 
 @lru_cache(maxsize=1)
@@ -302,9 +304,12 @@ def get_library_settings() -> LibrarySettings:
         keep_clips=int(section["keep_clips"]),
         min_consistency=float(section["min_consistency"]),
         max_clips=int(section["max_clips"]),
+        max_pools=int(section["max_pools"]),
     )
     if settings.keep_clips <= 0:
         raise RuntimeError("library.keep_clips must be greater than zero.")
     if settings.max_clips < settings.keep_clips:
         raise RuntimeError("library.max_clips must be at least library.keep_clips.")
+    if settings.max_pools <= 0:
+        raise RuntimeError("library.max_pools must be greater than zero.")
     return settings

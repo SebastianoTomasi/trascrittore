@@ -1,6 +1,6 @@
 @echo off
-rem Drag a recording onto this file to get "<name> - trascrizione.txt" next to it,
-rem or drag a "<name> - trascrizione.json" to name its voices later.
+rem Drag a recording onto this file to get a folder next to it with "<name>-trascrizione.txt" and the recording,
+rem or drag a "<name>-trascrizione.json" to name its voices later.
 rem The questions live in trascrittore.ps1, which asks them and then runs the same commands an agent runs.
 setlocal EnableExtensions
 rem chcp reads the stdin it inherits: give it nul so typed answers stay for the questions.
@@ -17,7 +17,7 @@ set "RC=%ERRORLEVEL%"
 goto :done
 
 :no_file
-echo Trascina sopra Trascrivi.bat una registrazione, oppure un file "- trascrizione.json" per dare i nomi alle voci.
+echo Trascina sopra Trascrivi.bat una registrazione, oppure un file "-trascrizione.json" per dare i nomi alle voci.
 goto :done
 
 :missing_file

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import tempfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable
 
 import numpy as np
@@ -172,26 +172,49 @@ def _grow_library(
     results: list[dict[str, Any]],
     recording: str | None,
     library_dir: Path | None,
-) -> None:
+) -> list[tuple[str, Path]]:
+    """
+    Add each named speaker's clips to the pool the library rules choose; return (person, pool) for each pool filled.
+    """
+    filled: list[tuple[str, Path]] = []
     if library_dir is None:
         for result in results:
             result["note"] = "La libreria delle voci non è configurata."
-        return
+        return filled
 
     audio, problem = open_recording(payload, transcript, recording)
     if audio is None:
         for result in results:
             result["note"] = problem
-        return
+        return filled
 
     voiceprints = voices.Voiceprints()
+    # Whether each person was already in the library tells a miss from a person new to it.
+    known = {result["name"]: (library_dir / result["name"]).is_dir() for result in results}
+    # The transcript is mounted under another name in the container: its folder's name is the one on the PC.
+    transcript_folder = PureWindowsPath(host_path(transcript.parent)).name
+    max_pools = get_library_settings().max_pools
     for result in results:
         candidates, result["note"] = _candidates(payload, result["label"], audio, voiceprints)
         if not candidates:
             continue
+        kept = [candidate for candidate in candidates if candidate.keep]
+        person_dir = library_dir / result["name"]
+        if result["action"] == CONFIRMED:
+            kind = library.CONFIRM
+        else:
+            kind = library.MISS if known[result["name"]] else library.NEW
+        folder = library.choose_pool(
+            person_dir,
+            kind=kind,
+            kept=len(kept),
+            transcript_folder=transcript_folder,
+            max_pools=max_pools,
+            similarity=library.similarity_to(kept, person_dir, voiceprints.of_clip),
+        ) if kept else person_dir / library.CLIPS_FOLDER
+        new_pool = kind == library.MISS and not folder.exists()
         saved = library.save_clips(
-            library_dir,
-            result["name"],
+            folder,
             audio,
             candidates,
             origin={
@@ -209,7 +232,15 @@ def _grow_library(
                 "o rumori, quindi non ho aggiunto clip."
             )
             continue
-        result["folder"] = host_path(library.clips_folder(library_dir, result["name"]))
+        result["folder"] = host_path(folder)
+        filled.append((result["name"], folder))
+        if new_pool:
+            _add_note(
+                result,
+                f"Non l'avevo riconosciuta: le sue clip formano un gruppo nuovo, '{folder.name}', "
+                "per le registrazioni come questa.",
+            )
+    return filled
 
 
 def _add_note(result: dict[str, Any], note: str, *, first: bool = False) -> None:
@@ -242,7 +273,7 @@ def _recognition_notes(payload: dict[str, Any], results: list[dict[str, Any]], l
             _add_note(
                 result,
                 f"'{result['label']}' era stata riconosciuta al posto di '{result['name']}': ascolta le clip di "
-                f"'{result['label']}'{where}, cancella quelle che non sono sue, e rifai la verifica del riconoscimento.",
+                f"'{result['label']}'{where} e cancella quelle che non sono sue.",
             )
 
 
@@ -253,15 +284,13 @@ def _write_transcript(transcript: Path, payload: dict[str, Any]) -> Path:
     return text_path
 
 
-def _over_cap(results: list[dict[str, Any]], library_dir: Path | None) -> list[dict[str, Any]]:
-    if library_dir is None:
-        return []
-    selection = get_library_settings()
+def _over_cap(filled: list[tuple[str, Path]]) -> list[dict[str, Any]]:
+    cap = get_library_settings().max_clips
     over = []
-    for person in dict.fromkeys(result["name"] for result in results if result["clips_added"]):
-        proposal = library.cap_proposal(library_dir, person, selection.max_clips)
+    for person, folder in dict.fromkeys(filled):
+        proposal = library.cap_proposal(folder, cap)
         if proposal:
-            over.append({"person": person, "cap": selection.max_clips, "remove": proposal})
+            over.append({"person": person, "pool": host_path(folder), "cap": cap, "remove": proposal})
     return over
 
 
@@ -279,8 +308,8 @@ def _naming_lines(results: list[dict[str, Any]], over_cap: list[dict[str, Any]])
         lines.append(line)
     for entry in over_cap:
         lines.append(
-            f"{entry['person']} ha più di {entry['cap']} clip aggiunte: propongo di togliere le {len(entry['remove'])} "
-            "delle registrazioni con più clip, le meno somiglianti. Le tolgo solo dopo una conferma."
+            f"{entry['person']} ha più di {entry['cap']} clip aggiunte in {entry['pool']}: propongo di togliere le "
+            f"{len(entry['remove'])} delle registrazioni con più clip, le meno somiglianti. Le tolgo solo dopo una conferma."
         )
     return lines
 
@@ -361,7 +390,7 @@ def _name_speakers(
     ]
     # Clips first: if rewriting the transcript then fails, the labels are still there and naming can be
     # repeated, and the clips it saves again replace the same files.
-    _grow_library(payload, transcript_path, results, recording, library_dir)
+    filled = _grow_library(payload, transcript_path, results, recording, library_dir)
     for result in results:
         if result["action"] != CONFIRMED and result["name"] != written[result["label"]]:
             _add_note(result, f"Nella libreria c'è già '{result['name']}': uso quel nome.", first=True)
@@ -369,7 +398,7 @@ def _name_speakers(
     text_path = _write_transcript(
         transcript_path, rename_speakers(payload, {result["label"]: result["name"] for result in results})
     )
-    over_cap = _over_cap(results, library_dir)
+    over_cap = _over_cap(filled)
 
     lines = _naming_lines(results, over_cap)
     for line in lines:

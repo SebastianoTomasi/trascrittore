@@ -55,4 +55,4 @@ Former questions:
 Settled on 2026-09-29 as recorded above. The rule is in
 [Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules) ("Similar names stop the naming"), and the
 matching in
-[Similar names](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#similar-names).
+[Similar names](../features/voice-library-growth/implementation/clip-selection-and-pools.md#similar-names).

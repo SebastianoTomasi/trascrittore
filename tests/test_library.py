@@ -95,14 +95,9 @@ def test_a_name_matching_a_library_folder_in_another_case_uses_the_folder(tmp_pa
     assert library.canonical_name(tmp_path / "missing", "Marco Verdi") == "Marco Verdi"
 
 
-def test_clip_names_carry_the_recording_and_the_time():
-    assert library.clip_filename("Registrazione budget.m4a", 754.6) == "Registrazione budget 00.12.34.wav"
-    assert library.clip_recording("Registrazione budget 00.12.34.wav") == "Registrazione budget"
-    assert library.clip_recording("Registrazione budget 00.12.34 - Copia.wav") == "Registrazione budget"
-    assert library.clip_recording(library.clip_filename("Registrazione 10.30.00.mp4", 5.0)) == "Registrazione 10.30.00"
-    # A clip placed by hand names no recording, even with a date in its name.
-    assert library.clip_recording("nota vocale.m4a") is None
-    assert library.clip_recording("nota vocale 24.09.2026.m4a") is None
+def test_clip_names_carry_the_recording_and_the_time_without_spaces():
+    assert library.clip_filename("Registrazione budget.m4a", 754.6) == "registrazione-budget-00-12-34.wav"
+    assert library.clip_filename("2026-10-29 14-30-12.mkv", 5.0) == "2026-10-29-14-30-12-00-00-05.wav"
 
 
 def test_only_the_kept_clips_are_saved_with_their_origin(tmp_path):
@@ -112,40 +107,41 @@ def test_only_the_kept_clips_are_saved_with_their_origin(tmp_path):
         library.Candidate(start=30.0, end=40.0, consistency=0.4, keep=False),
     ]
 
-    saved = library.save_clips(
-        tmp_path,
-        "Luca Bianchi",
-        audio,
-        candidates,
-        origin={
-            "recording": "C:\\Registrazioni\\Registrazione.m4a",
-            "recording_file": "Registrazione.m4a",
-            "recording_duration_sec": 60.0,
-            "transcript": "C:\\Registrazioni\\Registrazione.m4a - trascrizione.json",
-            "label": "Persona 2",
-        },
-    )
-
     folder = tmp_path / "Luca Bianchi" / "registrazioni"
-    assert saved == ["Registrazione 00.00.10.wav"]
-    assert sorted(path.name for path in folder.glob("*.wav")) == ["Registrazione 00.00.10.wav"]
-    info = sf.info(folder / "Registrazione 00.00.10.wav")
+    origin = {
+        "recording": "C:\\Registrazioni\\registrazione.m4a",
+        "recording_file": "registrazione.m4a",
+        "recording_duration_sec": 60.0,
+        "transcript": "C:\\Registrazioni\\registrazione-trascrizione.json",
+        "label": "Persona 2",
+    }
+
+    saved = library.save_clips(folder, audio, candidates, origin=origin)
+
+    assert saved == ["registrazione-00-00-10.wav"]
+    assert sorted(path.name for path in folder.glob("*.wav")) == ["registrazione-00-00-10.wav"]
+    info = sf.info(folder / "registrazione-00-00-10.wav")
     assert (info.samplerate, round(info.duration, 3)) == (16000, 10.0)
     record = json.loads((folder / "clip.json").read_text(encoding="utf-8"))
-    assert record["Registrazione 00.00.10.wav"] | {"saved": None} == {
-        "recording": "C:\\Registrazioni\\Registrazione.m4a",
-        "recording_file": "Registrazione.m4a",
-        "recording_duration_sec": 60.0,
-        "transcript": "C:\\Registrazioni\\Registrazione.m4a - trascrizione.json",
-        "label": "Persona 2",
+    assert record["registrazione-00-00-10.wav"] | {"saved": None} == origin | {
         "start": 10.0,
         "end": 20.0,
         "consistency": 0.9,
         "saved": None,
     }
-    # The record of a deleted clip stays: the recognition check finds its transcript through it.
-    (folder / "Registrazione 00.00.10.wav").unlink()
-    assert [origin["label"] for origin in library.clip_records(tmp_path)] == ["Persona 2"]
+
+
+def test_the_record_drops_the_clips_the_person_deleted(tmp_path):
+    audio = np.linspace(-0.5, 0.5, 16000 * 60, dtype=np.float32)
+    folder = tmp_path / "Luca Bianchi" / "registrazioni"
+    origin = {"recording_file": "registrazione.m4a", "label": "Persona 2"}
+    library.save_clips(folder, audio, [library.Candidate(start=10.0, end=20.0, consistency=0.9)], origin=origin)
+    (folder / "registrazione-00-00-10.wav").unlink()
+
+    library.save_clips(folder, audio, [library.Candidate(start=30.0, end=40.0, consistency=0.8)], origin=origin)
+
+    record = json.loads((folder / "clip.json").read_text(encoding="utf-8"))
+    assert list(record) == ["registrazione-00-00-30.wav"]
 
 
 @pytest.mark.parametrize(
@@ -194,8 +190,36 @@ def test_only_recorded_clips_are_removed(tmp_path):
     assert [entry["clip"] for entry in refused] == ["a mano.wav"]
     assert sorted(path.name for path in pool.glob("*.wav")) == ["Altra 00.00.02.wav", "a mano.wav"]
     record = json.loads((pool / library.CLIPS_RECORD).read_text(encoding="utf-8"))
-    assert "removed" in record["Altra 00.00.01.wav"] and "removed" not in record["Altra 00.00.02.wav"]
-    assert library.cap_proposal(tmp_path, "Luca Bianchi", 1) == []
+    assert list(record) == ["Altra 00.00.02.wav"]
+    assert library.cap_proposal(pool, 1) == []
+
+
+def test_a_clip_name_in_two_pools_is_refused(tmp_path):
+    for pool_name in (library.CLIPS_FOLDER, "2026-10-29-demo-acme"):
+        pool = tmp_path / "Luca Bianchi" / pool_name
+        pool.mkdir(parents=True)
+        (pool / "demo-00-00-05.wav").write_bytes(b"clip")
+        (pool / library.CLIPS_RECORD).write_text(json.dumps({"demo-00-00-05.wav": {"recording_file": "demo.mp4"}}), encoding="utf-8")
+
+    removed, refused = library.remove_clips(tmp_path, "Luca Bianchi", ["demo-00-00-05.wav"])
+
+    assert removed == [] and [entry["clip"] for entry in refused] == ["demo-00-00-05.wav"]
+    assert "più di un gruppo" in refused[0]["reason"]
+    assert len(list((tmp_path / "Luca Bianchi").glob("*/demo-00-00-05.wav"))) == 2
+
+
+def test_clips_are_removed_from_every_added_pool_of_the_person(tmp_path):
+    pool = _added_pool(tmp_path)
+    other = tmp_path / "Luca Bianchi" / "2026-10-29-demo-acme"
+    other.mkdir()
+    (other / "demo-00-00-05.wav").write_bytes(b"clip")
+    (other / library.CLIPS_RECORD).write_text(json.dumps({"demo-00-00-05.wav": {"recording_file": "demo.mp4"}}), encoding="utf-8")
+
+    removed, refused = library.remove_clips(tmp_path, "Luca Bianchi", ["Altra 00.00.02.wav", "demo-00-00-05.wav"])
+
+    assert (removed, refused) == (["Altra 00.00.02.wav", "demo-00-00-05.wav"], [])
+    assert json.loads((other / library.CLIPS_RECORD).read_text(encoding="utf-8")) == {}
+    assert sorted(path.name for path in pool.glob("*.wav")) == ["Altra 00.00.01.wav", "a mano.wav"]
 
 
 def test_the_remove_command_removes_the_confirmed_clips(tmp_path, monkeypatch, capsys):

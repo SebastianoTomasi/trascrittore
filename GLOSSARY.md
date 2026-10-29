@@ -22,6 +22,12 @@ part of it before or after a pause of a second or more, with the time it
 starts and ends.  
 _Avoid_: chunk
 
+**Frame**  
+An image taken from a video recording at a moment that matters to what was
+said, such as something a speaker shows or a name on screen, and kept with the
+transcript.  
+_Avoid_: screenshot
+
 **Speaker**  
 A person whose voice is heard in a recording, whether or not the transcriber
 can tell who they are.  
@@ -70,11 +76,6 @@ its subfolders, such as a folder for one recording condition.
 What the transcriber derives from a person's voice clips to recognize their
 voice.  
 _Avoid_: embedding
-
-**Recognition check**  
-A test of recognition on one PC: it replays that PC's named recordings against
-its own voice library and reports which speakers the current settings would
-name wrongly or leave anonymous.
 
 **Listening check**  
 The step of naming in which the person hears a speaker's best voice clips, one

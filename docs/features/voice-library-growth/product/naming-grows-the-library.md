@@ -14,8 +14,8 @@ the library:
 - the listening check;
 - the warning for similar names;
 - the automatic selection of the clips to keep;
-- the cap on each person's added clips;
-- the recognition check that must exist first.
+- the pools the added clips form, and their limits;
+- the list of who spoke that follows every transcription.
 
 Other concerns live elsewhere:
 
@@ -23,8 +23,8 @@ Other concerns live elsewhere:
   [agent-cli](../../agent-cli/product/transcribing-through-an-agent.md);
 - where clips come from and how the library holds them:
   [the architecture](../architecture/library-growth-architecture.md);
-- how clips are selected and how the check works:
-  [the implementation](../implementation/clip-selection-and-recognition-check.md).
+- how clips are selected:
+  [the implementation](../implementation/clip-selection-and-pools.md).
 
 ## Dependencies
 
@@ -79,8 +79,8 @@ transcript and the new clips to the right person.
   - **Correcting** gives the speaker the right name in the transcript and adds
     the clips to the right person. The clips of the person recognized in their
     place are left as they are; the message says who was taken for whom and
-    suggests listening to that person's clips and running the recognition
-    check.
+    suggests listening to that person's clips and deleting those that are not
+    theirs.
 - **One folder per person.** A name that differs from a folder in the library
   only in case or spacing goes to that folder, and the message says so.
 - **Similar names stop the naming.** A name similar to a person in the library
@@ -104,45 +104,65 @@ transcript and the new clips to the right person.
   others by itself. There is no trial period before the selection is trusted:
   the reasons, and the price of a bad clip reaching the library unseen, are in
   [ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md).
-- **The added clips stay within reach.** The result of a naming gives each
-  person's folder of added clips, where the person may listen to them and
-  delete a bad one. The transcriber opens no window.
-- **Cap on added clips.** A person keeps at most 64 clips added from recordings,
-  a setting a person can change in `trascrittore.ini`. When a naming passes the
-  cap, the transcriber proposes which added clips to remove and removes them
-  only after the person confirms. It proposes clips of the recording with the
-  most clips first, least consistent first, so that different rooms and
-  microphones stay. Clips the person placed by hand are never proposed.
-- **Recognition check first.** A repeatable check of recognition against the
-  PC's own library must exist before this feature ships.
-  - It reports how many wrong names and missed recognitions the current
-    threshold and margin would produce, and suggests a threshold.
-  - It takes as truth only the names a person gave. An automatic name may be
-    wrong, and counting it as right would hide the error.
-  - A person applies the suggestion in `trascrittore.ini`; the check never changes it
-    by itself.
-  - It runs on each PC, since each PC has its own library.
-  - It runs again after a number of additions. For now the person runs it now
-    and then; the number of additions is
-    [deferred](../../../deferred/recognition-check-cadence.md).
+- **A missed recognition starts a new pool.** The clips a naming adds go into
+  one pool of the person's folder:
+  - a person new to the library starts with `registrazioni`;
+  - confirming a recognized person adds to the added pool that recognized
+    them, or to `registrazioni` when a pool made by hand did;
+  - when the person says the transcriber missed someone already in the
+    library, by giving a "Persona N" that person's name, also after the
+    similar-name stop, or by correcting a recognized name to that person, the
+    clips start a new pool. It takes the name of the transcript's folder,
+    written without spaces as
+    [the transcriber writes names](../../../product/transcriber-promise.md#what-an-update-must-not-break),
+    such as `2026-10-29-demo-prodotto-acme`. More clips from the same
+    transcript join that pool, and the person may rename it;
+  - a miss with fewer than 3 full clips, or of a person who already has 8
+    added pools, adds its clips to the person's added pool most similar to
+    them.
+
+  The reasons are in
+  [ADR 0011](../../../adr/0011-a-missed-recognition-starts-a-new-pool.md).
+- **The added clips stay within reach.** The result of a naming gives the
+  folder where each person's clips went, where the person may listen to them
+  and delete a bad one. The transcriber opens no window.
+- **Caps on added clips.** Each pool of added clips keeps at most 16 clips,
+  and each person at most 8 such pools, so at most 128 added clips. A person
+  can change both numbers in `trascrittore.ini`. When a naming takes a pool
+  past its cap, the transcriber proposes which of its clips to remove and
+  removes them only after the person confirms. It proposes clips of the
+  recording with the most clips in that pool first, least consistent first, so
+  that different recordings stay. Clips the person placed by hand are never
+  proposed.
+- **Every transcription shows who spoke.** After each transcription the person
+  sees every speaker, recognized or "Persona N", with how long they spoke,
+  longest first, and is told to say if a name is wrong. Agreeing, or saying
+  nothing, changes nothing and adds no clips, so the list breeds none of the
+  confirmations by habit that
+  [ADR 0005](../../../adr/0005-recognized-speakers-get-clips-only-on-request.md)
+  rules out. Saying that a name is wrong is the person's request to correct it.
+  The list is how wrong names are found: there is no recognition check, and
+  the maintainer tunes the threshold by hand when people report wrong names.
+  The reasons are in
+  [ADR 0010](../../../adr/0010-the-list-of-who-spoke-replaces-the-recognition-check.md).
 
 ## Actors
 
-- **A person** names speakers, listens, confirms, may delete bad clips and
-  applies the threshold.
+- **A person** names speakers, listens, confirms, reads who spoke after each
+  transcription, and may delete bad clips.
 - **An agent** proposes names for anonymous speakers, runs the commands, and
   opens clips in the player on the person's PC, one speaker at a time. It asks the person before answering a similar name or a proposal to
   remove clips, and it confirms or corrects a recognized speaker only when the
   person asked. It cannot judge a voice by ear.
-- **The maintainer** may help a person run the recognition check, as the
-  promise's [Who acts](../../../product/transcriber-promise.md#who-acts) allows.
+- **The maintainer** tunes the recognition threshold by hand when people
+  report wrong names, as the promise's
+  [Who acts](../../../product/transcriber-promise.md#who-acts) allows.
 
 ## Data
 
 The feature handles voice clips cut from the person's own recordings. Voice
 clips are an existing term in `GLOSSARY.md`. It also keeps a record of where
-each added clip came from and prepares listening files. The recognition check reads named transcripts and their recordings.
-Nothing leaves the PC.
+each added clip came from and prepares listening files. Nothing leaves the PC.
 
 ## Preconditions
 
@@ -160,8 +180,8 @@ Nothing leaves the PC.
   neither the transcript nor the library.
 - **The name is similar to a person in the library.** Nothing changes until
   the person chooses that person or confirms a new one.
-- **The naming passes the cap.** The new clips are saved, and the proposed
-  removals wait for the person's confirmation.
+- **The naming takes a pool past its cap.** The new clips are saved, and the
+  proposed removals wait for the person's confirmation.
 
 ## Non-goals
 
@@ -169,8 +189,8 @@ Nothing leaves the PC.
 - **No shared library.**
 - **No consent step,** per ADR 0002.
 - **No score normalization for now.** It was considered and
-  [postponed](../../../deferred/recognition-score-normalization.md): the
-  recognition check comes first, and normalization would be judged with it.
+  [postponed](../../../deferred/recognition-score-normalization.md), and with
+  no recognition check nothing would measure it.
 - **No clips from recognized speakers without the person's request.**
 
 ## Later
@@ -185,6 +205,14 @@ clip at a time, and confirming or correcting recognized speakers, which had
 been postponed too. On 2026-10-22 the user dropped the trial period and the
 folder that naming opened, as
 [ADR 0006](../../../adr/0006-clip-selection-works-without-a-trial.md) records.
+On 2026-10-29 the user replaced the recognition check with the list of who
+spoke, as
+[ADR 0010](../../../adr/0010-the-list-of-who-spoke-replaces-the-recognition-check.md)
+records. The same day the user chose a new pool for each missed recognition,
+with 16 clips per pool and 8 pools per person in place of 64 clips per
+person, as
+[ADR 0011](../../../adr/0011-a-missed-recognition-starts-a-new-pool.md)
+records; this answers the postponed automatic condition pools.
 
 ## Security screening
 

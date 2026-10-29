@@ -50,7 +50,11 @@ def _parser() -> _Parser:
     transcribe = commands.add_parser("transcribe", help="trascrive una registrazione")
     transcribe.add_argument("recording", help="file audio o video (wav, mp3, m4a, mp4, ...)")
     transcribe.add_argument("--speakers", type=_positive_int, default=None, help="numero esatto di persone che parlano")
-    transcribe.add_argument("--out-dir", default=None, help="cartella dei file di uscita (default: quella della registrazione)")
+    transcribe.add_argument(
+        "--out-dir",
+        default=None,
+        help="dove creare la cartella della trascrizione (default: accanto alla registrazione, che poi ci sposta)",
+    )
 
     name = commands.add_parser(
         "name",
@@ -62,7 +66,7 @@ def _parser() -> _Parser:
             "riconosciuta si conferma o si corregge solo quando la persona lo chiede."
         ),
     )
-    name.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
+    name.add_argument("transcript", help="il file '<nome>-trascrizione.json'")
     name.add_argument("names", nargs="*", metavar="ETICHETTA=NOME", help='per esempio "Persona 2=Luca Bianchi"')
     name.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     name.add_argument(
@@ -81,7 +85,7 @@ def _parser() -> _Parser:
     listen = commands.add_parser(
         "listen", help="prepara una clip di una voce da ascoltare prima di nominarla; una voce alla volta"
     )
-    listen.add_argument("transcript", help="il file '<nome> - trascrizione.json'")
+    listen.add_argument("transcript", help="il file '<nome>-trascrizione.json'")
     listen.add_argument("label", metavar="ETICHETTA", help='per esempio "Persona 2"')
     listen.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     listen.add_argument("--out-dir", default=None, help="cartella delle clip da ascoltare")
@@ -93,23 +97,6 @@ def _parser() -> _Parser:
     )
     remove.add_argument("person", help="il nome della cartella della persona in 'voci'")
     remove.add_argument("clips", nargs="+", metavar="CLIP", help="i file proposti da 'name' in 'over_cap'")
-
-    check = commands.add_parser(
-        "check",
-        help="verifica quanto bene la libreria delle voci riconosce le persone, e suggerisce una soglia",
-        description=(
-            "Usa le voci a cui una persona ha dato il nome nelle trascrizioni del PC: senza --pair né --missing, "
-            "le trascrizioni da cui sono state aggiunte clip alla libreria. Non cambia mai trascrittore.ini."
-        ),
-    )
-    check.add_argument(
-        "--pair",
-        nargs=2,
-        action="append",
-        metavar=("TRASCRIZIONE", "REGISTRAZIONE"),
-        help="una trascrizione .json e la sua registrazione; ripetibile",
-    )
-    check.add_argument("--missing", action="append", default=[], help="una trascrizione non trovata, da elencare come saltata")
     return parser
 
 
@@ -146,21 +133,11 @@ def _remove_clips(args: argparse.Namespace) -> dict[str, Any]:
     return library.remove_clips_report(args.person, args.clips)
 
 
-def _check(args: argparse.Namespace) -> dict[str, Any]:
-    from src.transcriber import recognition_check
-
-    # Only a run with nothing given looks for transcripts itself: the launcher always says what it found.
-    given = bool(args.pair or args.missing)
-    pairs = [tuple(pair) for pair in args.pair or []] if given else None
-    return recognition_check.run_check(pairs, missing=args.missing)
-
-
 _COMMANDS = {
     "transcribe": _transcribe,
     "name": _name,
     "listen": _listen,
     "remove-clips": _remove_clips,
-    "check": _check,
 }
 
 

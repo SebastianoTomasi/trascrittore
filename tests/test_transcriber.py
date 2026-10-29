@@ -9,6 +9,7 @@ import pytest
 import src.asr.diarization as diarization
 import src.transcriber.runner as runner
 from src.asr.utils.config import SpeakerSettings, WhisperSettings
+from src.paths import slug
 from src.transcriber.transcript import (
     build_payload,
     display_labels,
@@ -257,11 +258,18 @@ def test_text_rendered_from_the_payload_matches_after_renaming():
     assert "[00:01:06] Luca Bianchi: io direi di rimandare" in text.splitlines()
 
 
-def test_output_paths_sit_next_to_the_audio(tmp_path):
-    txt_path, json_path = runner.output_paths(tmp_path / "Registrazione budget.m4a", None)
-
-    assert txt_path == tmp_path / "Registrazione budget - trascrizione.txt"
-    assert json_path == tmp_path / "Registrazione budget - trascrizione.json"
+@pytest.mark.parametrize(
+    ("name", "written"),
+    [
+        ("2026-10-29 14-30-12", "2026-10-29-14-30-12"),
+        ("Riunione Più Lunga è", "riunione-piu-lunga-e"),
+        ("  Call   (Acme) – finale!! ", "call-acme-finale"),
+        ("2026-10-29-demo-prodotto-acme", "2026-10-29-demo-prodotto-acme"),
+        ("???", "registrazione"),
+    ],
+)
+def test_names_the_transcriber_creates_have_no_spaces(name, written):
+    assert slug(name) == written
 
 
 def _cpu_settings() -> WhisperSettings:
@@ -309,21 +317,25 @@ def fake_pipeline(tmp_path, monkeypatch):
     return calls
 
 
-def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch, capsys, fake_pipeline):
-    audio = tmp_path / "Registrazione di prova è.m4a"
+def test_run_writes_the_transcript_in_its_folder_and_moves_the_recording(tmp_path, monkeypatch, capsys, fake_pipeline):
+    audio = tmp_path / "Registrazione di prova è.M4A"
     audio.write_bytes(b"not decoded: load_audio is faked")
     monkeypatch.setattr("builtins.input", lambda _prompt: pytest.fail("transcribing asks nothing"))
 
     summary = runner.run(str(audio), speakers=3)
 
     assert fake_pipeline == [("transcribe", ".wav"), "align", ("diarize", 3), "recognize"]
-    txt_path = tmp_path / "Registrazione di prova è - trascrizione.txt"
-    json_path = tmp_path / "Registrazione di prova è - trascrizione.json"
+    folder = tmp_path / "registrazione-di-prova-e"
+    moved = folder / "registrazione-di-prova-e.m4a"
+    txt_path = folder / "registrazione-di-prova-e-trascrizione.txt"
+    json_path = folder / "registrazione-di-prova-e-trascrizione.json"
+    assert not audio.exists() and moved.read_bytes() == b"not decoded: load_audio is faked"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["artifacts", "registrazione-di-prova-e"]
     text = txt_path.read_text(encoding="utf-8")
     assert "[00:01:06] Persona 1: io direi di rimandare" in text
     assert "ATTENZIONE: elaborata su CPU" in text
     payload = json.loads(json_path.read_text(encoding="utf-8"))
-    assert payload["recording"] == str(audio)
+    assert (payload["recording"], payload["file"]) == (str(moved), "registrazione-di-prova-e.m4a")
     assert payload["warnings"] and payload["device"] == "cpu"
     assert payload["speakers"][1]["windows"] == [{"start": 66.0, "end": 76.0}, {"start": 76.123, "end": 79.5}]
     assert text == render_payload_text(payload)
@@ -332,6 +344,7 @@ def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch
     assert summary["status"] == "ok"
     assert summary["message"].endswith("Senza nome: Persona 1, Persona 2.")
     assert (summary["transcript_txt"], summary["transcript_json"]) == (str(txt_path), str(json_path))
+    assert (summary["folder"], summary["recording"], summary["recording_moved"]) == (str(folder), str(moved), True)
     assert summary["warnings"] == payload["warnings"]
     assert summary["speakers"] == [
         {"label": "Mario Rossi", "recognized": True, "speech_sec": 71.0},
@@ -343,6 +356,147 @@ def test_run_writes_the_transcript_and_ends_with_a_summary(tmp_path, monkeypatch
     assert output.err.count("ATTENZIONE: nessuna GPU disponibile, elaboro su CPU") == 2
 
 
+def test_run_ends_with_who_spoke_longest_first(tmp_path, capsys, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+
+    summary = runner.run(str(audio))
+
+    assert "Chi ha parlato: Mario Rossi (1 min), Persona 1 (<1 min), Persona 2 (<1 min)." in summary["message"]
+    lines = capsys.readouterr().err.splitlines()
+    first = lines.index("Chi ha parlato:")
+    assert lines[first + 1 : first + 4] == ["  - Mario Rossi: 1 min", "  - Persona 1: <1 min", "  - Persona 2: <1 min"]
+    assert "Se un nome è sbagliato, trascina il file .json su Trascrivi.bat e correggilo." in lines
+
+
+def test_words_no_speaker_could_be_given_are_not_in_who_spoke(tmp_path, monkeypatch, capsys, fake_pipeline):
+    monkeypatch.setitem(globals(), "TURNS", TURNS + [_turn("UNATTRIBUTED", 90.0, 94.0, "mh")])
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+
+    summary = runner.run(str(audio))
+
+    assert "Voce non attribuita" not in summary["message"]
+    lines = capsys.readouterr().err.splitlines()
+    first = lines.index("Chi ha parlato:")
+    assert lines[first + 4] != "  - Voce non attribuita: <1 min"
+    assert not any("Voce non attribuita" in line for line in lines)
+
+
+def test_run_again_inside_the_transcripts_folder_writes_there(tmp_path, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    first = runner.run(str(audio))
+
+    again = runner.run(first["recording"])
+
+    folder = tmp_path / "call"
+    assert (again["folder"], again["recording"], again["recording_moved"]) == (str(folder), str(folder / "call.mp4"), False)
+    assert sorted(path.name for path in folder.iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt", "call.mp4"]
+
+
+@pytest.mark.parametrize(
+    ("folder_on_the_pc", "recording", "written_in"),
+    [
+        # A recording called like the container's mount still gets a folder of its own.
+        ("Registrazioni", "Recording.mp4", "recording"),
+        # A recording in a folder of its name, without a transcript, is transcribed there.
+        ("call", "call.mp4", "."),
+    ],
+)
+def test_run_judges_the_folder_by_its_name_on_the_pc(tmp_path, monkeypatch, fake_pipeline, folder_on_the_pc, recording, written_in):
+    mount = tmp_path / "recording"
+    mount.mkdir()
+    (mount / recording).write_bytes(b"x")
+    monkeypatch.setenv("TRANSCRIBER_HOST_PATHS", f"{mount.as_posix()}=C:\\Utenti\\{folder_on_the_pc}|")
+
+    runner.run(str(mount / recording))
+
+    assert (mount / written_in / f"{Path(recording).stem.lower()}-trascrizione.json").is_file()
+
+
+def test_run_keeps_the_transcript_of_a_recording_deleted_from_its_folder(tmp_path, fake_pipeline):
+    (tmp_path / "call.mp4").write_bytes(b"first")
+    runner.run(str(tmp_path / "call.mp4"))
+    (tmp_path / "call" / "call.mp4").unlink()
+    (tmp_path / "call.mp4").write_bytes(b"second")
+
+    summary = runner.run(str(tmp_path / "call.mp4"))
+
+    assert summary["recording"] == str(tmp_path / "call-2" / "call-2.mp4")
+    assert sorted(path.name for path in (tmp_path / "call").iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt"]
+
+
+def test_run_again_after_a_failed_move_writes_in_the_same_folder(tmp_path, monkeypatch, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    with monkeypatch.context() as busy:
+        busy.setattr(runner.os, "rename", _busy)
+        runner.run(str(audio))
+
+    summary = runner.run(str(audio))
+
+    assert summary["recording"] == str(tmp_path / "call" / "call.mp4") and summary["recording_moved"] is True
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["artifacts", "call"]
+
+
+def test_run_again_says_the_recording_is_already_in_its_folder(tmp_path, capsys, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    first = runner.run(str(audio))
+    capsys.readouterr()
+
+    runner.run(first["recording"])
+
+    assert "La registrazione è già nella cartella." in capsys.readouterr().err
+
+
+def test_run_again_in_a_folder_the_agent_renamed_writes_there(tmp_path, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    runner.run(str(audio))
+    renamed = tmp_path / "2026-10-29-demo-prodotto-acme"
+    (tmp_path / "call").rename(renamed)
+
+    again = runner.run(str(renamed / "call.mp4"))
+
+    assert again["transcript_json"] == str(renamed / "call-trascrizione.json")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["2026-10-29-demo-prodotto-acme", "artifacts"]
+
+
+def test_run_keeps_apart_two_recordings_with_the_same_name(tmp_path, fake_pipeline):
+    (tmp_path / "Call.mp4").write_bytes(b"first")
+    runner.run(str(tmp_path / "Call.mp4"))
+    (tmp_path / "call.mkv").write_bytes(b"second")
+
+    summary = runner.run(str(tmp_path / "call.mkv"))
+
+    assert summary["recording"] == str(tmp_path / "call-2" / "call-2.mkv")
+    assert (tmp_path / "call" / "call.mp4").read_bytes() == b"first"
+
+
+def _busy(_source, _destination):
+    raise PermissionError(13, "Permission denied")
+
+
+def test_run_says_when_the_recording_could_not_move(tmp_path, monkeypatch, capsys, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    monkeypatch.setattr(runner.os, "rename", _busy)
+
+    summary = runner.run(str(audio))
+
+    assert summary["status"] == "ok" and summary["recording_moved"] is False
+    assert audio.exists() and summary["recording"] == str(audio)
+    # No copy is left behind: the recording is either moved or where it was.
+    assert sorted(path.name for path in (tmp_path / "call").iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt"]
+    payload = json.loads((tmp_path / "call" / "call-trascrizione.json").read_text(encoding="utf-8"))
+    assert payload["recording"] == str(audio)
+    stayed = "La registrazione è rimasta dov'era: non ho potuto spostarla nella cartella (forse è aperta in un altro programma)."
+    assert summary["message"].endswith(stayed)
+    assert stayed in capsys.readouterr().err
+
+
 def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
@@ -350,22 +504,24 @@ def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_p
 
     summary = runner.run(str(audio))
 
-    assert summary["transcript_json"] == "C:\\Registrazioni\\call - trascrizione.json"
-    assert summary["recording"] == "C:\\Registrazioni\\call.mp4"
+    assert summary["transcript_json"] == "C:\\Registrazioni\\call\\call-trascrizione.json"
+    assert summary["recording"] == "C:\\Registrazioni\\call\\call.mp4"
 
 
-def test_run_names_the_output_folder_when_one_is_given(tmp_path, monkeypatch, capsys, fake_pipeline):
+def test_run_writes_the_folder_in_the_output_folder_and_leaves_the_recording(tmp_path, monkeypatch, capsys, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
     out_dir = tmp_path / "uscita"
     out_dir.mkdir()
     monkeypatch.setenv("TRANSCRIBER_HOST_PATHS", f"{out_dir.as_posix()}=C:\\Trascrizioni|")
 
-    runner.run(str(audio), out_dir=str(out_dir))
+    summary = runner.run(str(audio), out_dir=str(out_dir))
 
+    assert audio.exists() and summary["recording_moved"] is False
+    assert (out_dir / "call" / "call-trascrizione.json").is_file()
     err = capsys.readouterr().err
-    assert "Nella cartella C:\\Trascrizioni trovi 'call - trascrizione.txt' e 'call - trascrizione.json'." in err
-    assert "Accanto alla registrazione" not in err
+    assert "Nella cartella C:\\Trascrizioni\\call trovi 'call-trascrizione.txt' e 'call-trascrizione.json'." in err
+    assert "La registrazione è rimasta dov'era." in err
 
 
 def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipeline):
@@ -382,7 +538,7 @@ def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipe
     assert summary["status"] == "gpu_out_of_memory"
     assert "batch_size" in summary["message"]
     assert "Memoria della GPU esaurita" in capsys.readouterr().err
-    assert not (tmp_path / "call - trascrizione.txt").exists()
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["call.wav"]
 
 
 def test_run_explains_a_file_without_readable_audio(tmp_path, monkeypatch, capsys, fake_pipeline):

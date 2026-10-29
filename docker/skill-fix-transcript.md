@@ -11,7 +11,7 @@ misheard words, and only those.
 
 ## What to correct
 
-- The files: `<name> - trascrizione.txt`, and `.srt` subtitles made from a transcript. In the `.txt`
+- The files: `<name>-trascrizione.txt`, and `.srt` subtitles made from a transcript. In the `.txt`
   correct only the text after the speaker's name; in an `.srt`, only the text lines. Never change
   a time, a speaker's name, the header of the `.txt` or the numbers of the subtitles. Leave the
   `.json` as the transcriber wrote it.
@@ -27,14 +27,17 @@ Work it out from the context:
 
 - the topic of the recording and this conversation;
 - files the person points to, such as the script of a video;
-- what is on screen, when the recording is a video: extract frames around the doubtful passages
-  and read the terms they show;
+- what is on screen, when the recording is a video: first the frames already kept in the
+  `fotogrammi` folder next to the transcript, then frames you extract around the doubtful passages;
 - a glossary that already exists, such as `GLOSSARY.md` in the project you are working in.
 
 Write no vocabulary file of your own.
 
 To extract frames, use ffmpeg if the PC has it. Otherwise use the one in the transcriber's image,
-with a temporary folder of your own for the frames. Write both folders as Windows paths, such as
+with a temporary folder of your own for the frames. A frame you extract joins `fotogrammi` only when
+the trascrittore skill would keep it: it shows something that goes with what is said, or that the
+transcript lacks, and no kept frame shows nearly the same image. Save it there at full resolution,
+named after its time, such as `00-12-34.jpg`, and delete the temporary folder at the end. Write both folders as Windows paths, such as
 `C:\Users\...` or `C:/Users/...`. From PowerShell:
 
 ```

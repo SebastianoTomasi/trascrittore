@@ -13,9 +13,9 @@ the image itself is built and exported is left to `docker/build.ps1` and
 ## Dependencies
 
 - [Components](../architecture/agent-cli-architecture.md#components) — the
-  `trascrittore` skill describes the launcher's commands, and the
-  `fix-transcript` skill uses the image's ffmpeg, so a skill from another
-  version would describe commands or an image that do not exist.
+  `trascrittore` skill describes the launcher's commands, and both skills run
+  the image's ffmpeg for a video's frames, so a skill from another version
+  would describe commands or an image that do not exist.
 - [Agents](../../../product/transcriber-promise.md#agents) — the promise names
   Claude Code and Codex, so the skills are installed for both.
 - [Non-goals](../../../product/transcriber-promise.md#non-goals) — correcting

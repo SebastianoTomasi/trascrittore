@@ -1,6 +1,6 @@
 ---
 name: trascrittore
-description: Transcribe audio or video recordings (meetings, calls, OBS recordings) in Italian on this PC, with the names of who spoke, give names to the voices left as "Persona N", and, when the user asks, confirm or correct a voice the transcriber recognized. Use when the user asks to transcribe a recording ("trascrivi questa registrazione"), who spoke in it, to name the speakers of a transcript, or to add clips of a person or fix a wrong name ("vorrei aggiungere delle clip di Sebastiano").
+description: Transcribe audio or video recordings (meetings, calls, OBS recordings) in Italian on this PC, with the names of who spoke, keep frames of what a video showed, give names to the voices left as "Persona N", and, when the user asks, confirm or correct a voice the transcriber recognized. Use when the user asks to transcribe a recording ("trascrivi questa registrazione"), who spoke in it, for the frames or images of a video, to name the speakers of a transcript, or to add clips of a person or fix a wrong name ("vorrei aggiungere delle clip di Sebastiano").
 ---
 
 # Trascrittore
@@ -33,25 +33,61 @@ trascrittore transcribe "<recording>" [--speakers N] [--out-dir "<folder>"]
   separates the voices a little better, a wrong one worse.
 - The recording must be on the PC. A file that is only online in OneDrive or Google Drive must be
   downloaded first.
-- The transcript's `.txt` and `.json` files appear next to the recording, or in `--out-dir`.
+- The transcript goes in a folder of its own next to the recording, and the recording moves into
+  it. The transcriber writes the names it creates without spaces: lowercase, without accents, each
+  run of characters other than letters and digits replaced by one hyphen, and no hyphen at either
+  end. So `2026-10-29 14-30-12.mkv` gives the folder
+  `2026-10-29-14-30-12`, holding `2026-10-29-14-30-12-trascrizione.txt`, `...-trascrizione.json` and
+  the recording as `2026-10-29-14-30-12.mkv`. With `--out-dir` the folder goes there and the
+  recording stays where it is. Transcribing a recording that is already in its folder writes there
+  again.
 
-On success the summary gives `transcript_txt`, `transcript_json`, `duration_sec`, `elapsed_sec`,
-`device`, `warnings`, and `speakers`: for each one its `label`, whether it was `recognized`, and
-its `speech_sec`. Say how many speakers were found. If that looks wrong, for example a speaker with
-only a few seconds of speech or fewer speakers than the person expects, propose transcribing again
-with `--speakers N`. When `warnings` is not empty, the transcription ran on the CPU: tell the person
+On success the summary gives `folder`, `recording` (where the recording is now), `recording_moved`,
+`transcript_txt`, `transcript_json`, `duration_sec`, `elapsed_sec`, `device`, `warnings`, and
+`speakers`: for each one its `label`, whether it was `recognized`, and its `speech_sec`. When
+`recording_moved` is false without `--out-dir`, the `message` says why the recording stayed where
+it was: relay it. If the number of speakers looks wrong, for example a speaker with only a few
+seconds of speech or fewer speakers than the person expects, propose transcribing again with
+`--speakers N`. When `warnings` is not empty, the transcription ran on the CPU: tell the person
 why. Read `transcript_txt` for the content. Minutes, summaries and action items are your own work
 on that text.
 
-Then propose correcting the transcript's misheard words with the `fix-transcript` skill. When
-speakers are left as "Persona N", propose it once naming is over instead: `name` rewrites the `.txt`
-and would undo the corrections.
+### Show who spoke, every time
+
+After every transcription, show the person who spoke: one bullet per speaker, longest first, with
+the name in bold and the minutes of speech from `speech_sec`, recognized names and "Persona N"
+alike. Leave out "Voce non attribuita": it holds words no speaker could be given. Then ask whether
+the names are right. For example:
+
+> In questa registrazione hanno parlato:
+> - **Luca Bianchi**: 15 min
+> - **Persona 1**: 5 min
+> - **Mario Rossi**: 3 min
+>
+> I nomi sono giusti?
+
+Ask in your message, without answer buttons. A "yes", or no answer, changes nothing and adds no
+clips. A name the person says is wrong is their request to correct it: follow
+[Confirm or correct a recognized voice](#confirm-or-correct-a-recognized-voice-only-when-asked).
+For "Persona N", propose names as below.
+
+### Then
+
+For a video, title its folder and keep its frames first, as
+[A video: its folder and its frames](#a-video-its-folder-and-its-frames) says, then propose the
+names. Then propose correcting the transcript's misheard words with the `fix-transcript` skill.
+When speakers are left as "Persona N", propose it once naming is over instead: `name` rewrites the
+`.txt` and would undo the corrections.
+
+Never delete the recording, and never propose deleting it. A person who wants to keep only the
+transcript and its frames gives the names first: naming reads the recording to cut voice clips, and
+without it a name adds no clips.
 
 For times inside a turn, for example to cut a video, read `transcript_json`. Each of its `turns` has
 `segments`: one per sentence, split again where the speaker pauses for a second or more, each with
 `start_sec`, `end_sec` and `text`. A gap between two segments is a pause. Use them instead of
-running Whisper yourself. A transcript made by an older version has no `segments`: transcribe the
-recording again with `trascrittore transcribe`.
+running Whisper yourself. A transcript made by an older version has no `segments`, and no folder of
+its own: transcribe the recording again with `trascrittore transcribe`.
 
 When `status` is not `ok`, relay `message`. The statuses:
 
@@ -67,12 +103,69 @@ When `status` is not `ok`, relay `message`. The statuses:
 `{{CARTELLA}}\trascrittore.ini` holds only the settings the person changed, each under its section,
 for example `batch_size = 4` under `[whisper]`. Everything else comes from the transcriber.
 
+## A video: its folder and its frames
+
+When the recording is a video, work in this order, without asking:
+
+1. **Title the folder.** Rename the transcript's folder, `folder` in the summary, to the date of the
+   recording followed by a short Italian title drawn from what was said, written the way the
+   transcriber writes names: `2026-10-29-demo-prodotto-acme`. The date is when the video was
+   recorded, from its file name or, failing that, its file's date. Rename only the folder, never the
+   files inside it, and use the new paths from then on.
+2. **Keep the frames.** A frame is kept for what it shows, not for when: something a speaker shows,
+   such as a product, a service or a slide, or something on screen the transcript lacks, such as
+   names, figures or a document, even if it stays there only a few seconds. Never keep two frames
+   that show nearly the same image, and never keep one only because of its time. Find the
+   candidates with everything you have:
+   - the transcript, where speech refers to the screen ("come vedete qui", "in questa slide", a
+     name being introduced);
+   - the moments where the picture changes;
+   - one frame every 20 seconds, or as often as the person asked for this recording, so that you
+     see the screen where nothing is said about it and nothing changes.
+
+   Look at the candidates small, in a temporary folder of your own: looking at a candidate does not
+   keep it. Save each frame you keep at the video's full resolution in a `fotogrammi` folder inside
+   the transcript's folder, named after its time from the start of the recording, such as
+   `00-12-34.jpg`. Then delete the temporary folder. When nothing on screen is worth keeping, make
+   no `fotogrammi` folder and say so.
+3. **Propose names** for the speakers, using the names shown on screen too.
+
+The transcript's files do not list the frames: do not add them there.
+
+Use ffmpeg if the PC has it. Otherwise use the one in the transcriber's image, writing every folder
+as a Windows path, such as `C:\Users\...` or `C:/Users/...`. From PowerShell:
+
+```
+# The moments where the picture changes: read the pts_time values it prints.
+docker run --rm -v "<transcript folder>:/video:ro" --entrypoint ffmpeg trascrittore:latest -hide_banner -i "/video/<video file>" -vf "select='gt(scene,0.2)',showinfo" -an -f null -
+
+# One small frame every 20 seconds: frame N is at second 20 x (N - 1).
+docker run --rm -v "<transcript folder>:/video:ro" -v "<temporary folder>:/frames" --entrypoint ffmpeg trascrittore:latest -hide_banner -i "/video/<video file>" -vf "fps=1/20,scale=640:-2" /frames/sonda-%04d.jpg
+
+# One small candidate at a given second.
+docker run --rm -v "<transcript folder>:/video:ro" -v "<temporary folder>:/frames" --entrypoint ffmpeg trascrittore:latest -hide_banner -ss <second> -i "/video/<video file>" -frames:v 1 -vf "scale=640:-2" /frames/<second>.jpg
+
+# A frame to keep, at full resolution: create the fotogrammi folder first.
+docker run --rm -v "<transcript folder>:/video" --entrypoint ffmpeg trascrittore:latest -hide_banner -ss <second> -i "/video/<video file>" -frames:v 1 -q:v 2 /video/fotogrammi/00-12-34.jpg
+```
+
+On a screen recording, where slides change little, lower the scene threshold to `0.1` if it finds
+few changes. From Git Bash, put `MSYS_NO_PATHCONV=1` in front of each line. Without it, Git Bash
+rewrites `/video` and `/frames` into folders of its own, and ffmpeg finds no file. With it, a folder
+written as `/c/Users/...` does not reach Docker as a Windows path either, so write the folders as
+above. If ffmpeg cannot run, for example because Docker Desktop is not running, tell the person you
+could not see the screen; the transcript and its folder stay as they are, apart from the title.
+
+A video transcribed by an older version has no folder of its own: when the person asks for its
+frames, propose transcribing it again. The names given earlier are not lost, since those voices are
+in the voice library.
+
 ## Name the voices left as "Persona N"
 
 Only the person gives a name. You may propose one from what a speaker said, for example when others
-address them by name, but use it only after the person confirms it or writes another. Naming a voice
-also adds it to this PC's voice library, so later recordings recognize that person: a wrong name
-would teach the transcriber the wrong voice.
+address them by name, or from a name on screen, but use it only after the person confirms it or
+writes another. Naming a voice also adds it to this PC's voice library, so later recordings
+recognize that person: a wrong name would teach the transcriber the wrong voice.
 
 1. Propose names to the person, quoting the lines that suggest them. Naming is the answer you
    recommend: when you ask with answer buttons, the one that names the voices comes first and
@@ -96,9 +189,21 @@ would teach the transcriber the wrong voice.
    trascrittore name "<transcript.json>" "Persona 2=Nome Cognome" ["Persona 3=Nome Cognome" ...]
    ```
 
-   It rewrites both transcript files with the names, without transcribing again, adds the
-   speaker's clips to `{{CARTELLA}}\voci\<Nome Cognome>\registrazioni`. It opens no window; the
-   speaker's `folder` gives the path.
+   It rewrites both transcript files with the names, without transcribing again, and adds the
+   speaker's clips to a pool, a folder of clips in `{{CARTELLA}}\voci\<Nome Cognome>`. It opens no
+   window; the speaker's `folder` gives the path.
+
+Which pool the clips go to (the Italian messages call a pool "gruppo"):
+
+- A person new to the library starts with the pool `registrazioni`.
+- A "Persona N" named after someone already in the library is a voice the transcriber missed,
+  most likely because this recording sounds different: another microphone, room or call. Its clips
+  start a new pool, a folder named after the transcript's folder, and the speaker's `note` says
+  so: relay it. With only one or two clips, or once the person has 8 pools added by naming, they
+  join the closest pool instead.
+- The person may rename a pool, for example to `macchina`.
+
+Also:
 
 - If the person says the voice is not that person, do not name it.
 - If `listen` found nothing to play, its `note` says why. The name can still be
@@ -114,39 +219,20 @@ would teach the transcriber the wrong voice.
 | status | what happened | what to do |
 |---|---|---|
 | `similar_name` | A name looks like a person already in the library (listed in `similar`). Nothing was saved. | Ask whether they meant that person. Run `name` again with the folder's exact name, or, if it really is a new person, add `--new-person "Nome Cognome"`. |
-| `over_cap` | The names are applied and the clips saved, but a person now has more added clips than the cap. `over_cap` lists, for each person, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
+| `over_cap` | The names are applied and the clips saved, but a pool now holds more than the cap. `over_cap` lists, for each `person` and `pool`, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
 
 ## Confirm or correct a recognized voice, only when asked
 
 A voice the transcriber recognized keeps its name. Never propose to confirm or correct it: do it
-only when the person asks, for example "vorrei aggiungere delle clip di Sebastiano" or "quella non
-era Luca, era Sebastiano".
+only when the person asks, for example "vorrei aggiungere delle clip di Sebastiano", "quella non
+era Luca, era Sebastiano", or by saying a name is wrong in the list of who spoke.
 
 1. Let the person hear it, as above: `trascrittore listen "<transcript.json>" "Sebastiano Tomasi" --open`.
 2. Only after they confirm the voice:
    - **the name is right, add clips**: `trascrittore name "<transcript.json>" --confirm "Sebastiano Tomasi"`.
-     The speaker's `note` says whether new clips help much (recognition was close to the
-     threshold) or little; relay it.
+     The clips join the person's pool that matches the voice best. The speaker's `note` says
+     whether new clips help much (recognition was close to the threshold) or little; relay it.
    - **the name is wrong**: `trascrittore name "<transcript.json>" "Luca Bianchi=Sebastiano Tomasi" --correct`.
-     The transcript takes the right name and the clips go to the right person. The `note` tells
-     the person to listen to the wrong person's clips and delete those that are not theirs, then
-     run the check below; relay it.
-
-## Check recognition
-
-```
-trascrittore check
-```
-
-It does what `Verifica.bat` does; suggest it after a few new names. It measures how well the voice
-library recognizes the voices a person named or confirmed in this PC's transcripts, and suggests a
-threshold.
-
-A voice counts only once a person has named or confirmed it in at least two recordings. The check
-scores each recording without the clips cut from it, so a person whose clips all come from one
-recording is missing from the library there. A name the transcriber gave by itself never counts.
-When the report says there is nothing to measure yet, tell the person this condition. It is no
-reason to propose confirming a recognized voice.
-
-It never changes `trascrittore.ini`: relay the suggestion, and let the person decide whether to write it
-as `threshold` under `[matching]` in `{{CARTELLA}}\trascrittore.ini`.
+     The transcript takes the right name and the clips go to the right person, in a new pool when
+     that person was already in the library. The `note` tells the person to listen to the wrong
+     person's clips and delete those that are not theirs; relay it.

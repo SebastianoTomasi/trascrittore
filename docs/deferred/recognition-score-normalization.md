@@ -10,7 +10,7 @@ cannot remove.
 Recognition gives a speaker a person's name when the best raw similarity score
 reaches `matching.threshold` and beats the second-best person by
 `matching.margin`, as
-[the implementation](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#how-recognition-scores-today)
+[the implementation](../features/voice-library-growth/implementation/clip-selection-and-pools.md#how-recognition-scores-today)
 describes. Score normalization, for example S-norm or AS-norm against a cohort
 of impostor voices, could make the scores of different people comparable and
 the threshold more stable as libraries grow.

@@ -18,7 +18,7 @@ the cache is rebuilt. Past some size they may also stop improving recognition,
 because a pool counts as the mean of its clips.
 
 A cap was listed as an open question in
-[the implementation](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md)
+[the implementation](../features/voice-library-growth/implementation/clip-selection-and-pools.md)
 and as proposed in
 [the Product artifact](../features/voice-library-growth/product/naming-grows-the-library.md).
 On 2026-09-25 the user chose to postpone it. It can wait because the library is
@@ -57,4 +57,4 @@ Settled on 2026-09-29 as recorded above. The rule is in
 [Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules) ("Cap on added clips"), the removable clips in
 [Clips over the cap](../features/voice-library-growth/architecture/library-growth-architecture.md#clips-over-the-cap),
 and the order of removal in
-[Clips over the cap](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#clips-over-the-cap).
+[Clips over the cap](../features/voice-library-growth/implementation/clip-selection-and-pools.md#clips-over-the-cap).
