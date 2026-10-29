@@ -52,7 +52,7 @@ _DURATION_TOLERANCE_SEC = 1.0
 # A confirmed speaker scoring less than this above the threshold gains much from new clips.
 _CLOSE_TO_THRESHOLD = 0.05
 # Listening clips that a session left behind, for example because it stopped before naming, go after a day.
-_FORGOTTEN_CLIP_SEC = 24 * 3600
+_FORGOTTEN_CLIP_AGE_SEC = 24 * 3600
 
 
 def _clean(text: str) -> str:
@@ -459,11 +459,13 @@ def _listening_prefix(transcript: Path) -> str:
 def _clear_listening_clips(out_dir: Path, prefix: str) -> None:
     """
     Delete the transcript's own listening clips, and those any transcript left for more than a day.
+
+    The prefix ignores case, as Windows does: an agent may write the transcript's path in another case.
     """
-    forgotten = time.time() - _FORGOTTEN_CLIP_SEC
+    cutoff = time.time() - _FORGOTTEN_CLIP_AGE_SEC
     for path in out_dir.glob(f"{LISTEN_PREFIX}*.wav"):
         try:
-            if path.name.startswith(prefix) or path.stat().st_mtime < forgotten:
+            if path.name.casefold().startswith(prefix.casefold()) or path.stat().st_mtime < cutoff:
                 path.unlink()
         except OSError:
             # Still open in the player, or just deleted by another session: the next listening tries again.

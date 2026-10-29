@@ -252,13 +252,14 @@ function Clear-ListeningFiles([string]$Transcript) {
     # The listening files are only for the check before naming. Clear only this transcript's: listen names them
     # "ascolta <name> - ..." from "<name>-trascrizione.json", and other sessions may be listening to theirs.
     # The prefix ignores case, as Windows does: an agent may write the transcript's path in another case than for listen.
-    # One still open in the player stays until the next listen.
+    # Clips any transcript left for more than a day go too, as listen does. One still open in the player stays.
     $suffix = '-trascrizione'
     $name = [IO.Path]::GetFileNameWithoutExtension($Transcript)
     if ($name.EndsWith($suffix)) { $name = $name.Substring(0, $name.Length - $suffix.Length) }
     $prefix = "ascolta $name - "
+    $cutoff = (Get-Date).AddDays(-1)
     Get-ChildItem -LiteralPath $ListenDir -Filter 'ascolta *.wav' -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
+        Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or $_.LastWriteTime -lt $cutoff } |
         Remove-Item -ErrorAction SilentlyContinue
 }
 

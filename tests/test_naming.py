@@ -96,14 +96,18 @@ def _library_settings(monkeypatch, **changes):
     monkeypatch.setattr(naming, "get_library_settings", lambda: settings)
 
 
+def _write_transcript(folder: Path, name: str) -> Path:
+    folder.mkdir()
+    transcript = folder / f"{name}-trascrizione.json"
+    transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
+    transcript.with_suffix(".txt").write_text(render_payload_text(_payload()), encoding="utf-8")
+    (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
+    return transcript
+
+
 @pytest.fixture
 def transcript_and_library(tmp_path, monkeypatch):
-    folder = tmp_path / "2026-10-29 Demo Acme"
-    folder.mkdir()
-    transcript = folder / "registrazione-trascrizione.json"
-    transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
-    (folder / "registrazione-trascrizione.txt").write_text(render_payload_text(_payload()), encoding="utf-8")
-    (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
+    transcript = _write_transcript(tmp_path / "2026-10-29 Demo Acme", "registrazione")
     library_dir = tmp_path / "voci"
     library_dir.mkdir()
 
@@ -489,20 +493,11 @@ def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, t
     assert "solo 3 clip" in fourth["note"]
 
 
-def _another_transcript(tmp_path: Path, name: str) -> Path:
-    folder = tmp_path / name
-    folder.mkdir()
-    transcript = folder / f"{name}-trascrizione.json"
-    transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
-    (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
-    return transcript
-
-
 def test_two_transcripts_with_the_same_speaker_keep_their_own_listening_clips(
     transcript_and_library, tmp_path, monkeypatch
 ):
     transcript, _ = transcript_and_library
-    other = _another_transcript(tmp_path, "altra")
+    other = _write_transcript(tmp_path / "altra", "altra")
     out_dir = tmp_path / "ascolto"
     # The other recording sounds different, so a clip overwritten by the other transcript's would show.
     def load_recording(path):
