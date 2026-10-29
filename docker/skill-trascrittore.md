@@ -176,13 +176,19 @@ recognize that person: a wrong name would teach the transcriber the wrong voice.
    trascrittore listen "<transcript.json>" "Persona 2" --open
    ```
 
-   It opens, in the person's default player, one 10-second clip of that speaker: the best one.
-   Clips opened together cannot be told apart, so `listen` takes one speaker only. Tell the person
-   whose voice is playing and the name it would get, for example "this is Persona 2: is it Luca
-   Bianchi?", and wait for the answer before playing the next speaker. You cannot judge a voice by
-   ear. If the person is unsure, play the same speaker's next clip with `--clip 2`, then
-   `--clip 3`; the summary's `clips` says how many there are. A speaker without any full clip is
-   played from their longest stretch (`seconds`), which serves only to recognize the voice.
+   It opens one 10-second clip of that speaker, the best one, in the person's default player. Tell
+   the person whose voice is playing, the file that opened (the last part of the summary's `file`)
+   and the name the voice would get, then wait for the answer before playing the next speaker. For
+   example: "this is Persona 2, in `ascolta registrazione - Persona 2 - 1.wav`: is it Luca
+   Bianchi?". The person checks that the player shows that file, because another session may open
+   its own clip at the same time and the player plays only the last one opened. Clips opened
+   together cannot be told apart, which is also why `listen` takes one speaker only. You cannot
+   judge a voice by ear.
+
+   - If the person is unsure, play the same speaker's next clip with `--clip 2`, then `--clip 3`;
+     the summary's `clips` says how many there are.
+   - A speaker without any full clip is played from their longest stretch (`seconds`), which
+     serves only to recognize the voice.
 3. Only for the voices the person confirmed:
 
    ```

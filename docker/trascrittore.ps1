@@ -248,9 +248,18 @@ function Invoke-Summary($Plan) {
     return $summary
 }
 
-function Clear-ListeningFiles {
-    # The listening files are only for the check before naming. One still open in the player stays until the next listen.
+function Clear-ListeningFiles([string]$Transcript) {
+    # The listening files are only for the check before naming. Clear only this transcript's: listen names them
+    # "ascolta <name> - ..." from "<name>-trascrizione.json", and other sessions may be listening to theirs.
+    # The prefix ignores case, as Windows does: an agent may write the transcript's path in another case than for listen.
+    # Clips any transcript left for more than a day go too, as listen does. One still open in the player stays.
+    $suffix = '-trascrizione'
+    $name = [IO.Path]::GetFileNameWithoutExtension($Transcript)
+    if ($name.EndsWith($suffix)) { $name = $name.Substring(0, $name.Length - $suffix.Length) }
+    $prefix = "ascolta $name - "
+    $cutoff = (Get-Date).AddDays(-1)
     Get-ChildItem -LiteralPath $ListenDir -Filter 'ascolta *.wav' -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) -or $_.LastWriteTime -lt $cutoff } |
         Remove-Item -ErrorAction SilentlyContinue
 }
 
@@ -259,7 +268,7 @@ function Complete-Plan($Plan) {
     $summary = Invoke-Summary $Plan
     foreach ($line in $script:RunLines) { [Console]::Out.WriteLine($line) }
     if ($Plan.Open -and $summary.status -eq 'ok') { Open-ListeningFile $summary }
-    if ($Plan.Command -eq 'name') { Clear-ListeningFiles }
+    if ($Plan.Command -eq 'name') { Clear-ListeningFiles $Plan.Transcript }
     exit $script:RunCode
 }
 
@@ -329,6 +338,7 @@ function New-TranscriptPlan([string]$Command, [object[]]$Arguments) {
     Assert-Docker $Command
 
     $plan = New-Plan $Command
+    $plan.Transcript = $transcript
     $plan.RecordingArgument = $null
     [void]$plan.Arguments.Add($Command)
     Add-TranscriptMounts $plan $transcript $recording -ReadOnly:($Command -ne 'name')
@@ -413,7 +423,7 @@ function Test-VoiceByEar([string]$Transcript, $Item, [object[]]$RecordingOption)
         if ($listening.status -ne 'ok') { return $null }
         if ($listening.file) {
             Write-Line ''
-            Write-Line "Si apre il lettore con la voce di $($Item.Label): ascoltala."
+            Write-Line "Si apre il lettore con la voce di $($Item.Label), nel file '$([IO.Path]::GetFileName($listening.file))': ascoltala."
             Invoke-Item -LiteralPath $listening.file
         }
         elseif ($clip -eq 1) {
@@ -456,7 +466,7 @@ function Invoke-Naming([string]$Transcript, [object[]]$Items, [object[]]$Recordi
             else { $newPeople += $entry.name }
         }
     }
-    Clear-ListeningFiles
+    Clear-ListeningFiles $Transcript
     foreach ($entry in @($named.over_cap | Where-Object { $_ })) {
         $files = @($entry.remove)
         Write-Line ''
@@ -536,11 +546,11 @@ function Invoke-NamingQuestions([string]$Transcript, [bool]$AllowRecognized) {
     $confirmed = @()
     foreach ($item in $items) {
         $heard = Test-VoiceByEar $Transcript $item $recordingOption
-        if ($null -eq $heard) { Clear-ListeningFiles; return 1 }
+        if ($null -eq $heard) { Clear-ListeningFiles $Transcript; return 1 }
         if ($heard) { $confirmed += $item }
         else { Write-Line "Va bene: $($item.Label) resta com'e' e non aggiungo niente alla libreria." }
     }
-    if (-not $confirmed) { Clear-ListeningFiles; return 0 }
+    if (-not $confirmed) { Clear-ListeningFiles $Transcript; return 0 }
     return (Invoke-Naming $Transcript $confirmed $recordingOption)
 }
 
