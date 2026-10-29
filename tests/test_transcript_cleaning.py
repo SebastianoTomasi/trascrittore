@@ -26,6 +26,16 @@ def test_transcript_cleaning_removes_subtitle_boilerplate():
     ]
 
 
+def test_transcript_cleaning_removes_closing_lines_whisper_invents_over_silence():
+    turns = [
+        {"speaker": "A", "text": "Grazie per avermi seguito."},
+        {"speaker": "A", "text": "Va bene, a domani. Grazie a tutti per averci seguito!"},
+        {"speaker": "B", "text": "Mi hai seguito fino a qui?"},
+    ]
+
+    assert _texts(turns) == ["Va bene, a domani.", "Mi hai seguito fino a qui?"]
+
+
 def test_the_echoed_prompt_is_removed_only_where_it_appears_whole(monkeypatch):
     monkeypatch.setattr(transcript_cleaning, "_configured_initial_prompt", lambda: LONG_PROMPT)
     turns = [

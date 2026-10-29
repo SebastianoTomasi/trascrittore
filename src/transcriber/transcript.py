@@ -161,8 +161,18 @@ def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
     )
 
 
-def _warnings(fallback_reason: str | None, unaligned: list[dict[str, float]]) -> list[str]:
+def _loop_warning(loop: dict[str, float]) -> str:
+    return (
+        f"Tra {format_offset(loop['start_sec'])} e {format_offset(loop['end_sec'])} la trascrizione si è inceppata "
+        "ripetendo le stesse sillabe, e lì può mancare del parlato."
+    )
+
+
+def _warnings(
+    fallback_reason: str | None, unaligned: list[dict[str, float]], repetition_loops: list[dict[str, float]]
+) -> list[str]:
     warnings = [f"{_CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else []
+    warnings.extend(_loop_warning(loop) for loop in repetition_loops)
     if unaligned:
         warnings.append(_unaligned_warning(unaligned))
     return warnings
@@ -177,6 +187,7 @@ def build_payload(
     compute_type: str,
     fallback_reason: str | None,
     unaligned: list[dict[str, float]],
+    repetition_loops: list[dict[str, float]],
     elapsed_sec: float,
     turns: list[dict[str, Any]],
     labels: dict[str, str],
@@ -185,7 +196,8 @@ def build_payload(
     """
     Build the machine-readable transcript saved next to the text file.
 
-    `unaligned` holds the stretches whose speech whisperX could not align word by word.
+    `unaligned` holds the stretches whose speech whisperX could not align word by word, and
+    `repetition_loops` the windows where Whisper looped even when decoding them again.
     """
     return {
         "file": source_name,
@@ -193,7 +205,7 @@ def build_payload(
         "duration_sec": round(duration_sec, 1),
         "device": device,
         "compute_type": compute_type,
-        "warnings": _warnings(fallback_reason, unaligned),
+        "warnings": _warnings(fallback_reason, unaligned, repetition_loops),
         "elapsed_sec": round(elapsed_sec, 1),
         "speakers": speakers,
         "turns": [

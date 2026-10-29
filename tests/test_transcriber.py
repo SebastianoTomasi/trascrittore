@@ -34,6 +34,8 @@ TURNS = [
 ]
 # Stretches of speech whisperX could not align word by word.
 UNALIGNED: list[dict[str, float]] = []
+# Windows where Whisper looped even when decoding them again.
+REPETITION_LOOPS: list[dict[str, float]] = []
 
 DIAGNOSTICS = {
     "speakers": {
@@ -195,6 +197,7 @@ def _payload(labels: dict[str, str] | None = None) -> dict[str, object]:
         compute_type="int8",
         fallback_reason="Nessuna GPU NVIDIA disponibile.",
         unaligned=[],
+        repetition_loops=[],
         elapsed_sec=301.26,
         turns=TURNS,
         labels=labels,
@@ -213,6 +216,7 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         compute_type="int8",
         fallback_reason="Nessuna GPU NVIDIA disponibile.",
         unaligned=[],
+        repetition_loops=[],
         elapsed_sec=301.26,
         turns=TURNS,
         labels=labels,
@@ -246,6 +250,7 @@ def test_build_payload_warns_about_speech_that_could_not_be_aligned():
         compute_type="float16",
         fallback_reason=None,
         unaligned=[{"start_sec": 66.0, "end_sec": 80.5}, {"start_sec": 3725.0, "end_sec": 3731.0}],
+        repetition_loops=[],
         elapsed_sec=30.0,
         turns=TURNS,
         labels=labels,
@@ -258,6 +263,36 @@ def test_build_payload_warns_about_speech_that_could_not_be_aligned():
     )
     assert payload["warnings"] == [warning]
     assert f"ATTENZIONE: i{warning[1:]}" in render_payload_text(payload).splitlines()
+
+
+def test_build_payload_warns_about_each_repetition_loop_that_could_not_be_undone():
+    labels = display_labels(TURNS, "ANONYMOUS_")
+
+    payload = build_payload(
+        source_name="a.wav",
+        recording="C:\\Registrazioni\\a.wav",
+        duration_sec=95.0,
+        device="cuda",
+        compute_type="float16",
+        fallback_reason=None,
+        unaligned=[],
+        repetition_loops=[{"start_sec": 381.2, "end_sec": 418.0}, {"start_sec": 3725.0, "end_sec": 3731.0}],
+        elapsed_sec=30.0,
+        turns=TURNS,
+        labels=labels,
+        speakers=speaker_summaries(TURNS, labels, DIAGNOSTICS),
+    )
+
+    assert payload["warnings"] == [
+        "Tra 00:06:21 e 00:06:58 la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        "e lì può mancare del parlato.",
+        "Tra 01:02:05 e 01:02:11 la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        "e lì può mancare del parlato.",
+    ]
+    assert (
+        "ATTENZIONE: tra 00:06:21 e 00:06:58 la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        "e lì può mancare del parlato."
+    ) in render_payload_text(payload).splitlines()
 
 
 def test_rename_speakers_changes_only_the_named_labels():
@@ -323,7 +358,15 @@ def fake_pipeline(tmp_path, monkeypatch):
     """
     calls: list[object] = []
     monkeypatch.setattr(diarization, "load_audio", lambda _path: np.zeros(16000 * 95, dtype=np.float32))
-    monkeypatch.setattr(diarization, "transcribe_recording", lambda path: calls.append(("transcribe", Path(path).suffix)))
+
+    def fake_transcribe(path: str) -> str:
+        calls.append(("transcribe", Path(path).suffix))
+        asr_path = tmp_path / "artifacts" / "asr.json"
+        asr_path.parent.mkdir(exist_ok=True)
+        asr_path.write_text(json.dumps({"segments": [], "repetition_loops": REPETITION_LOOPS}), encoding="utf-8")
+        return str(asr_path)
+
+    monkeypatch.setattr(diarization, "transcribe_recording", fake_transcribe)
     monkeypatch.setattr(diarization, "align_transcript", lambda _path: calls.append("align"))
     monkeypatch.setattr(
         diarization,
@@ -409,6 +452,17 @@ def test_run_warns_about_speech_that_could_not_be_aligned(tmp_path, monkeypatch,
     assert payload["warnings"][1].endswith("orari e chi parla sono approssimativi: 00:01:06–00:01:20.")
     assert summary["warnings"] == payload["warnings"]
     assert Path(summary["transcript_txt"]).read_text(encoding="utf-8") == render_payload_text(payload)
+
+
+def test_run_warns_about_a_repetition_loop_that_could_not_be_undone(tmp_path, monkeypatch, fake_pipeline):
+    monkeypatch.setitem(globals(), "REPETITION_LOOPS", [{"start_sec": 30.0, "end_sec": 58.5}])
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+
+    summary = runner.run(str(audio))
+
+    assert summary["warnings"][1].startswith("Tra 00:00:30 e 00:00:58 la trascrizione si è inceppata")
+    assert "ATTENZIONE: tra 00:00:30 e 00:00:58" in Path(summary["transcript_txt"]).read_text(encoding="utf-8")
 
 
 def test_words_no_speaker_could_be_given_are_not_in_who_spoke(tmp_path, monkeypatch, capsys, fake_pipeline):
