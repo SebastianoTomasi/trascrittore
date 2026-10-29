@@ -14,7 +14,7 @@ TRANSCRIPT_SUFFIX = "-trascrizione"
 ANONYMOUS_DISPLAY_PREFIX = "Persona"
 UNATTRIBUTED_LABEL = "UNATTRIBUTED"
 UNATTRIBUTED_DISPLAY = "Voce non attribuita"
-CPU_WARNING_PREFIX = "Elaborata su CPU invece che su GPU. "
+_CPU_WARNING_PREFIX = "Elaborata su CPU invece che su GPU. "
 # Windows whose voiceprint was, or could have been, computed to recognize a speaker; "skipped" ones failed.
 _USABLE_WINDOW_STATUSES = {"computed", "not_computed"}
 
@@ -119,12 +119,12 @@ def render_text(
     source_name: str,
     duration_sec: float,
     device: str,
-    fallback_reason: str | None,
+    warnings: list[str],
     turns: list[dict[str, Any]],
     labels: dict[str, str],
 ) -> str:
     """
-    Render the human-readable transcript: a short header, then "[HH:MM:SS] Name: text" lines.
+    Render the human-readable transcript: a short header with any warnings, then "[HH:MM:SS] Name: text" lines.
     """
     speech_by_display: dict[str, float] = {}
     for turn in turns:
@@ -139,8 +139,9 @@ def render_text(
         f"Durata: {format_offset(duration_sec)} · Elaborata su {'GPU' if device.startswith('cuda') else 'CPU'}",
         f"Chi parla: {speakers or 'nessuno'}",
     ]
-    if fallback_reason:
-        lines.append(f"ATTENZIONE: elaborata su CPU invece che su GPU. {fallback_reason}")
+    for warning in warnings:
+        # Each warning is a sentence of its own in the JSON file; here it goes on after "ATTENZIONE:".
+        lines.append(f"ATTENZIONE: {warning[:1].lower()}{warning[1:]}")
     lines.append("")
     if not turns:
         lines.append("(Nella registrazione non è stato trovato parlato.)")
@@ -148,6 +149,23 @@ def render_text(
         lines.append(f"[{format_offset(turn['start_sec'])}] {labels[turn['speaker']]}: {turn['text']}")
         lines.append("")
     return "\n".join(lines)
+
+
+def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
+    stretches = ", ".join(
+        f"{format_offset(stretch['start_sec'])}–{format_offset(stretch['end_sec'])}" for stretch in unaligned
+    )
+    return (
+        "In alcuni tratti il parlato non si è potuto allineare parola per parola, "
+        f"e orari e chi parla sono approssimativi: {stretches}."
+    )
+
+
+def _warnings(fallback_reason: str | None, unaligned: list[dict[str, float]]) -> list[str]:
+    warnings = [f"{_CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else []
+    if unaligned:
+        warnings.append(_unaligned_warning(unaligned))
+    return warnings
 
 
 def build_payload(
@@ -158,6 +176,7 @@ def build_payload(
     device: str,
     compute_type: str,
     fallback_reason: str | None,
+    unaligned: list[dict[str, float]],
     elapsed_sec: float,
     turns: list[dict[str, Any]],
     labels: dict[str, str],
@@ -165,6 +184,8 @@ def build_payload(
 ) -> dict[str, Any]:
     """
     Build the machine-readable transcript saved next to the text file.
+
+    `unaligned` holds the stretches whose speech whisperX could not align word by word.
     """
     return {
         "file": source_name,
@@ -172,7 +193,7 @@ def build_payload(
         "duration_sec": round(duration_sec, 1),
         "device": device,
         "compute_type": compute_type,
-        "warnings": [f"{CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else [],
+        "warnings": _warnings(fallback_reason, unaligned),
         "elapsed_sec": round(elapsed_sec, 1),
         "speakers": speakers,
         "turns": [
@@ -189,13 +210,6 @@ def build_payload(
     }
 
 
-def _fallback_reason(payload: dict[str, Any]) -> str | None:
-    for warning in payload.get("warnings", []):
-        if warning.startswith(CPU_WARNING_PREFIX):
-            return warning[len(CPU_WARNING_PREFIX):]
-    return None
-
-
 def render_payload_text(payload: dict[str, Any]) -> str:
     """
     Render the text transcript from its JSON payload, so both files always agree.
@@ -205,7 +219,7 @@ def render_payload_text(payload: dict[str, Any]) -> str:
         source_name=payload["file"],
         duration_sec=float(payload["duration_sec"]),
         device=payload["device"],
-        fallback_reason=_fallback_reason(payload),
+        warnings=payload["warnings"],
         turns=turns,
         labels={turn["speaker"]: turn["speaker"] for turn in turns},
     )

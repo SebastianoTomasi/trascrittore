@@ -48,8 +48,9 @@ On success the summary gives `folder`, `recording` (where the recording is now),
 `recording_moved` is false without `--out-dir`, the `message` says why the recording stayed where
 it was: relay it. If the number of speakers looks wrong, for example a speaker with only a few
 seconds of speech or fewer speakers than the person expects, propose transcribing again with
-`--speakers N`. When `warnings` is not empty, the transcription ran on the CPU: tell the person
-why. Read `transcript_txt` for the content. Minutes, summaries and action items are your own work
+`--speakers N`. Tell the person each entry of `warnings`: one says that the transcription ran on
+the CPU and why; another lists stretches whose speech could not be aligned word by word, so their
+times and speaker are approximate. Read `transcript_txt` for the content. Minutes, summaries and action items are your own work
 on that text.
 
 ### Show who spoke, every time

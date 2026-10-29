@@ -225,7 +225,8 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
             4, "Riconoscimento delle voci", diarization.recognize_speakers, work_copy
         )
         with open(transcript_path, encoding="utf-8") as f:
-            turns = json.load(f)["turns"]
+            transcript = json.load(f)
+        turns = transcript["turns"]
         with open(diagnostics_path, encoding="utf-8") as f:
             diagnostics = json.load(f)
 
@@ -241,6 +242,7 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
         device=settings.device,
         compute_type=settings.compute_type,
         fallback_reason=settings.fallback_reason,
+        unaligned=transcript["unaligned"],
         elapsed_sec=elapsed_sec,
         turns=turns,
         labels=labels,

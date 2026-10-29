@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.asr.utils.output_format import build_transcript_turns, format_offset
+from src.asr.utils.output_format import build_transcript_turns, format_offset, unaligned_stretches
 
 
 def _word(word: str, start: float, end: float, speaker: str) -> dict[str, object]:
@@ -283,6 +283,157 @@ def test_segments_lose_what_cleaning_removes_from_their_turn():
     [turn] = build_transcript_turns(result, "monologo.mp4")
 
     assert _segments(turn) == [(0.0, 0.6, "Buongiorno."), (1.0, 1.3, "Ehm.")]
+
+
+def _aligned(speaker: str, word: str, start: float, end: float) -> dict[str, object]:
+    return {"start": start, "end": end, "speaker": speaker, "text": word, "words": [_word(word, start, end, speaker)]}
+
+
+def _unaligned(start: float, end: float, text: str, speaker: str | None = None) -> dict[str, object]:
+    """
+    A Whisper segment that whisperX could not align: it keeps its text and times, without words.
+    """
+    segment: dict[str, object] = {"start": start, "end": end, "text": text, "words": []}
+    if speaker is not None:
+        segment["speaker"] = speaker
+    return segment
+
+
+def test_speech_whisperx_cannot_align_keeps_its_text_its_times_and_its_speaker():
+    result = {
+        "segments": [
+            _aligned("Alice", "Buongiorno.", 0.0, 0.8),
+            _unaligned(2.0, 5.5, " Nel 2026, 3 progetti  nuovi.", speaker="Bob"),
+            _aligned("Alice", "Bene.", 6.0, 6.5),
+        ]
+    }
+
+    turns = build_transcript_turns(result, "call.m4a")
+
+    assert [(turn["speaker"], turn["start_sec"], turn["end_sec"], turn["text"]) for turn in turns] == [
+        ("Alice", 0.0, 0.8, "Buongiorno."),
+        ("Bob", 2.0, 5.5, "Nel 2026, 3 progetti nuovi."),
+        ("Alice", 6.0, 6.5, "Bene."),
+    ]
+    assert _segments(turns[1]) == [(2.0, 5.5, "Nel 2026, 3 progetti nuovi.")]
+    assert unaligned_stretches(result) == [{"start_sec": 2.0, "end_sec": 5.5}]
+
+
+def test_speech_whisperx_cannot_align_without_a_speaker_is_unattributed():
+    result = {"segments": [_aligned("Alice", "Ciao.", 0.0, 0.8), _unaligned(2.0, 3.0, "2026.")]}
+
+    turns = build_transcript_turns(result, "call.m4a")
+
+    assert [(turn["speaker"], turn["text"]) for turn in turns] == [("Alice", "Ciao."), ("UNATTRIBUTED", "2026.")]
+
+
+def test_speech_whisperx_cannot_align_joins_the_sentence_of_its_speaker():
+    result = {
+        "segments": [
+            _aligned("Alice", "Siamo", 0.0, 0.4),
+            _unaligned(0.5, 2.0, "in 3,", speaker="Alice"),
+            _aligned("Alice", "forse.", 2.1, 2.5),
+        ]
+    }
+
+    [turn] = build_transcript_turns(result, "call.m4a")
+
+    assert _segments(turn) == [(0.0, 2.5, "Siamo in 3, forse.")]
+
+
+def test_unaligned_speech_counts_its_words_for_the_turn_rules():
+    # Four words between two turns of Alice: more than the short flips that smoothing absorbs.
+    result = {
+        "segments": [
+            _aligned("Alice", "Allora.", 0.0, 0.5),
+            _unaligned(1.0, 3.0, "Sì, 2 o 3.", speaker="Bob"),
+            _aligned("Alice", "Bene.", 3.5, 4.0),
+        ]
+    }
+
+    turns = build_transcript_turns(result, "call.m4a")
+
+    assert [turn["speaker"] for turn in turns] == ["Alice", "Bob", "Alice"]
+
+
+def _spoken(speaker: str, start: float, *words: str) -> dict[str, object]:
+    """
+    An aligned Whisper segment of one speaker, half a second per word.
+    """
+    timed = [_word(word, start + i * 0.5, start + i * 0.5 + 0.4, speaker) for i, word in enumerate(words)]
+    return {"start": start, "end": timed[-1]["end"], "speaker": speaker, "text": " ".join(words), "words": timed}
+
+
+def test_unaligned_speech_that_ends_a_sentence_moves_back_only_with_at_most_three_words():
+    result = {
+        "segments": [
+            _spoken("Alice", 0.0, "allora", "prendiamo", "il", "treno", "delle"),
+            _unaligned(2.5, 4.0, "otto e poi 2 o 3.", speaker="Bob"),
+            _spoken("Bob", 4.5, "Sì."),
+        ]
+    }
+
+    turns = build_transcript_turns(result, "call.m4a")
+
+    assert [(turn["speaker"], turn["text"]) for turn in turns] == [
+        ("Alice", "allora prendiamo il treno delle"),
+        ("Bob", "otto e poi 2 o 3. Sì."),
+    ]
+
+
+def test_unaligned_speech_that_starts_a_sentence_moves_forward_only_with_at_most_three_words():
+    result = {
+        "segments": [
+            _spoken("Alice", 0.0, "Bene."),
+            _unaligned(0.5, 2.0, "Poi andiamo a casa", speaker="Alice"),
+            _spoken("Bob", 2.5, "domani", "sera", "con", "calma."),
+        ]
+    }
+
+    turns = build_transcript_turns(result, "call.m4a")
+
+    assert [(turn["speaker"], turn["text"]) for turn in turns] == [
+        ("Alice", "Bene. Poi andiamo a casa"),
+        ("Bob", "domani sera con calma."),
+    ]
+
+
+def test_unaligned_speech_goes_through_cleaning():
+    result = {
+        "segments": [
+            _aligned("Alice", "Ciao.", 0.0, 0.8),
+            _unaligned(9.0, 12.0, "Grazie per la visione.", speaker="Bob"),
+            _unaligned(14.0, 15.0, "Ehm.", speaker="Bob"),
+        ]
+    }
+
+    assert build_transcript_turns(result, "call.m4a") == [_whole_turn("Alice", "00:00:00", 0.0, 0.8, "Ciao.")]
+    assert unaligned_stretches(result) == []
+
+
+def test_a_whisper_segment_without_words_or_text_adds_nothing():
+    result = {"segments": [_aligned("Alice", "Ciao.", 0.0, 0.8), _unaligned(2.0, 3.0, "  ", speaker="Bob")]}
+
+    assert build_transcript_turns(result, "call.m4a") == [_whole_turn("Alice", "00:00:00", 0.0, 0.8, "Ciao.")]
+    assert unaligned_stretches(result) == []
+
+
+def test_unaligned_stretches_lists_each_one_in_order():
+    result = {
+        "segments": [
+            _unaligned(2.0, 5.5, "Nel 2026."),
+            _aligned("Alice", "Ciao.", 6.0, 6.8),
+            _unaligned(20.0, 21.25, "3, 2, 1."),
+        ]
+    }
+
+    assert unaligned_stretches(result) == [{"start_sec": 2.0, "end_sec": 5.5}, {"start_sec": 20.0, "end_sec": 21.25}]
+
+
+def test_a_fully_aligned_result_has_no_unaligned_stretches():
+    result = {"segments": [_aligned("Alice", "Ciao.", 0.0, 0.8), _aligned("Bob", "Salve.", 1.0, 1.5)]}
+
+    assert unaligned_stretches(result) == []
 
 
 def test_format_offset_pads_and_clamps():
