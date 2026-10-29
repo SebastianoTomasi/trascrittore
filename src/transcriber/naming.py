@@ -570,48 +570,48 @@ def prepare_listening(
     )
 
 
-def _seconds(time: str) -> float:
+def _seconds(at: str) -> float:
     """
     Read a time written as HH:MM:SS, MM:SS or seconds, with decimals after a point or, as in an .srt, a comma.
     """
-    match = _TIME_RE.fullmatch(time.strip())
+    match = _TIME_RE.fullmatch(at.strip())
     if match is None:
         raise CommandError(
             INVALID_ARGUMENTS,
-            f"Tempo non valido: '{time}'. Scrivilo come HH:MM:SS, MM:SS o in secondi, per esempio 00:04:09.62.",
+            f"Tempo non valido: '{at}'. Scrivilo come HH:MM:SS, MM:SS o in secondi, per esempio 00:04:09.62.",
         )
     sign, hours, minutes, seconds = match.groups()
     total = int(hours or 0) * 3600 + int(minutes or 0) * 60 + float(seconds.replace(",", "."))
     return -total if sign else total
 
 
-def _passage(payload: dict[str, Any], at: float) -> dict[str, Any] | None:
+def _passage(payload: dict[str, Any], seconds: float) -> dict[str, Any] | None:
     """
     Return the segment that holds the time or, when the time falls in a pause, the nearest one.
     """
     segments = [segment for turn in payload["turns"] for segment in turn.get("segments", [])]
     return min(
         segments,
-        key=lambda segment: max(float(segment["start_sec"]) - at, at - float(segment["end_sec"]), 0.0),
+        key=lambda segment: max(float(segment["start_sec"]) - seconds, seconds - float(segment["end_sec"]), 0.0),
         default=None,
     )
 
 
-def _prepare_listening_at(transcript: str, time: str, recording: str | None, out_dir: str | None) -> dict[str, Any]:
-    at = _seconds(time)
+def _prepare_listening_at(transcript: str, at: str, recording: str | None, out_dir: str | None) -> dict[str, Any]:
+    seconds = _seconds(at)
     transcript_path = Path(transcript)
     payload = load_transcript(transcript_path)
     duration = float(payload["duration_sec"])
-    if not 0 <= at <= duration:
+    if not 0 <= seconds <= duration:
         raise CommandError(
-            INVALID_ARGUMENTS, f"Il tempo {time} è fuori dalla registrazione, che dura {format_offset(duration)}."
+            INVALID_ARGUMENTS, f"Il tempo {at} è fuori dalla registrazione, che dura {format_offset(duration)}."
         )
     folder = _listening_folder(out_dir)
     prefix = _listening_prefix(transcript_path)
     _clear_listening_clips(folder, prefix)
 
     heard: dict[str, Any] = {"file": None, "start": None, "end": None, "text": None, "note": None}
-    segment = _passage(payload, at)
+    segment = _passage(payload, seconds)
     if segment is None:
         heard["note"] = (
             "La trascrizione è di una versione precedente, senza i tempi delle frasi: "
@@ -643,7 +643,7 @@ def _prepare_listening_at(transcript: str, time: str, recording: str | None, out
 
 def prepare_listening_at(
     transcript: str,
-    time: str,
+    at: str,
     *,
     recording: str | None = None,
     out_dir: str | None = None,
@@ -656,6 +656,6 @@ def prepare_listening_at(
     """
     return guarded(
         LISTEN_COMMAND,
-        lambda: _prepare_listening_at(transcript, time, recording, out_dir),
+        lambda: _prepare_listening_at(transcript, at, recording, out_dir),
         failed="Non sono riuscito a preparare il passaggio da ascoltare",
     )
