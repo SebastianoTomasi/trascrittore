@@ -284,14 +284,12 @@ def test_build_payload_warns_about_each_repetition_loop_that_could_not_be_undone
     )
 
     assert payload["warnings"] == [
-        "Tra 00:06:21 e 00:06:58 la trascrizione si è inceppata ripetendo le stesse sillabe, "
-        "e lì può mancare del parlato.",
-        "Tra 01:02:05 e 01:02:11 la trascrizione si è inceppata ripetendo le stesse sillabe, "
-        "e lì può mancare del parlato.",
+        "In alcuni tratti la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        "e lì può mancare del parlato: 00:06:21–00:06:58, 01:02:05–01:02:11."
     ]
     assert (
-        "ATTENZIONE: tra 00:06:21 e 00:06:58 la trascrizione si è inceppata ripetendo le stesse sillabe, "
-        "e lì può mancare del parlato."
+        "ATTENZIONE: in alcuni tratti la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        "e lì può mancare del parlato: 00:06:21–00:06:58, 01:02:05–01:02:11."
     ) in render_payload_text(payload).splitlines()
 
 
@@ -461,8 +459,9 @@ def test_run_warns_about_a_repetition_loop_that_could_not_be_undone(tmp_path, mo
 
     summary = runner.run(str(audio))
 
-    assert summary["warnings"][1].startswith("Tra 00:00:30 e 00:00:58 la trascrizione si è inceppata")
-    assert "ATTENZIONE: tra 00:00:30 e 00:00:58" in Path(summary["transcript_txt"]).read_text(encoding="utf-8")
+    assert summary["warnings"][1].startswith("In alcuni tratti la trascrizione si è inceppata")
+    assert summary["warnings"][1].endswith(": 00:00:30–00:00:58.")
+    assert "ATTENZIONE: in alcuni tratti la trascrizione si è inceppata" in Path(summary["transcript_txt"]).read_text(encoding="utf-8")
 
 
 def test_words_no_speaker_could_be_given_are_not_in_who_spoke(tmp_path, monkeypatch, capsys, fake_pipeline):

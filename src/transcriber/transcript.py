@@ -151,20 +151,23 @@ def render_text(
     return "\n".join(lines)
 
 
-def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
-    stretches = ", ".join(
-        f"{format_offset(stretch['start_sec'])}–{format_offset(stretch['end_sec'])}" for stretch in unaligned
+def _stretches(stretches: list[dict[str, float]]) -> str:
+    return ", ".join(
+        f"{format_offset(stretch['start_sec'])}–{format_offset(stretch['end_sec'])}" for stretch in stretches
     )
+
+
+def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
     return (
         "In alcuni tratti il parlato non si è potuto allineare parola per parola, "
-        f"e orari e chi parla sono approssimativi: {stretches}."
+        f"e orari e chi parla sono approssimativi: {_stretches(unaligned)}."
     )
 
 
-def _loop_warning(loop: dict[str, float]) -> str:
+def _loop_warning(repetition_loops: list[dict[str, float]]) -> str:
     return (
-        f"Tra {format_offset(loop['start_sec'])} e {format_offset(loop['end_sec'])} la trascrizione si è inceppata "
-        "ripetendo le stesse sillabe, e lì può mancare del parlato."
+        "In alcuni tratti la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        f"e lì può mancare del parlato: {_stretches(repetition_loops)}."
     )
 
 
@@ -172,7 +175,8 @@ def _warnings(
     fallback_reason: str | None, unaligned: list[dict[str, float]], repetition_loops: list[dict[str, float]]
 ) -> list[str]:
     warnings = [f"{_CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else []
-    warnings.extend(_loop_warning(loop) for loop in repetition_loops)
+    if repetition_loops:
+        warnings.append(_loop_warning(repetition_loops))
     if unaligned:
         warnings.append(_unaligned_warning(unaligned))
     return warnings

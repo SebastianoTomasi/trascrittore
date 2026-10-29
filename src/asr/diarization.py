@@ -10,7 +10,7 @@ import whisperx
 from faster_whisper.transcribe import get_compression_ratio
 from whisperx.audio import SAMPLE_RATE
 
-from src.asr.transcript_cleaning import clean_transcript_turns
+from src.asr.transcript_cleaning import clean_transcript_turns, is_obvious_transcript_noise
 from src.asr.utils.config import (
     ensure_data_directories,
     get_diarization_settings,
@@ -277,7 +277,8 @@ def recover_repetition_loops(model: Any, audio: np.ndarray, segments: list[dict[
     whisperX's batched pipeline decodes each window once and never checks the compression ratio, so a loop
     runs to the decoder's maximum length and takes the rest of the window's speech with it. faster-whisper's
     sequential decoding checks it and falls back to higher temperatures. The new text replaces the looping
-    one when it holds speech and repeats itself less. Windows under the threshold are left as they are.
+    one when it holds speech and repeats itself less. Windows under the threshold are left as they are, and
+    a loop of invented boilerplate, which cleaning removes, is not returned.
     """
     options = model.options
     threshold = options.compression_ratio_threshold
@@ -310,7 +311,7 @@ def recover_repetition_loops(model: Any, audio: np.ndarray, segments: list[dict[
             end=segment["end"],
             recovered=not looping,
         )
-        if looping:
+        if looping and not is_obvious_transcript_noise(segment["text"]):
             unrecovered.append({"start_sec": segment["start"], "end_sec": segment["end"]})
     return unrecovered
 

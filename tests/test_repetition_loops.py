@@ -85,6 +85,14 @@ def test_decoding_again_that_finds_no_speech_keeps_the_text_heard_first():
     assert segments[1]["text"] == LOOP
 
 
+def test_a_loop_of_invented_boilerplate_is_not_reported():
+    boilerplate = "Grazie per la visione. " * 20
+    pipeline = _pipeline(boilerplate)
+    segments = [{"text": boilerplate, "start": 381.2, "end": 418.0}]
+
+    assert diarization.recover_repetition_loops(pipeline, AUDIO, segments) == []
+
+
 def test_windows_under_the_threshold_are_not_decoded_again():
     pipeline = _pipeline()
     segments = [
