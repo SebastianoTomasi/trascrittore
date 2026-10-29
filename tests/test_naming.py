@@ -498,10 +498,18 @@ def _another_transcript(tmp_path: Path, name: str) -> Path:
     return transcript
 
 
-def test_two_transcripts_with_the_same_speaker_keep_their_own_listening_clips(transcript_and_library, tmp_path):
+def test_two_transcripts_with_the_same_speaker_keep_their_own_listening_clips(
+    transcript_and_library, tmp_path, monkeypatch
+):
     transcript, _ = transcript_and_library
     other = _another_transcript(tmp_path, "altra")
     out_dir = tmp_path / "ascolto"
+    # The other recording sounds different, so a clip overwritten by the other transcript's would show.
+    def load_recording(path):
+        loudness = 0.5 if Path(path).parent == other.parent else 0.0
+        return np.full(int(DURATION_SEC * 16000), loudness, dtype=np.float32)
+
+    monkeypatch.setattr(voices, "load_recording", load_recording)
 
     first = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
     heard = (out_dir / "ascolta registrazione - Persona 1 - 1.wav").read_bytes()

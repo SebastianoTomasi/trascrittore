@@ -251,9 +251,11 @@ function Invoke-Summary($Plan) {
 function Clear-ListeningFiles([string]$Transcript) {
     # The listening files are only for the check before naming. Clear only this transcript's: listen names them
     # "ascolta <name> - ..." from "<name>-trascrizione.json", and other sessions may be listening to theirs.
+    # The prefix ignores case, as Windows does: an agent may write the transcript's path in another case than for listen.
     # One still open in the player stays until the next listen.
+    $suffix = '-trascrizione'
     $name = [IO.Path]::GetFileNameWithoutExtension($Transcript)
-    if ($name.EndsWith('-trascrizione')) { $name = $name.Substring(0, $name.Length - '-trascrizione'.Length) }
+    if ($name.EndsWith($suffix)) { $name = $name.Substring(0, $name.Length - $suffix.Length) }
     $prefix = "ascolta $name - "
     Get-ChildItem -LiteralPath $ListenDir -Filter 'ascolta *.wav' -ErrorAction SilentlyContinue |
         Where-Object { $_.Name.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase) } |
