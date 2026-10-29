@@ -107,7 +107,7 @@ def speaker_summaries(
     return summaries
 
 
-def _format_minutes(seconds: float) -> str:
+def format_minutes(seconds: float) -> str:
     minutes = round(seconds / 60)
     return f"{minutes} min" if minutes >= 1 else "<1 min"
 
@@ -129,7 +129,7 @@ def render_text(
         display = labels[turn["speaker"]]
         speech_by_display[display] = speech_by_display.get(display, 0.0) + _speech_sec([turn])
     speakers = ", ".join(
-        f"{name} ({_format_minutes(speech_by_display[name])})" for name in speaker_names(labels)
+        f"{name} ({format_minutes(speech_by_display[name])})" for name in speaker_names(labels)
     )
 
     lines = [
@@ -222,8 +222,8 @@ def rename_speakers(payload: dict[str, Any], names: dict[str, str]) -> dict[str,
     """
     Return a copy of the transcript payload with displayed labels replaced ("Persona 2" -> "Luca Bianchi").
 
-    Renamed speakers are marked "named": a person gave that name, unlike a recognized one, so the
-    recognition check can trust it. Everything else stays as it was.
+    Renamed speakers are marked "named": a person gave that name, unlike a recognized one.
+    Everything else stays as it was.
     """
     renamed = dict(payload)
     renamed["speakers"] = [

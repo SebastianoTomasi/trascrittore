@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,17 @@ def join_path(base: str | os.PathLike[str], *parts: str) -> str:
 def safe_filename_part(value: str) -> str:
     cleaned = "".join(char if char.isalnum() or char in "_.-" else "_" for char in value.strip())
     return cleaned.strip("._") or "value"
+
+
+def slug(value: str) -> str:
+    """
+    Write a name the way the transcriber writes the names it creates: no accents, lowercase, no spaces.
+
+    Every run of characters other than a-z and 0-9 becomes one hyphen, so "2026-10-29 14-30-12" gives
+    "2026-10-29-14-30-12". A name with nothing left becomes "registrazione".
+    """
+    decomposed = "".join(char for char in unicodedata.normalize("NFKD", value) if not unicodedata.combining(char))
+    return re.sub(r"[^a-z0-9]+", "-", decomposed.lower()).strip("-") or "registrazione"
 
 
 @dataclass(frozen=True)

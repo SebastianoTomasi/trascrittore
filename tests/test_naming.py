@@ -53,7 +53,11 @@ def _payload(*, windows: bool = True) -> dict[str, object]:
 
 
 class FakeVoiceprints:
-    """Every window sounds the same, except those starting at the seconds listed in `outliers`."""
+    """
+    Every window sounds the same, except those starting at the seconds listed in `outliers`.
+
+    A clip in the library sounds like the speaker when its file holds b"near", and unlike them otherwise.
+    """
 
     outliers: set[float] = set()
 
@@ -63,14 +67,40 @@ class FakeVoiceprints:
             for window in windows
         ]
 
+    def of_clip(self, path):
+        near = Path(path).read_bytes() == b"near"
+        return np.asarray([1.0, 0.0] if near else [0.0, 1.0], dtype=np.float32)
+
+
+def _pool(folder: Path, *, sound: bytes = b"far", added: bool = True, clips: int = 3) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    names = [f"altra-00-00-0{second}.wav" for second in range(1, clips + 1)]
+    for name in names:
+        (folder / name).write_bytes(sound)
+    if added:
+        record = {name: {"recording_file": "Altra.m4a", "consistency": 0.8} for name in names}
+        (folder / "clip.json").write_text(json.dumps(record), encoding="utf-8")
+    return folder
+
+
+def _library_settings(monkeypatch, **changes):
+    selection = naming.get_library_settings()
+    settings = library.LibrarySettings(
+        keep_clips=changes.get("keep_clips", selection.keep_clips),
+        min_consistency=changes.get("min_consistency", selection.min_consistency),
+        max_clips=changes.get("max_clips", selection.max_clips),
+        max_pools=changes.get("max_pools", selection.max_pools),
+    )
+    monkeypatch.setattr(naming, "get_library_settings", lambda: settings)
+
 
 @pytest.fixture
 def transcript_and_library(tmp_path, monkeypatch):
-    folder = tmp_path / "Registrazioni"
+    folder = tmp_path / "2026-10-29 Demo Acme"
     folder.mkdir()
-    transcript = folder / "Registrazione - trascrizione.json"
+    transcript = folder / "registrazione-trascrizione.json"
     transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
-    (folder / "Registrazione - trascrizione.txt").write_text(render_payload_text(_payload()), encoding="utf-8")
+    (folder / "registrazione-trascrizione.txt").write_text(render_payload_text(_payload()), encoding="utf-8")
     (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
     library_dir = tmp_path / "voci"
     library_dir.mkdir()
@@ -104,13 +134,13 @@ def test_naming_rewrites_both_files_and_adds_the_speakers_clips(transcript_and_l
 
     pool = library_dir / "Luca Bianchi" / "registrazioni"
     assert sorted(path.name for path in pool.glob("*.wav")) == [
-        "Registrazione 00.00.03.wav",
-        "Registrazione 00.00.13.wav",
-        "Registrazione 00.00.23.wav",
+        "registrazione-00-00-03.wav",
+        "registrazione-00-00-13.wav",
+        "registrazione-00-00-23.wav",
     ]
     record = json.loads((pool / "clip.json").read_text(encoding="utf-8"))
-    assert record["Registrazione 00.00.03.wav"]["transcript"] == str(transcript)
-    assert record["Registrazione 00.00.03.wav"]["label"] == "Persona 1"
+    assert record["registrazione-00-00-03.wav"]["transcript"] == str(transcript)
+    assert record["registrazione-00-00-03.wav"]["label"] == "Persona 1"
     assert summary["named"] == [
         {
             "label": "Persona 1",
@@ -189,7 +219,7 @@ def test_only_the_selected_clips_are_saved_from_the_first_naming(transcript_and_
     summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
 
     pool = library_dir / "Luca Bianchi" / "registrazioni"
-    assert sorted(path.name for path in pool.glob("*.wav")) == ["Registrazione 00.00.03.wav", "Registrazione 00.00.23.wav"]
+    assert sorted(path.name for path in pool.glob("*.wav")) == ["registrazione-00-00-03.wav", "registrazione-00-00-23.wav"]
     assert summary["named"][0]["clips_added"] == 2
     assert "prova" not in summary["message"]
 
@@ -227,7 +257,7 @@ def test_a_refused_name_leaves_the_files_as_they_were(transcript_and_library, pa
 
 
 def test_naming_a_missing_transcript_is_refused(tmp_path):
-    summary = naming.name_speakers(str(tmp_path / "manca - trascrizione.json"), ["Persona 1=Luca Bianchi"])
+    summary = naming.name_speakers(str(tmp_path / "manca-trascrizione.json"), ["Persona 1=Luca Bianchi"])
 
     assert summary["status"] == "file_not_found"
 
@@ -243,7 +273,7 @@ def test_a_recognized_speaker_the_person_confirms_gets_more_clips(transcript_and
     assert (result["action"], result["name"], result["clips_added"]) == ("confirmed", "Mario Rossi", 1)
     assert (result["score"], result["threshold"]) == (0.7, naming.get_matching_settings().threshold)
     assert "0.700" in result["note"] and "aiuteranno poco" in result["note"]
-    assert (library_dir / "Mario Rossi" / "registrazioni" / "Registrazione 00.00.40.wav").is_file()
+    assert (library_dir / "Mario Rossi" / "registrazioni" / "registrazione-00-00-40.wav").is_file()
     payload, _ = _read(transcript)
     assert payload["speakers"][0]["label"] == "Mario Rossi" and payload["speakers"][0]["named"] is True
 
@@ -298,16 +328,9 @@ def test_a_similar_name_stops_the_naming_until_the_person_decides(transcript_and
     assert (library_dir / "Luca Bianco" / "registrazioni").is_dir()
 
 
-def test_passing_the_cap_proposes_clips_to_remove(transcript_and_library, monkeypatch):
+def test_passing_a_pools_cap_proposes_clips_to_remove(transcript_and_library, monkeypatch):
     transcript, library_dir = transcript_and_library
-    selection = naming.get_library_settings()
-    monkeypatch.setattr(
-        naming,
-        "get_library_settings",
-        lambda: library.LibrarySettings(
-            keep_clips=selection.keep_clips, min_consistency=selection.min_consistency, max_clips=4
-        ),
-    )
+    _library_settings(monkeypatch, max_clips=4, max_pools=1)
     pool = library_dir / "Luca Bianchi" / "registrazioni"
     pool.mkdir(parents=True)
     record = {}
@@ -324,11 +347,111 @@ def test_passing_the_cap_proposes_clips_to_remove(transcript_and_library, monkey
     assert summary["over_cap"] == [
         {
             "person": "Luca Bianchi",
+            "pool": str(pool),
             "cap": 4,
-            "remove": ["Altra 00.00.03.wav", "Altra 00.00.02.wav", "Registrazione 00.00.03.wav"],
+            "remove": ["Altra 00.00.03.wav", "Altra 00.00.02.wav", "registrazione-00-00-03.wav"],
         }
     ]
     assert len(list(pool.glob("*.wav"))) == 8
+
+
+def test_a_missed_recognition_starts_a_pool_named_after_the_transcripts_folder(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    _pool(library_dir / "Luca Bianchi", added=False)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    pool = library_dir / "Luca Bianchi" / "2026-10-29-demo-acme"
+    assert sorted(path.name for path in pool.glob("*.wav")) == [
+        "registrazione-00-00-03.wav",
+        "registrazione-00-00-13.wav",
+        "registrazione-00-00-23.wav",
+    ]
+    assert (pool / "clip.json").is_file()
+    assert summary["named"][0]["folder"] == str(pool)
+    assert "gruppo nuovo" in summary["named"][0]["note"]
+    assert not (library_dir / "Luca Bianchi" / "registrazioni").exists()
+
+
+def test_a_corrected_name_of_someone_in_the_library_is_a_miss_too(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    payload = _payload()
+    payload["speakers"][0]["windows"] = [{"start": 40.0, "end": 50.0}, {"start": 50.0, "end": 60.0}, {"start": 60.0, "end": 70.0}]
+    transcript.write_text(json.dumps(payload), encoding="utf-8")
+    _pool(library_dir / "Luca Bianchi" / "registrazioni")
+
+    summary = naming.name_speakers(str(transcript), ["Mario Rossi=Luca Bianchi"], correct=True)
+
+    assert summary["named"][0]["folder"] == str(library_dir / "Luca Bianchi" / "2026-10-29-demo-acme")
+
+
+def test_a_miss_with_few_clips_joins_the_closest_added_pool(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    FakeVoiceprints.outliers = {13.0}
+    person = library_dir / "Luca Bianchi"
+    _pool(person / "registrazioni", sound=b"far")
+    _pool(person / "2026-01-01-call", sound=b"near")
+    _pool(person / "macchina", sound=b"near", added=False)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    assert summary["named"][0]["folder"] == str(person / "2026-01-01-call")
+    assert len(list((person / "2026-01-01-call").glob("registrazione-*.wav"))) == 2
+    assert sorted(path.name for path in person.iterdir()) == ["2026-01-01-call", "macchina", "registrazioni"]
+
+
+def test_a_miss_past_the_limit_of_pools_joins_the_closest_added_pool(transcript_and_library, monkeypatch):
+    transcript, library_dir = transcript_and_library
+    _library_settings(monkeypatch, max_pools=2)
+    person = library_dir / "Luca Bianchi"
+    _pool(person / "registrazioni", sound=b"near")
+    _pool(person / "2026-01-01-call", sound=b"far")
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    assert summary["named"][0]["folder"] == str(person / "registrazioni")
+    assert sorted(path.name for path in person.iterdir()) == ["2026-01-01-call", "registrazioni"]
+
+
+def test_a_miss_without_added_pools_and_few_clips_starts_registrazioni(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    FakeVoiceprints.outliers = {13.0}
+    _pool(library_dir / "Luca Bianchi" / "macchina", sound=b"near", added=False)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    assert summary["named"][0]["folder"] == str(library_dir / "Luca Bianchi" / "registrazioni")
+
+
+def test_a_folder_made_by_hand_keeps_its_name_from_a_new_pool(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    _pool(library_dir / "Luca Bianchi" / "2026-10-29-demo-acme", added=False)
+
+    summary = naming.name_speakers(str(transcript), ["Persona 1=Luca Bianchi"])
+
+    assert summary["named"][0]["folder"] == str(library_dir / "Luca Bianchi" / "2026-10-29-demo-acme-2")
+
+
+def test_a_confirmation_joins_the_added_pool_closest_to_the_speaker(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    person = library_dir / "Mario Rossi"
+    _pool(person / "registrazioni", sound=b"far")
+    _pool(person / "2026-01-01-call", sound=b"near")
+
+    summary = naming.name_speakers(str(transcript), [], confirm=["Mario Rossi"])
+
+    assert summary["named"][0]["folder"] == str(person / "2026-01-01-call")
+
+
+def test_a_confirmation_closest_to_a_folder_made_by_hand_joins_registrazioni(transcript_and_library):
+    transcript, library_dir = transcript_and_library
+    person = library_dir / "Mario Rossi"
+    _pool(person / "2026-01-01-call", sound=b"far")
+    _pool(person, sound=b"near", added=False)
+
+    summary = naming.name_speakers(str(transcript), [], confirm=["Mario Rossi"])
+
+    assert summary["named"][0]["folder"] == str(person / "registrazioni")
 
 
 def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, tmp_path):

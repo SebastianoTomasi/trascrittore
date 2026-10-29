@@ -1,5 +1,5 @@
 """
-Voiceprints of stretches of a recording, or of whole voice clips, for naming and for the recognition check.
+Voiceprints of stretches of a recording, or of whole voice clips, for naming.
 
 They run on the CPU: a transcription may be using the GPU at the same time, and a few dozen
 10-second stretches take seconds there.

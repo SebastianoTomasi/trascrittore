@@ -10,7 +10,7 @@ from src.asr.utils.config import get_paths_settings
 from src.utils.logging_setup import get_logger, log_event, log_warning
 
 
-_AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".opus"}
+AUDIO_EXTS = {".wav", ".mp3", ".m4a", ".flac", ".ogg", ".aac", ".opus"}
 logger = get_logger("asr.voice_library")
 
 
@@ -37,7 +37,7 @@ ROOT_POOL = "."
 
 
 def _is_audio_file(path: str) -> bool:
-    return os.path.isfile(path) and os.path.splitext(path)[1].lower() in _AUDIO_EXTS
+    return os.path.isfile(path) and os.path.splitext(path)[1].lower() in AUDIO_EXTS
 
 
 def scan_voice_library(voice_library_dir: str) -> LibraryPools:
@@ -82,7 +82,7 @@ def scan_voice_library(voice_library_dir: str) -> LibraryPools:
             for root, _, files in os.walk(pool_entry.path):
                 for fn in sorted(files, key=str.lower):
                     ext = os.path.splitext(fn)[1].lower()
-                    if ext in _AUDIO_EXTS:
+                    if ext in AUDIO_EXTS:
                         clips.append(os.path.normpath(os.path.join(root, fn)))
 
             if clips:
@@ -136,7 +136,7 @@ def load_library_voiceprints(device: str) -> Dict[str, List[np.ndarray]] | None:
         log_warning(
             "No voice clips found under %s (supported formats: %s); every speaker stays anonymous.",
             voice_library_dir,
-            ", ".join(sorted(_AUDIO_EXTS)),
+            ", ".join(sorted(AUDIO_EXTS)),
         )
         return None
     log_event(logger, "voice library loaded", level=logging.DEBUG, person_count=len(voice_library))

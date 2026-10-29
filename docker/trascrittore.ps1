@@ -1,11 +1,11 @@
 <#
 Host launcher of the transcriber: the only place that knows how to run its commands in the Docker image.
-Installa.bat, Trascrivi.bat, Verifica.bat and agents all go through it.
+Installa.bat, Trascrivi.bat and agents all go through it.
 
   powershell -NoProfile -ExecutionPolicy Bypass -File trascrittore.ps1 <command> [arguments]
 
-Run "help" for the commands. Trascrivi.bat and Verifica.bat use two more, "interactive" and "verify",
-which ask the person questions and then run the same commands. Every command ends with one JSON result summary on standard output;
+Run "help" for the commands. Trascrivi.bat uses one more, "interactive",
+which asks the person questions and then runs the same commands. Every command ends with one JSON result summary on standard output;
 lines for people go to standard error. This file stays ASCII: Windows PowerShell 5.1 reads a
 script without a byte order mark in the ANSI code page.
 #>
@@ -37,9 +37,12 @@ Uso: powershell -NoProfile -ExecutionPolicy Bypass -File "$Here\trascrittore.ps1
 
 Comandi:
   transcribe <registrazione> [--speakers N] [--out-dir <cartella>]
-      Trascrive un file audio o video. Scrive "<nome> - trascrizione.txt" e ".json" accanto alla
-      registrazione, o nella cartella indicata. Una trascrizione alla volta per PC. Dura minuti:
-      avvialo in background e aspetta che finisca.
+      Trascrive un file audio o video. Crea accanto alla registrazione la cartella "<nome>", con
+      "<nome>-trascrizione.txt" e ".json", e ci sposta la registrazione come "<nome>.<estensione>":
+      <nome> e' il nome della registrazione senza spazi, accenti e maiuscole. Con --out-dir crea la
+      cartella li' e lascia la registrazione dov'e'. Il riepilogo dice chi ha parlato e per quanto,
+      in "speakers". Una trascrizione alla volta per PC. Dura minuti: avvialo in background e
+      aspetta che finisca.
   listen <trascrizione.json> "Persona 2" [--clip N] [--recording <file>] [--open]
       Prepara una clip della voce da ascoltare: la migliore, o con --clip N la N-esima. Con --open
       la apre nel lettore predefinito del PC, perche' la persona senta di chi e' la voce prima di
@@ -48,21 +51,20 @@ Comandi:
   name <trascrizione.json> "Persona 2=Nome Cognome" [...] [--recording <file>]
       Da' i nomi alle voci "Persona N": riscrive i due file della trascrizione senza trascrivere di
       nuovo, e aggiunge le clip di ogni voce nominata alla libreria "voci"; il riepilogo dice in
-      quale cartella. Usa solo nomi che la persona ha confermato o scritto, dopo "listen".
+      quale cartella. Una voce che era gia' nella libreria ma non e' stata riconosciuta forma un
+      gruppo nuovo di clip, una cartella col nome della cartella della trascrizione. Usa solo nomi
+      che la persona ha confermato o scritto, dopo "listen".
       Solo se la persona lo chiede, per una voce riconosciuta:
         --confirm "Nome Cognome"   conferma la voce e aggiunge altre sue clip (ripetibile);
         "Nome Cognome=Altro Nome" --correct   corregge il nome e da' le clip alla persona giusta.
       Stato "similar_name": un nome somiglia a una persona della libreria e non e' stato salvato
       niente. Chiedi chi intendeva e ripeti con il nome esatto della cartella, oppure aggiungi
       --new-person "Nome Cognome" se e' davvero una persona nuova.
-      Stato "over_cap": i nomi sono applicati, e "over_cap" propone clip da togliere a chi ha
-      superato il limite. Toglile con remove-clips solo se la persona conferma.
+      Stato "over_cap": i nomi sono applicati, e "over_cap" propone, per ogni cartella di clip
+      che ha superato il limite, le clip da togliere. Toglile con remove-clips solo se la persona
+      conferma.
   remove-clips "Nome Cognome" "<clip.wav>" [...]
       Toglie dalla libreria le clip proposte in "over_cap", dopo la conferma della persona.
-  check [<trascrizione.json> ...]
-      Verifica quanto bene la libreria riconosce le voci a cui una persona ha dato il nome, nelle
-      trascrizioni da cui sono state aggiunte clip e in quelle indicate, e suggerisce una soglia.
-      Non cambia mai trascrittore.ini.
   help
       Mostra questo testo.
 
@@ -367,52 +369,6 @@ function Open-ListeningFile($Summary) {
     if ($Summary.file) { Invoke-Item -LiteralPath $Summary.file }
 }
 
-function New-CheckPlan([object[]]$Arguments) {
-    $parsed = Split-Arguments 'check' $Arguments @() @()
-    # The named transcripts on this PC are those the library's clips were cut from, plus any given here.
-    $pairs = [ordered]@{}
-    foreach ($record in @(Get-ChildItem -LiteralPath $Voices -Recurse -Filter 'clip.json' -ErrorAction SilentlyContinue)) {
-        try { $clips = [IO.File]::ReadAllText($record.FullName, [Text.Encoding]::UTF8) | ConvertFrom-Json } catch { continue }
-        foreach ($clip in $clips.PSObject.Properties) {
-            $transcript = $clip.Value.transcript
-            if ($transcript -and -not $pairs.Contains($transcript.ToLowerInvariant())) {
-                $pairs[$transcript.ToLowerInvariant()] = @($transcript, $clip.Value.recording)
-            }
-        }
-    }
-    foreach ($given in $parsed.Positional) {
-        $transcript = Resolve-HostFile $given
-        if (-not $transcript) { Exit-With 'check' 'file_not_found' "Trascrizione non trovata: $given" }
-        $pairs[$transcript.ToLowerInvariant()] = @($transcript, (Find-Recording $transcript))
-    }
-    Assert-Docker 'check'
-
-    $plan = New-Plan 'check'
-    Add-Mount $plan $Voices '/voci' -ReadOnly
-    [void]$plan.Arguments.Add('check')
-    $folders = @{}
-    foreach ($pair in $pairs.Values) {
-        $transcript, $recording = $pair
-        if (-not $recording -or -not (Test-Path -LiteralPath $recording -PathType Leaf)) { $recording = Find-Recording $transcript }
-        if (-not (Test-Path -LiteralPath $transcript -PathType Leaf) -or -not $recording) {
-            [void]$plan.Arguments.AddRange(@('--missing', $transcript))
-            continue
-        }
-        $paths = @()
-        foreach ($file in @($transcript, $recording)) {
-            $folder = Split-Path -Parent $file
-            $key = $folder.ToLowerInvariant()
-            if (-not $folders.ContainsKey($key)) {
-                $folders[$key] = '/check/' + $folders.Count
-                Add-Mount $plan $folder $folders[$key] -ReadOnly
-            }
-            $paths += $folders[$key] + '/' + (Split-Path -Leaf $file)
-        }
-        [void]$plan.Arguments.AddRange(@('--pair', $paths[0], $paths[1]))
-    }
-    return $plan
-}
-
 function Format-Minutes([double]$Seconds) {
     $minutes = [math]::Round($Seconds / 60)
     if ($minutes -ge 1) { return "$minutes min" }
@@ -504,7 +460,7 @@ function Invoke-Naming([string]$Transcript, [object[]]$Items, [object[]]$Recordi
     foreach ($entry in @($named.over_cap | Where-Object { $_ })) {
         $files = @($entry.remove)
         Write-Line ''
-        Write-Line "$($entry.person) ha piu' di $($entry.cap) clip aggiunte. Propongo di togliere queste $($files.Count), delle registrazioni con piu' clip:"
+        Write-Line "$($entry.person) ha piu' di $($entry.cap) clip aggiunte in $($entry.pool). Propongo di togliere queste $($files.Count), delle registrazioni con piu' clip:"
         foreach ($file in $files) { Write-Line "  $file" }
         if (Read-YesNo "Le tolgo dalla libreria? (s/n)") {
             [void](Invoke-Summary (New-RemovePlan (@($entry.person) + $files)))
@@ -606,13 +562,6 @@ function Invoke-Interactive([object[]]$Arguments) {
     $summary = Invoke-Summary (New-TranscribePlan $arguments)
     if ($summary.status -ne 'ok') { exit (Get-ExitCode $summary.status) }
     exit (Invoke-NamingQuestions $summary.transcript_json $false)
-}
-
-function Invoke-Verify([object[]]$Arguments) {
-    # Verifica.bat: the recognition check, for a person.
-    $script:Interactive = $true
-    $check = Invoke-Summary (New-CheckPlan $Arguments)
-    exit (Get-ExitCode $check.status)
 }
 
 $SettingsTemplate = @'
@@ -758,9 +707,7 @@ switch ($command) {
     'name' { Complete-Plan (New-TranscriptPlan 'name' $rest) }
     'listen' { Complete-Plan (New-TranscriptPlan 'listen' $rest) }
     'remove-clips' { Complete-Plan (New-RemovePlan $rest) }
-    'check' { Complete-Plan (New-CheckPlan $rest) }
     'interactive' { Invoke-Interactive $rest }
-    'verify' { Invoke-Verify $rest }
     'setup' { Invoke-Setup; exit 0 }
     { $_ -in @('help', '--help', '-h', '/?') } { [Console]::Out.WriteLine($Help); exit 0 }
     default { Exit-With $command 'invalid_arguments' "Comando sconosciuto: $command. Vedi: trascrittore.ps1 help" }
