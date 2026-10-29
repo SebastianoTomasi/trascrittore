@@ -219,11 +219,19 @@ powershell -ExecutionPolicy Bypass -File docker\build.ps1 -Export "C:\path\to\ex
 
 - The Hugging Face token goes from `.env` to BuildKit as a secret; it never lands
   in a layer or in the build history.
-- Layers go dependencies → models → code, so a code change reuses the cached
-  dependencies and models. Docker still needs time to export the large image.
-  A lock change reinstalls dependencies. `-ModelImage trascrittore:latest` can
-  reuse models from an existing image when their IDs are unchanged; that build
-  needs no Hugging Face token or model download.
+- Dependencies and models go into an image of their own,
+  `trascrittore-base:<key>`, and the code goes on top of it. The key changes
+  only with `Dockerfile`, `pyproject.toml`, `uv.lock` or
+  `docker/prefetch_models.py`, so a code change reuses that image even after
+  Docker has cleaned up its build cache. Docker still needs time to export the
+  large image.
+- Python's image is pinned by digest, so a Docker Hub refresh of its tag
+  changes nothing until the digest in the `Dockerfile` is moved on.
+- A change to one of those files builds a new base image and reinstalls
+  dependencies. `-ModelImage trascrittore:latest` can reuse models from an
+  existing image when their IDs are unchanged; that build needs no Hugging Face
+  token or model download. Base images of older keys can be removed with
+  `docker image rm`.
 - The image works offline (`HF_HUB_OFFLINE=1`). It is about 20 GB in Docker,
   7 GB as a `.tar`.
 - `-Export` writes `trascrittore-cu128.tar`, the `.bat` files, `trascrittore.ps1`,
