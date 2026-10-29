@@ -564,6 +564,143 @@ def test_a_speaker_without_a_full_clip_is_heard_from_the_longest_stretch(transcr
     assert naming.name_speakers(str(transcript), ["Persona 2=Anna Neri"])["named"][0]["clips_added"] == 0
 
 
+def _with_segments(transcript: Path) -> None:
+    """
+    Give the transcript's turns their segments, as transcripts have since 2026-10-10.
+    """
+    payload = _payload()
+    segments = [
+        [(0.4, 2.0, "Allora."), (3.0, 10.0, "Partiamo dal budget."), (12.0, 20.0, "Poi i tempi.")],
+        [(40.0, 70.0, "Va bene.")],
+        [(71.0, 94.6, "D'accordo.")],
+    ]
+    for turn, timed in zip(payload["turns"], segments):
+        turn["segments"] = [{"start_sec": start, "end_sec": end, "text": text} for start, end, text in timed]
+    transcript.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _passage(summary: dict[str, object]) -> tuple[object, ...]:
+    return tuple(summary[key] for key in ("status", "start", "end", "text"))
+
+
+def test_listening_at_a_time_plays_its_segment_with_a_second_on_each_side(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+    out_dir = tmp_path / "ascolto"
+
+    summary = naming.prepare_listening_at(str(transcript), "00:00:13.5", out_dir=str(out_dir))
+
+    assert _passage(summary) == ("ok", 11.0, 21.0, "Poi i tempi.")
+    assert (summary["command"], summary["note"]) == ("listen", None)
+    assert summary["file"] == str(out_dir / "ascolta registrazione - 00-00-12.wav")
+    assert round(sf.info(out_dir / "ascolta registrazione - 00-00-12.wav").duration, 2) == 10.0
+
+
+@pytest.mark.parametrize(("time", "text"), [("11.5", "Poi i tempi."), ("10.5", "Partiamo dal budget.")])
+def test_a_time_in_a_pause_plays_the_nearest_segment(transcript_and_library, tmp_path, time, text):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+
+    assert naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))["text"] == text
+
+
+@pytest.mark.parametrize("time", ["00:00:13.50", "0:13,5", "13.5", "13"])
+def test_a_time_written_in_any_of_its_forms_plays_the_same_segment(transcript_and_library, tmp_path, time):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+
+    assert _passage(naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))) == (
+        "ok", 11.0, 21.0, "Poi i tempi."
+    )
+
+
+@pytest.mark.parametrize(("time", "start", "end"), [("1", 0.0, 3.0), ("01:30", 70.0, 95.0)])
+def test_the_margin_stays_within_the_recording(transcript_and_library, tmp_path, time, start, end):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+
+    summary = naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))
+
+    assert (summary["start"], summary["end"]) == (start, end)
+
+
+@pytest.mark.parametrize("time", ["-1", "00:01:36", "1:00:00"])
+def test_a_time_outside_the_recording_is_refused_with_its_duration(transcript_and_library, tmp_path, time):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+
+    summary = naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))
+
+    assert summary["status"] == "invalid_arguments"
+    assert "00:01:35" in summary["message"]
+
+
+@pytest.mark.parametrize("time", ["", "dopo", "4m09s", "00:04:09:01"])
+def test_a_time_that_cannot_be_read_is_refused(transcript_and_library, tmp_path, time):
+    transcript, _ = transcript_and_library
+
+    summary = naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))
+
+    assert summary["status"] == "invalid_arguments"
+    assert "HH:MM:SS" in summary["message"]
+
+
+def test_a_transcript_without_segments_has_no_passage_to_play(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+
+    summary = naming.prepare_listening_at(str(transcript), "00:00:13", out_dir=str(tmp_path))
+
+    assert (summary["status"], summary["file"]) == ("ok", None)
+    assert "versione precedente" in summary["note"]
+
+
+def test_listening_at_a_time_without_the_recording_says_where_it_was_looked_for(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+    (transcript.parent / "Registrazione.m4a").unlink()
+
+    summary = naming.prepare_listening_at(str(transcript), "13", out_dir=str(tmp_path))
+
+    assert (summary["status"], summary["file"], summary["text"]) == ("ok", None, "Poi i tempi.")
+    assert "Registrazione non trovata" in summary["note"]
+
+
+def test_listening_at_a_time_keeps_the_other_transcripts_listening_clips(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+    out_dir = tmp_path / "ascolto"
+    other = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
+    mine = _write_transcript(tmp_path / "altra", "altra")
+    _with_segments(mine)
+
+    first = naming.prepare_listening_at(str(mine), "13", out_dir=str(out_dir))
+    second = naming.prepare_listening_at(str(mine), "45", out_dir=str(out_dir))
+
+    assert sorted(path.name for path in out_dir.iterdir()) == [
+        "ascolta altra - 00-00-40.wav",
+        "ascolta registrazione - Persona 1 - 1.wav",
+    ]
+    assert other["file"] == str(out_dir / "ascolta registrazione - Persona 1 - 1.wav")
+    assert (first["file"], second["file"]) == (
+        str(out_dir / "ascolta altra - 00-00-12.wav"),
+        str(out_dir / "ascolta altra - 00-00-40.wav"),
+    )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="only Windows refuses to delete a file that is still open")
+def test_a_passage_still_open_in_the_player_is_played_again_from_its_file(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    _with_segments(transcript)
+    out_dir = tmp_path / "ascolto"
+    naming.prepare_listening_at(str(transcript), "13", out_dir=str(out_dir))
+    playing = out_dir / "ascolta registrazione - 00-00-12.wav"
+
+    with playing.open("rb"):
+        summary = naming.prepare_listening_at(str(transcript), "14", out_dir=str(out_dir))
+
+    assert (summary["status"], summary["file"]) == ("ok", str(playing))
+
+
 def test_the_unattributed_voice_cannot_be_heard(transcript_and_library, tmp_path):
     transcript, _ = transcript_and_library
 

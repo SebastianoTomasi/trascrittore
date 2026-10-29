@@ -36,6 +36,8 @@ def test_transcribe_passes_its_arguments_and_prints_the_summary(monkeypatch, cap
         ["listen", "registrazione-trascrizione.json"],
         ["listen", "registrazione-trascrizione.json", "Persona 1", "--clip", "0"],
         ["listen", "registrazione-trascrizione.json", "Persona 1", "Persona 2"],
+        ["listen", "registrazione-trascrizione.json", "Persona 1", "--at", "00:04:09"],
+        ["listen", "registrazione-trascrizione.json", "--at", "00:04:09", "--clip", "2"],
         ["remove-clips", "Luca Bianchi"],
         ["trial"],
         ["rinomina"],
@@ -80,15 +82,23 @@ def test_listen_and_remove_reach_their_commands(monkeypatch, capsys):
         or ok,
     )
     monkeypatch.setattr(
+        naming,
+        "prepare_listening_at",
+        lambda transcript, time, *, recording, out_dir: calls.append(("listen at", transcript, time, recording, out_dir))
+        or ok,
+    )
+    monkeypatch.setattr(
         library, "remove_clips_report", lambda person, clips: calls.append(("remove", person, clips)) or ok
     )
 
     assert cli.main(["listen", "t.json", "Persona 1", "--out-dir", "/ascolto"]) == 0
     assert cli.main(["listen", "t.json", "Mario Rossi", "--clip", "2"]) == 0
+    assert cli.main(["listen", "t.json", "--at", "00:04:09,62", "--recording", "r.m4a", "--out-dir", "/ascolto"]) == 0
     assert cli.main(["remove-clips", "Luca Bianchi", "a.wav", "b.wav"]) == 0
     assert calls == [
         ("listen", "t.json", "Persona 1", "/ascolto", 1),
         ("listen", "t.json", "Mario Rossi", None, 2),
+        ("listen at", "t.json", "00:04:09,62", "r.m4a", "/ascolto"),
         ("remove", "Luca Bianchi", ["a.wav", "b.wav"]),
     ]
 

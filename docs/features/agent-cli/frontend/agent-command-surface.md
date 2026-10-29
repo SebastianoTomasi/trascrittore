@@ -151,6 +151,14 @@ hearing the next. A speaker without a full clip is played from their
 longest stretch of speech, and the summary says how long it lasts. The summary
 also says how many clips the speaker has.
 
+In place of a label, the command can take a time. It then plays the segment of
+the transcript that holds that time, or the nearest one when the time falls in
+a pause, with a second before and after it, so that a person can hear a
+doubtful passage before choosing its correction. Its summary gives the times it
+cut and the segment's text, so the agent checks that it holds the doubtful
+words before offering it. One passage at a time, as for voices. A transcript
+made before segments existed has no passage to play, and the summary says so.
+
 ## The person's path
 
 `Trascrivi.bat` keeps what a person has today: drag and drop, the question about

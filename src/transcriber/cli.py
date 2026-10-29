@@ -83,13 +83,25 @@ def _parser() -> _Parser:
     )
 
     listen = commands.add_parser(
-        "listen", help="prepara una clip di una voce da ascoltare prima di nominarla; una voce alla volta"
+        "listen",
+        help=(
+            "prepara una clip da ascoltare: di una voce prima di nominarla, o del passaggio a un tempo; "
+            "una alla volta"
+        ),
     )
     listen.add_argument("transcript", help="il file '<nome>-trascrizione.json'")
-    listen.add_argument("label", metavar="ETICHETTA", help='per esempio "Persona 2"')
+    heard = listen.add_mutually_exclusive_group(required=True)
+    heard.add_argument("label", nargs="?", metavar="ETICHETTA", help='la voce, per esempio "Persona 2"')
+    heard.add_argument(
+        "--at",
+        metavar="TEMPO",
+        help="al posto della voce: il tempo, come HH:MM:SS, MM:SS o secondi; suona il segmento che lo contiene",
+    )
     listen.add_argument("--recording", default=None, help="la registrazione, se non è più dove dice la trascrizione")
     listen.add_argument("--out-dir", default=None, help="cartella delle clip da ascoltare")
-    listen.add_argument("--clip", type=_positive_int, default=1, help="quale clip: 1 la migliore, 2 la seconda, ...")
+    listen.add_argument(
+        "--clip", type=_positive_int, default=None, help="con una voce, quale clip: 1 la migliore, 2 la seconda, ..."
+    )
 
     remove = commands.add_parser(
         "remove-clips",
@@ -122,8 +134,10 @@ def _name(args: argparse.Namespace) -> dict[str, Any]:
 def _listen(args: argparse.Namespace) -> dict[str, Any]:
     from src.transcriber import naming
 
+    if args.at is not None:
+        return naming.prepare_listening_at(args.transcript, args.at, recording=args.recording, out_dir=args.out_dir)
     return naming.prepare_listening(
-        args.transcript, args.label, recording=args.recording, out_dir=args.out_dir, clip=args.clip
+        args.transcript, args.label, recording=args.recording, out_dir=args.out_dir, clip=args.clip or 1
     )
 
 
@@ -141,9 +155,17 @@ _COMMANDS = {
 }
 
 
+def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "listen" and args.at is not None and args.clip is not None:
+        parser.error("--clip va con una voce, non con --at")
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
-        args = _parser().parse_args(argv)
+        args = _parse_args(argv)
     except _UsageError as exc:
         say(f"Errore: {exc}")
         say(exc.usage.rstrip())
