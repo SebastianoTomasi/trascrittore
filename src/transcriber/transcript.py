@@ -9,6 +9,8 @@ from typing import Any
 from src.asr.utils.output_format import format_offset
 
 
+# A transcript's files are "<name>-trascrizione.txt" and "<name>-trascrizione.json".
+TRANSCRIPT_SUFFIX = "-trascrizione"
 ANONYMOUS_DISPLAY_PREFIX = "Persona"
 UNATTRIBUTED_LABEL = "UNATTRIBUTED"
 UNATTRIBUTED_DISPLAY = "Voce non attribuita"

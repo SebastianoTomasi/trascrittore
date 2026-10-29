@@ -30,6 +30,7 @@ from src.transcriber.summary import (
     say as _say,
 )
 from src.transcriber.transcript import (
+    TRANSCRIPT_SUFFIX,
     UNATTRIBUTED_DISPLAY,
     build_payload,
     display_labels,
@@ -45,7 +46,6 @@ from src.utils.logging_setup import format_duration, get_logger
 logger = get_logger("transcriber")
 
 SAMPLE_RATE = 16000
-TRANSCRIPT_SUFFIX = "-trascrizione"
 COMMAND = "transcribe"
 _RULE = "=" * 70
 _ALERT = "!" * 70

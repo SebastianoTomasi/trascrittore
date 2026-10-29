@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 from pathlib import Path
 
 import numpy as np
@@ -459,7 +461,7 @@ def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, t
     FakeVoiceprints.outliers = {3.0}
     out_dir = tmp_path / "ascolto"
     out_dir.mkdir()
-    (out_dir / "ascolta Persona 3 - 1.wav").write_bytes(b"old")
+    (out_dir / "ascolta registrazione - Persona 3 - 1.wav").write_bytes(b"old")
     (out_dir / "altro.wav").write_bytes(b"not ours")
 
     summary = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
@@ -467,24 +469,83 @@ def test_listening_plays_one_clip_at_a_time_best_first(transcript_and_library, t
     assert summary["status"] == "ok"
     assert {key: summary[key] for key in ("label", "file", "clip", "clips", "seconds", "note")} == {
         "label": "Persona 1",
-        "file": str(out_dir / "ascolta Persona 1 - 1.wav"),
+        "file": str(out_dir / "ascolta registrazione - Persona 1 - 1.wav"),
         "clip": 1,
         "clips": 3,
         "seconds": 10.0,
         "note": None,
     }
     assert "Persona 1" in summary["message"]
-    assert round(sf.info(out_dir / "ascolta Persona 1 - 1.wav").duration, 2) == 10.0
-    assert sorted(path.name for path in out_dir.iterdir()) == ["altro.wav", "ascolta Persona 1 - 1.wav"]
+    assert round(sf.info(out_dir / "ascolta registrazione - Persona 1 - 1.wav").duration, 2) == 10.0
+    assert sorted(path.name for path in out_dir.iterdir()) == ["altro.wav", "ascolta registrazione - Persona 1 - 1.wav"]
 
     recognized = naming.prepare_listening(str(transcript), "Mario Rossi", out_dir=str(out_dir))
     third = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir), clip=3)
     fourth = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir), clip=4)
 
-    assert recognized["file"] == str(out_dir / "ascolta Mario Rossi - 1.wav")
-    assert third["file"] == str(out_dir / "ascolta Persona 1 - 3.wav")
+    assert recognized["file"] == str(out_dir / "ascolta registrazione - Mario Rossi - 1.wav")
+    assert third["file"] == str(out_dir / "ascolta registrazione - Persona 1 - 3.wav")
     assert fourth["file"] is None
     assert "solo 3 clip" in fourth["note"]
+
+
+def _another_transcript(tmp_path: Path, name: str) -> Path:
+    folder = tmp_path / name
+    folder.mkdir()
+    transcript = folder / f"{name}-trascrizione.json"
+    transcript.write_text(json.dumps(_payload(), ensure_ascii=False), encoding="utf-8")
+    (folder / "Registrazione.m4a").write_bytes(b"not decoded: load_recording is faked")
+    return transcript
+
+
+def test_two_transcripts_with_the_same_speaker_keep_their_own_listening_clips(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    other = _another_transcript(tmp_path, "altra")
+    out_dir = tmp_path / "ascolto"
+
+    first = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
+    heard = (out_dir / "ascolta registrazione - Persona 1 - 1.wav").read_bytes()
+    second = naming.prepare_listening(str(other), "Persona 1", out_dir=str(out_dir))
+
+    assert first["file"] == str(out_dir / "ascolta registrazione - Persona 1 - 1.wav")
+    assert second["file"] == str(out_dir / "ascolta altra - Persona 1 - 1.wav")
+    assert (out_dir / "ascolta registrazione - Persona 1 - 1.wav").read_bytes() == heard
+
+
+def test_listening_clips_older_than_a_day_go_whatever_their_transcript(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    out_dir = tmp_path / "ascolto"
+    out_dir.mkdir()
+    forgotten = out_dir / "ascolta vecchia - Persona 1 - 1.wav"
+    forgotten.write_bytes(b"two days old")
+    two_days_ago = time.time() - 2 * 24 * 3600
+    os.utime(forgotten, (two_days_ago, two_days_ago))
+    (out_dir / "ascolta altra - Persona 1 - 1.wav").write_bytes(b"another session's")
+
+    naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
+
+    assert sorted(path.name for path in out_dir.iterdir()) == [
+        "ascolta altra - Persona 1 - 1.wav",
+        "ascolta registrazione - Persona 1 - 1.wav",
+    ]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="only Windows refuses to delete a file that is still open")
+def test_a_listening_clip_still_open_in_the_player_is_left_for_later(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    out_dir = tmp_path / "ascolto"
+    out_dir.mkdir()
+    playing = out_dir / "ascolta registrazione - Persona 1 - 2.wav"
+    playing.write_bytes(b"still playing")
+
+    with playing.open("rb"):
+        summary = naming.prepare_listening(str(transcript), "Persona 1", out_dir=str(out_dir))
+
+    assert summary["status"] == "ok"
+    assert sorted(path.name for path in out_dir.iterdir()) == [
+        "ascolta registrazione - Persona 1 - 1.wav",
+        "ascolta registrazione - Persona 1 - 2.wav",
+    ]
 
 
 def test_a_speaker_without_a_full_clip_is_heard_from_the_longest_stretch(transcript_and_library, tmp_path):

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
 from pathlib import Path, PureWindowsPath
 from typing import Any, Iterable
 
@@ -32,7 +33,14 @@ from src.transcriber.summary import (
     host_path,
     say,
 )
-from src.transcriber.transcript import UNATTRIBUTED_DISPLAY, is_anonymous, rename_speakers, render_payload_text, speaker_labels
+from src.transcriber.transcript import (
+    TRANSCRIPT_SUFFIX,
+    UNATTRIBUTED_DISPLAY,
+    is_anonymous,
+    rename_speakers,
+    render_payload_text,
+    speaker_labels,
+)
 
 
 NAME_COMMAND = "name"
@@ -43,6 +51,8 @@ NAMED, CONFIRMED, CORRECTED = "named", "confirmed", "corrected"
 _DURATION_TOLERANCE_SEC = 1.0
 # A confirmed speaker scoring less than this above the threshold gains much from new clips.
 _CLOSE_TO_THRESHOLD = 0.05
+# Listening clips that a session left behind, for example because it stopped before naming, go after a day.
+_FORGOTTEN_CLIP_SEC = 24 * 3600
 
 
 def _clean(text: str) -> str:
@@ -436,12 +446,27 @@ def name_speakers(
     )
 
 
-def _clear_listening_clips(out_dir: Path) -> None:
+def _listening_prefix(transcript: Path) -> str:
+    """
+    Return how the names of a transcript's listening clips start, such as "ascolta registrazione - ".
+
+    The name says which recording the person hears, and keeps apart the clips of parallel sessions.
+    The launcher clears a transcript's listening clips after naming by this same rule.
+    """
+    return f"{LISTEN_PREFIX}{transcript.stem.removesuffix(TRANSCRIPT_SUFFIX)} - "
+
+
+def _clear_listening_clips(out_dir: Path, prefix: str) -> None:
+    """
+    Delete the transcript's own listening clips, and those any transcript left for more than a day.
+    """
+    forgotten = time.time() - _FORGOTTEN_CLIP_SEC
     for path in out_dir.glob(f"{LISTEN_PREFIX}*.wav"):
         try:
-            path.unlink()
+            if path.name.startswith(prefix) or path.stat().st_mtime < forgotten:
+                path.unlink()
         except OSError:
-            # Still open in the player: the next listening tries again.
+            # Still open in the player, or just deleted by another session: the next listening tries again.
             pass
 
 
@@ -484,7 +509,8 @@ def _prepare_listening(
     _check_known(payload, [label])
     folder = Path(out_dir) if out_dir else Path(tempfile.gettempdir()) / "trascrittore-ascolto"
     folder.mkdir(parents=True, exist_ok=True)
-    _clear_listening_clips(folder)
+    prefix = _listening_prefix(transcript_path)
+    _clear_listening_clips(folder, prefix)
 
     heard: dict[str, Any] = {"label": label, "file": None, "clip": clip, "clips": 0, "seconds": None, "note": None}
     audio, problem = open_recording(payload, transcript_path, recording)
@@ -494,7 +520,7 @@ def _prepare_listening(
         piece, heard["clips"], heard["note"] = _listening_piece(payload, label, audio, voices.Voiceprints(), clip)
         if piece is not None:
             # One file per clip: the one heard before may still be open in the player.
-            path = folder / f"{LISTEN_PREFIX}{label} - {clip}.wav"
+            path = folder / f"{prefix}{label} - {clip}.wav"
             sf.write(path, voices.cut(audio, *piece), voices.SAMPLE_RATE, subtype="PCM_16")
             heard["file"], heard["seconds"] = host_path(path), round(piece[1] - piece[0], 1)
 

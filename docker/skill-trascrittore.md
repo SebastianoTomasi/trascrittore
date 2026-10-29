@@ -179,10 +179,14 @@ recognize that person: a wrong name would teach the transcriber the wrong voice.
    It opens, in the person's default player, one 10-second clip of that speaker: the best one.
    Clips opened together cannot be told apart, so `listen` takes one speaker only. Tell the person
    whose voice is playing and the name it would get, for example "this is Persona 2: is it Luca
-   Bianchi?", and wait for the answer before playing the next speaker. You cannot judge a voice by
-   ear. If the person is unsure, play the same speaker's next clip with `--clip 2`, then
-   `--clip 3`; the summary's `clips` says how many there are. A speaker without any full clip is
-   played from their longest stretch (`seconds`), which serves only to recognize the voice.
+   Bianchi?", and wait for the answer before playing the next speaker. Also give the name of the
+   file that opened, the last part of the summary's `file`, such as
+   `ascolta registrazione - Persona 2 - 1.wav`. Another session may open its own clip at the same
+   time, and the player then plays only the last one, so the person checks that the player shows
+   that file. You cannot judge a voice by ear. If the person is unsure, play the same speaker's
+   next clip with `--clip 2`, then `--clip 3`; the summary's `clips` says how many there are. A
+   speaker without any full clip is played from their longest stretch (`seconds`), which serves
+   only to recognize the voice.
 3. Only for the voices the person confirmed:
 
    ```
