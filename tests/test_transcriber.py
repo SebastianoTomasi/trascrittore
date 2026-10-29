@@ -32,6 +32,8 @@ TURNS = [
     _turn("Mario Rossi", 81.0, 90.0, "va bene"),
     _turn("ANONYMOUS_SPEAKER_01", 91.0, 95.0, "sono d'accordo con la proposta di rimandare tutto"),
 ]
+# Stretches of speech whisperX could not align word by word.
+UNALIGNED: list[dict[str, float]] = []
 
 DIAGNOSTICS = {
     "speakers": {
@@ -86,7 +88,7 @@ def test_render_text_lists_speakers_and_timestamped_turns():
         source_name="Registrazione budget.m4a",
         duration_sec=3725.0,
         device="cuda",
-        fallback_reason=None,
+        warnings=[],
         turns=TURNS,
         labels=labels,
     )
@@ -114,7 +116,7 @@ def test_render_text_leaves_unattributed_words_out_of_the_speakers():
         source_name="a.wav",
         duration_sec=70.0,
         device="cuda",
-        fallback_reason=None,
+        warnings=[],
         turns=turns,
         labels=display_labels(turns, "ANONYMOUS_"),
     )
@@ -128,7 +130,7 @@ def test_render_text_warns_when_processed_on_cpu():
         source_name="a.wav",
         duration_sec=10.0,
         device="cpu",
-        fallback_reason="Nessuna GPU NVIDIA disponibile.",
+        warnings=["Elaborata su CPU invece che su GPU. Nessuna GPU NVIDIA disponibile."],
         turns=[],
         labels={},
     )
@@ -192,6 +194,7 @@ def _payload(labels: dict[str, str] | None = None) -> dict[str, object]:
         device="cpu",
         compute_type="int8",
         fallback_reason="Nessuna GPU NVIDIA disponibile.",
+        unaligned=[],
         elapsed_sec=301.26,
         turns=TURNS,
         labels=labels,
@@ -209,6 +212,7 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         device="cpu",
         compute_type="int8",
         fallback_reason="Nessuna GPU NVIDIA disponibile.",
+        unaligned=[],
         elapsed_sec=301.26,
         turns=TURNS,
         labels=labels,
@@ -229,6 +233,31 @@ def test_build_payload_uses_display_labels_and_records_the_cpu_warning():
         "text": "io direi di rimandare",
         "segments": [{"start_sec": 66.0, "end_sec": 80.0, "text": "io direi di rimandare"}],
     }
+
+
+def test_build_payload_warns_about_speech_that_could_not_be_aligned():
+    labels = display_labels(TURNS, "ANONYMOUS_")
+
+    payload = build_payload(
+        source_name="a.wav",
+        recording="C:\\Registrazioni\\a.wav",
+        duration_sec=95.0,
+        device="cuda",
+        compute_type="float16",
+        fallback_reason=None,
+        unaligned=[{"start_sec": 66.0, "end_sec": 80.5}, {"start_sec": 3725.0, "end_sec": 3731.0}],
+        elapsed_sec=30.0,
+        turns=TURNS,
+        labels=labels,
+        speakers=speaker_summaries(TURNS, labels, DIAGNOSTICS),
+    )
+
+    warning = (
+        "In alcuni tratti il parlato non si è potuto allineare parola per parola, "
+        "e orari e chi parla sono approssimativi: 00:01:06–00:01:20, 01:02:05–01:02:11."
+    )
+    assert payload["warnings"] == [warning]
+    assert f"ATTENZIONE: i{warning[1:]}" in render_payload_text(payload).splitlines()
 
 
 def test_rename_speakers_changes_only_the_named_labels():
@@ -307,7 +336,7 @@ def fake_pipeline(tmp_path, monkeypatch):
         transcript_path = tmp_path / "artifacts" / "transcript.json"
         diagnostics_path = tmp_path / "artifacts" / "diagnostics.json"
         transcript_path.parent.mkdir(exist_ok=True)
-        transcript_path.write_text(json.dumps({"date": None, "turns": TURNS}), encoding="utf-8")
+        transcript_path.write_text(json.dumps({"date": None, "turns": TURNS, "unaligned": UNALIGNED}), encoding="utf-8")
         diagnostics_path.write_text(json.dumps(DIAGNOSTICS), encoding="utf-8")
         return "recognized.json", str(transcript_path), str(diagnostics_path)
 
@@ -367,6 +396,19 @@ def test_run_ends_with_who_spoke_longest_first(tmp_path, capsys, fake_pipeline):
     first = lines.index("Chi ha parlato:")
     assert lines[first + 1 : first + 4] == ["  - Mario Rossi: 1 min", "  - Persona 1: <1 min", "  - Persona 2: <1 min"]
     assert "Se un nome è sbagliato, trascina il file .json su Trascrivi.bat e correggilo." in lines
+
+
+def test_run_warns_about_speech_that_could_not_be_aligned(tmp_path, monkeypatch, fake_pipeline):
+    monkeypatch.setitem(globals(), "UNALIGNED", [{"start_sec": 66.0, "end_sec": 80.0}])
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+
+    summary = runner.run(str(audio))
+
+    payload = json.loads(Path(summary["transcript_json"]).read_text(encoding="utf-8"))
+    assert payload["warnings"][1].endswith("orari e chi parla sono approssimativi: 00:01:06–00:01:20.")
+    assert summary["warnings"] == payload["warnings"]
+    assert Path(summary["transcript_txt"]).read_text(encoding="utf-8") == render_payload_text(payload)
 
 
 def test_words_no_speaker_could_be_given_are_not_in_who_spoke(tmp_path, monkeypatch, capsys, fake_pipeline):
