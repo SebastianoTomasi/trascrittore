@@ -1,6 +1,6 @@
 # Automatic condition pools for added clips
 
-**State:** open
+**State:** closed
 **Scope:** feature:voice-library-growth
 **Destination:** architecture
 **Revisit when:** the recognition check has run on at least 10 named speakers
@@ -30,3 +30,12 @@ voiceprints. That bounds the extra pools while keeping condition matching.
 Before adopting it, the recognition check should compare it with the single
 pool on the PC's own named meetings. It must not raise the highest score of a
 missing voice.
+
+## Resolution
+
+Settled on 2026-10-29 in another way: instead of grouping a person's added
+clips by similarity, a recognition the person says was missed starts a pool of
+its own, up to 8 added pools per person. The rule is in
+[Naming grows the library](../features/voice-library-growth/product/naming-grows-the-library.md#rules)
+("A missed recognition starts a new pool"), with the reasons in
+[ADR 0011](../adr/0011-a-missed-recognition-starts-a-new-pool.md).

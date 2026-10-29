@@ -56,7 +56,7 @@ Established facts that bound N:
 
 - Candidates are only full-length windows (`matching.window_sec`, 10 seconds),
   as
-  [the implementation](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md)
+  [the implementation](../features/voice-library-growth/implementation/clip-selection-and-pools.md)
   states, and the transcript records at most `matching.max_windows_per_spk`
   (12) windows per speaker. So N is at most 12 and often less; the result
   should say how many were found.
@@ -87,6 +87,6 @@ Settled on 2026-09-29 as recorded above. The rules are in
 the person's to review"), the command in
 [Listening before naming](../features/agent-cli/frontend/agent-command-surface.md#listening-before-naming),
 and the mechanics in
-[Clip selection](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#clip-selection).
+[Clip selection](../features/voice-library-growth/implementation/clip-selection-and-pools.md#clip-selection).
 Whether 10-second windows are right was measured the same day; see
 [Shorter clips for the library](shorter-clips-for-the-library.md).

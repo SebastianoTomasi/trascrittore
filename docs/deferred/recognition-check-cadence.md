@@ -1,6 +1,6 @@
 # When to run the recognition check again
 
-**State:** open
+**State:** closed
 **Scope:** feature:voice-library-growth
 **Destination:** implementation
 **Revisit when:** the first trial ends, after 10 named speakers, and there are
@@ -9,7 +9,7 @@ at least two runs of the check to compare.
 [The Product rules](../features/voice-library-growth/product/naming-grows-the-library.md#rules)
 say the recognition check runs again after a number of additions and before
 the trial ends. The number was left open in
-[the implementation](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md).
+[the implementation](../features/voice-library-growth/implementation/clip-selection-and-pools.md).
 
 Today nothing counts additions. `Verifica.bat` runs the check and then the
 trial report. `LEGGIMI.md` tells the person to use it "ogni tanto, dopo aver
@@ -27,3 +27,10 @@ Remaining questions:
   it;
 - who says it is time: the `name` command's message, `Trascrivi.bat`, or only
   the agent skill.
+
+## Resolution
+
+Closed on 2026-10-29: the recognition check and `Verifica.bat` are gone,
+replaced by the list of who spoke after every transcription, as
+[ADR 0010](../adr/0010-the-list-of-who-spoke-replaces-the-recognition-check.md)
+records. There is no check left to run again.

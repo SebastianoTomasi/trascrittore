@@ -6,8 +6,8 @@
 
 This artifact states what an agent can do with the transcriber on a person's
 behalf: transcribe a recording without anyone answering questions, read the
-result, and give names to speakers after the transcript exists. It also states
-the rule that keeps people and agents at the same capability. The commands are
+result, and give names to speakers after the transcript exists. It also applies
+the rule on what people and agents share. The commands are
 in [the command surface](../frontend/agent-command-surface.md), their
 components and file guarantees in
 [the architecture](../architecture/agent-cli-architecture.md), and how the
@@ -25,6 +25,9 @@ a named speaker's voice clips to the voice library belongs to
 - [What users are assumed to have](../../../product/transcriber-promise.md#what-users-are-assumed-to-have)
   — agents run on Windows itself, not inside WSL, so every command must work
   from the Windows shells an agent uses.
+- [Where transcripts go](../../../product/transcriber-promise.md#what-an-update-must-not-break)
+  — the transcript's folder, its names and the move of the recording are set
+  there, so transcribing gives agents and people the same files.
 - [Work with or without a GPU](../../../product/transcriber-promise.md#capabilities)
   — the result reports CPU use only for a PC without an NVIDIA GPU; a GPU
   failure is an error rather than a successful mixed-device run.
@@ -48,8 +51,13 @@ Once this feature exists, a person can tell their agent to transcribe a
 recording, for example a file just saved by OBS, and get the transcript without
 sitting at the console. The agent starts the transcription, waits for it
 without holding a command open, and reads a short machine-readable result:
-whether it succeeded, where the transcript files are, who spoke, and which
-speakers stayed "Persona N".
+whether it succeeded, where the transcript's folder is, who spoke and for how
+long, and which speakers stayed "Persona N". It then shows the person who
+spoke, as
+[voice library growth](../../voice-library-growth/product/naming-grows-the-library.md#rules)
+requires after every transcription. For a video, it also titles the
+transcript's folder and keeps the frames worth keeping, as
+[Frames of a video](../../video-frames/product/frames-of-a-video.md) details.
 
 Afterwards the agent can propose names for those speakers from what they said.
 The person confirms or writes each name, and the transcript is updated without
@@ -88,8 +96,9 @@ no new class of data.
 
 ## Outcomes
 
-**Transcribing succeeds.** The transcript's text and JSON files appear next to
-the recording, as they do today. The command ends with a result summary that
+**Transcribing succeeds.** The transcript's text and JSON files appear in a
+folder of their own next to the recording, and the recording moves into it, as
+[Where transcripts go](../../../product/transcriber-promise.md#what-an-update-must-not-break) states. The command ends with a result summary that
 the agent can read. On a PC without an NVIDIA GPU, the summary and files say
 that the CPU was used.
 

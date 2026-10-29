@@ -8,7 +8,7 @@
 from several recordings to recalibrate with.
 
 Only full-length windows (`matching.window_sec`, 10 seconds) become clips, as
-[Clip selection](../features/voice-library-growth/implementation/clip-selection-and-recognition-check.md#clip-selection)
+[Clip selection](../features/voice-library-growth/implementation/clip-selection-and-pools.md#clip-selection)
 states. In calls, speech is broken up, so some speakers have few such windows
 or none. On 2026-09-29 the user asked whether 10 seconds is the right length,
 and chose to keep it after the measurement below. Accepting clips of about 7.5
