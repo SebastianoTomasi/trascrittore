@@ -34,8 +34,9 @@ trascrittore transcribe "<recording>" [--speakers N] [--out-dir "<folder>"]
 - The recording must be on the PC. A file that is only online in OneDrive or Google Drive must be
   downloaded first.
 - The transcript goes in a folder of its own next to the recording, and the recording moves into
-  it. The transcriber writes the names it creates without spaces: lowercase, without accents, with
-  a hyphen in place of every space or other character. So `2026-10-29 14-30-12.mkv` gives the folder
+  it. The transcriber writes the names it creates without spaces: lowercase, without accents, each
+  run of characters other than letters and digits replaced by one hyphen, and no hyphen at either
+  end. So `2026-10-29 14-30-12.mkv` gives the folder
   `2026-10-29-14-30-12`, holding `2026-10-29-14-30-12-trascrizione.txt`, `...-trascrizione.json` and
   the recording as `2026-10-29-14-30-12.mkv`. With `--out-dir` the folder goes there and the
   recording stays where it is. Transcribing a recording that is already in its folder writes there
@@ -55,12 +56,13 @@ on that text.
 
 After every transcription, show the person who spoke: one bullet per speaker, longest first, with
 the name in bold and the minutes of speech from `speech_sec`, recognized names and "Persona N"
-alike. Then ask whether the names are right. For example:
+alike. Leave out "Voce non attribuita": it holds words no speaker could be given. Then ask whether
+the names are right. For example:
 
 > In questa registrazione hanno parlato:
-> - **Sebastiano Tomasi**: 15 min
+> - **Luca Bianchi**: 15 min
 > - **Persona 1**: 5 min
-> - **Antonio Rossi**: 3 min
+> - **Mario Rossi**: 3 min
 >
 > I nomi sono giusti?
 
@@ -188,18 +190,18 @@ recognize that person: a wrong name would teach the transcriber the wrong voice.
    ```
 
    It rewrites both transcript files with the names, without transcribing again, and adds the
-   speaker's clips to a group of clips in `{{CARTELLA}}\voci\<Nome Cognome>`. It opens no window;
-   the speaker's `folder` gives the path.
+   speaker's clips to a pool, a folder of clips in `{{CARTELLA}}\voci\<Nome Cognome>`. It opens no
+   window; the speaker's `folder` gives the path.
 
-Where the clips go:
+Which pool the clips go to (the Italian messages call a pool "gruppo"):
 
-- A person new to the library starts with `registrazioni`.
+- A person new to the library starts with the pool `registrazioni`.
 - A "Persona N" named after someone already in the library is a voice the transcriber missed,
   most likely because this recording sounds different: another microphone, room or call. Its clips
-  start a new group, a folder named after the transcript's folder, and the speaker's `note` says
-  so: relay it. With only one or two clips, or once the person has 8 groups, they join the closest
-  group instead.
-- The person may rename a group, for example to `macchina`.
+  start a new pool, a folder named after the transcript's folder, and the speaker's `note` says
+  so: relay it. With only one or two clips, or once the person has 8 pools added by naming, they
+  join the closest pool instead.
+- The person may rename a pool, for example to `macchina`.
 
 Also:
 
@@ -217,7 +219,7 @@ Also:
 | status | what happened | what to do |
 |---|---|---|
 | `similar_name` | A name looks like a person already in the library (listed in `similar`). Nothing was saved. | Ask whether they meant that person. Run `name` again with the folder's exact name, or, if it really is a new person, add `--new-person "Nome Cognome"`. |
-| `over_cap` | The names are applied and the clips saved, but a group of clips now holds more than the cap. `over_cap` lists, for each `person` and `pool`, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
+| `over_cap` | The names are applied and the clips saved, but a pool now holds more than the cap. `over_cap` lists, for each `person` and `pool`, the clips proposed for removal. | Tell the person and ask. Only if they agree: `trascrittore remove-clips "Nome Cognome" "<clip.wav>" [...]` with the listed files. |
 
 ## Confirm or correct a recognized voice, only when asked
 
@@ -228,9 +230,9 @@ era Luca, era Sebastiano", or by saying a name is wrong in the list of who spoke
 1. Let the person hear it, as above: `trascrittore listen "<transcript.json>" "Sebastiano Tomasi" --open`.
 2. Only after they confirm the voice:
    - **the name is right, add clips**: `trascrittore name "<transcript.json>" --confirm "Sebastiano Tomasi"`.
-     The clips join the person's group that matches the voice best. The speaker's `note` says
+     The clips join the person's pool that matches the voice best. The speaker's `note` says
      whether new clips help much (recognition was close to the threshold) or little; relay it.
    - **the name is wrong**: `trascrittore name "<transcript.json>" "Luca Bianchi=Sebastiano Tomasi" --correct`.
-     The transcript takes the right name and the clips go to the right person, in a new group when
+     The transcript takes the right name and the clips go to the right person, in a new pool when
      that person was already in the library. The `note` tells the person to listen to the wrong
      person's clips and delete those that are not theirs; relay it.

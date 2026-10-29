@@ -194,6 +194,20 @@ def test_only_recorded_clips_are_removed(tmp_path):
     assert library.cap_proposal(pool, 1) == []
 
 
+def test_a_clip_name_in_two_pools_is_refused(tmp_path):
+    for pool_name in (library.CLIPS_FOLDER, "2026-10-29-demo-acme"):
+        pool = tmp_path / "Luca Bianchi" / pool_name
+        pool.mkdir(parents=True)
+        (pool / "demo-00-00-05.wav").write_bytes(b"clip")
+        (pool / library.CLIPS_RECORD).write_text(json.dumps({"demo-00-00-05.wav": {"recording_file": "demo.mp4"}}), encoding="utf-8")
+
+    removed, refused = library.remove_clips(tmp_path, "Luca Bianchi", ["demo-00-00-05.wav"])
+
+    assert removed == [] and [entry["clip"] for entry in refused] == ["demo-00-00-05.wav"]
+    assert "più di un gruppo" in refused[0]["reason"]
+    assert len(list((tmp_path / "Luca Bianchi").glob("*/demo-00-00-05.wav"))) == 2
+
+
 def test_clips_are_removed_from_every_added_pool_of_the_person(tmp_path):
     pool = _added_pool(tmp_path)
     other = tmp_path / "Luca Bianchi" / "2026-10-29-demo-acme"

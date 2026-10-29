@@ -91,16 +91,21 @@ at either end. An empty result becomes `registrazione`. Call the result
   next to the recording. If the recording already sits in its transcript's
   folder, one holding `<name>-trascrizione.json` or itself called `<name>`, the
   transcript is written there again. If `<name>` already holds another
-  recording called `<name>`, the next free `<name>-2`, `<name>-3` is used.
+  recording called `<name>`, or the transcript of another recording, the next
+  free `<name>-2`, `<name>-3` is used: a transcript whose video the person
+  deleted is kept, and one whose recording could not move is written again.
+  Whether the folder is the recording's own is judged by its name on the PC,
+  since the container mounts it under another name.
   With an output folder, `<name>` is created there instead, and the recording
   stays where it is.
 - **The files.** The text and JSON files are `<name>-trascrizione.txt` and
   `<name>-trascrizione.json`.
 - **The move.** Only after both files are written does the recording move into
-  the folder as `<name>` with its extension in lowercase. When the move
-  succeeds, both files are written again with the recording's new place. When
-  it fails, the files keep the old place, and the summary and the message say
-  that the recording stayed where it was.
+  the folder as `<name>` with its extension in lowercase, by a rename, so that
+  no copy stays behind. When the move succeeds, both files are written again
+  with the recording's new place. When it fails, the files keep the old place,
+  and the summary and the message say that the recording stayed where it
+  was.
 
 An agent may rename the folder, writing the new name the same way. The path
 the JSON records then no longer matches, which is why readers also look for the

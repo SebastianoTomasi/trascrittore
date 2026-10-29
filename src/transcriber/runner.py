@@ -10,10 +10,9 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import tempfile
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Callable
 
 import soundfile as sf
@@ -31,6 +30,7 @@ from src.transcriber.summary import (
     say as _say,
 )
 from src.transcriber.transcript import (
+    UNATTRIBUTED_DISPLAY,
     build_payload,
     display_labels,
     format_minutes,
@@ -51,8 +51,24 @@ _RULE = "=" * 70
 _ALERT = "!" * 70
 
 
-def _holds_another_recording(folder: Path, name: str) -> bool:
-    return folder.is_dir() and any(path.is_file() and path.stem == name for path in folder.iterdir())
+def _holds_another_recording(folder: Path, name: str, recording: str) -> bool:
+    """
+    Whether the folder holds a recording called <name>, or the transcript of a recording other than this one.
+
+    A transcript left without its recording, because the person deleted it, is kept; one whose recording
+    stayed where it was, because the move failed, is written again.
+    """
+    if not folder.is_dir():
+        return False
+    if any(path.is_file() and path.stem == name for path in folder.iterdir()):
+        return True
+    transcript = folder / f"{name}{TRANSCRIPT_SUFFIX}.json"
+    if not transcript.is_file():
+        return False
+    try:
+        return json.loads(transcript.read_text(encoding="utf-8")).get("recording") != recording
+    except (OSError, ValueError):
+        return True
 
 
 def transcript_place(recording_path: str | os.PathLike[str], out_dir: str | None) -> tuple[Path, str, Path | None]:
@@ -67,10 +83,11 @@ def transcript_place(recording_path: str | os.PathLike[str], out_dir: str | None
     if out_dir:
         return Path(out_dir) / name, name, None
     here = source.parent
-    if here.name == name or (here / f"{name}{TRANSCRIPT_SUFFIX}.json").is_file():
+    # In the container the folder is mounted under another name: its name on the PC is the one to compare.
+    if PureWindowsPath(host_path(here)).name == name or (here / f"{name}{TRANSCRIPT_SUFFIX}.json").is_file():
         return here, name, None
     base, count = name, 1
-    while _holds_another_recording(here / name, name):
+    while _holds_another_recording(here / name, name, host_path(source)):
         count += 1
         name = f"{base}-{count}"
     return here / name, name, here / name / f"{name}{source.suffix.lower()}"
@@ -122,15 +139,21 @@ def _move_recording(source: Path, destination: Path) -> str | None:
     if destination.exists():
         return f"nella cartella c'è già '{destination.name}'"
     try:
-        shutil.move(str(source), str(destination))
+        # A rename, never a copy: the folder is next to the recording, and a copy could stay behind.
+        os.rename(source, destination)
     except OSError as exc:
         logger.debug("Moving the recording failed", exc_info=exc)
-        return exc.strerror or str(exc)
+        return "forse è aperta in un altro programma"
     return None
 
 
+def _stayed(move_problem: str) -> str:
+    return f"La registrazione è rimasta dov'era: non ho potuto spostarla nella cartella ({move_problem})."
+
+
 def _who_spoke(payload: dict[str, Any]) -> list[tuple[str, str]]:
-    speakers = sorted(payload["speakers"], key=lambda speaker: -speaker["speech_sec"])
+    speakers = [speaker for speaker in payload["speakers"] if speaker["label"] != UNATTRIBUTED_DISPLAY]
+    speakers.sort(key=lambda speaker: -speaker["speech_sec"])
     return [(speaker["label"], format_minutes(speaker["speech_sec"])) for speaker in speakers]
 
 
@@ -143,7 +166,7 @@ def _summary(
     if anonymous:
         message += f" Senza nome: {', '.join(anonymous)}."
     if move_problem:
-        message += f" La registrazione è rimasta dov'era: non ho potuto spostarla nella cartella ({move_problem})."
+        message += f" {_stayed(move_problem)}"
     return {
         "command": COMMAND,
         "status": OK,
@@ -246,7 +269,11 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
     if moved:
         _say(f"Ho spostato lì anche la registrazione, come '{destination.name}'.")
     elif move_problem:
-        _say(f"La registrazione è rimasta dov'era: non ho potuto spostarla nella cartella ({move_problem}).")
+        _say(_stayed(move_problem))
+    elif source.parent == folder:
+        _say("La registrazione è già nella cartella.")
+    else:
+        _say("La registrazione è rimasta dov'era.")
     if settings.fallback_reason:
         for line in _cpu_alert(settings):
             _say(line)

@@ -369,6 +369,20 @@ def test_run_ends_with_who_spoke_longest_first(tmp_path, capsys, fake_pipeline):
     assert "Se un nome è sbagliato, trascina il file .json su Trascrivi.bat e correggilo." in lines
 
 
+def test_words_no_speaker_could_be_given_are_not_in_who_spoke(tmp_path, monkeypatch, capsys, fake_pipeline):
+    monkeypatch.setitem(globals(), "TURNS", TURNS + [_turn("UNATTRIBUTED", 90.0, 94.0, "mh")])
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+
+    summary = runner.run(str(audio))
+
+    assert "Voce non attribuita" not in summary["message"]
+    lines = capsys.readouterr().err.splitlines()
+    first = lines.index("Chi ha parlato:")
+    assert lines[first + 4] != "  - Voce non attribuita: <1 min"
+    assert not any("Voce non attribuita" in line for line in lines)
+
+
 def test_run_again_inside_the_transcripts_folder_writes_there(tmp_path, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
@@ -379,6 +393,62 @@ def test_run_again_inside_the_transcripts_folder_writes_there(tmp_path, fake_pip
     folder = tmp_path / "call"
     assert (again["folder"], again["recording"], again["recording_moved"]) == (str(folder), str(folder / "call.mp4"), False)
     assert sorted(path.name for path in folder.iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt", "call.mp4"]
+
+
+@pytest.mark.parametrize(
+    ("folder_on_the_pc", "recording", "written_in"),
+    [
+        # A recording called like the container's mount still gets a folder of its own.
+        ("Registrazioni", "Recording.mp4", "recording"),
+        # A recording in a folder of its name, without a transcript, is transcribed there.
+        ("call", "call.mp4", "."),
+    ],
+)
+def test_run_judges_the_folder_by_its_name_on_the_pc(tmp_path, monkeypatch, fake_pipeline, folder_on_the_pc, recording, written_in):
+    mount = tmp_path / "recording"
+    mount.mkdir()
+    (mount / recording).write_bytes(b"x")
+    monkeypatch.setenv("TRANSCRIBER_HOST_PATHS", f"{mount.as_posix()}=C:\\Utenti\\{folder_on_the_pc}|")
+
+    runner.run(str(mount / recording))
+
+    assert (mount / written_in / f"{Path(recording).stem.lower()}-trascrizione.json").is_file()
+
+
+def test_run_keeps_the_transcript_of_a_recording_deleted_from_its_folder(tmp_path, fake_pipeline):
+    (tmp_path / "call.mp4").write_bytes(b"first")
+    runner.run(str(tmp_path / "call.mp4"))
+    (tmp_path / "call" / "call.mp4").unlink()
+    (tmp_path / "call.mp4").write_bytes(b"second")
+
+    summary = runner.run(str(tmp_path / "call.mp4"))
+
+    assert summary["recording"] == str(tmp_path / "call-2" / "call-2.mp4")
+    assert sorted(path.name for path in (tmp_path / "call").iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt"]
+
+
+def test_run_again_after_a_failed_move_writes_in_the_same_folder(tmp_path, monkeypatch, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    with monkeypatch.context() as busy:
+        busy.setattr(runner.os, "rename", _busy)
+        runner.run(str(audio))
+
+    summary = runner.run(str(audio))
+
+    assert summary["recording"] == str(tmp_path / "call" / "call.mp4") and summary["recording_moved"] is True
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["artifacts", "call"]
+
+
+def test_run_again_says_the_recording_is_already_in_its_folder(tmp_path, capsys, fake_pipeline):
+    audio = tmp_path / "call.mp4"
+    audio.write_bytes(b"x")
+    first = runner.run(str(audio))
+    capsys.readouterr()
+
+    runner.run(first["recording"])
+
+    assert "La registrazione è già nella cartella." in capsys.readouterr().err
 
 
 def test_run_again_in_a_folder_the_agent_renamed_writes_there(tmp_path, fake_pipeline):
@@ -405,23 +475,26 @@ def test_run_keeps_apart_two_recordings_with_the_same_name(tmp_path, fake_pipeli
     assert (tmp_path / "call" / "call.mp4").read_bytes() == b"first"
 
 
+def _busy(_source, _destination):
+    raise PermissionError(13, "Permission denied")
+
+
 def test_run_says_when_the_recording_could_not_move(tmp_path, monkeypatch, capsys, fake_pipeline):
     audio = tmp_path / "call.mp4"
     audio.write_bytes(b"x")
-
-    def busy(_source, _destination):
-        raise PermissionError("in uso da un altro programma")
-
-    monkeypatch.setattr(runner.shutil, "move", busy)
+    monkeypatch.setattr(runner.os, "rename", _busy)
 
     summary = runner.run(str(audio))
 
     assert summary["status"] == "ok" and summary["recording_moved"] is False
     assert audio.exists() and summary["recording"] == str(audio)
+    # No copy is left behind: the recording is either moved or where it was.
+    assert sorted(path.name for path in (tmp_path / "call").iterdir()) == ["call-trascrizione.json", "call-trascrizione.txt"]
     payload = json.loads((tmp_path / "call" / "call-trascrizione.json").read_text(encoding="utf-8"))
     assert payload["recording"] == str(audio)
-    assert "La registrazione è rimasta dov'era" in summary["message"]
-    assert "La registrazione è rimasta dov'era" in capsys.readouterr().err
+    stayed = "La registrazione è rimasta dov'era: non ho potuto spostarla nella cartella (forse è aperta in un altro programma)."
+    assert summary["message"].endswith(stayed)
+    assert stayed in capsys.readouterr().err
 
 
 def test_run_reports_paths_as_the_person_sees_them(tmp_path, monkeypatch, fake_pipeline):
@@ -448,6 +521,7 @@ def test_run_writes_the_folder_in_the_output_folder_and_leaves_the_recording(tmp
     assert (out_dir / "call" / "call-trascrizione.json").is_file()
     err = capsys.readouterr().err
     assert "Nella cartella C:\\Trascrizioni\\call trovi 'call-trascrizione.txt' e 'call-trascrizione.json'." in err
+    assert "La registrazione è rimasta dov'era." in err
 
 
 def test_run_explains_gpu_out_of_memory(tmp_path, monkeypatch, capsys, fake_pipeline):

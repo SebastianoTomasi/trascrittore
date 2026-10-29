@@ -86,4 +86,5 @@ The cap counts, in each added pool, the clips that have an entry in its clip
 record. Only those clips can be proposed for removal; a clip placed by hand,
 in any folder, never is. A proposal names the pool and the clips by file name,
 and a removal deletes only clips the person confirmed that are still in one of
-that person's added pools.
+that person's added pools. A file name found in more than one of them is
+refused, since the person could not tell which one they confirmed.

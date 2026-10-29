@@ -54,7 +54,7 @@ Se sposti la cartella, fai di nuovo doppio clic su `Installa.bat`: la skill per 
 5. Per le voci a cui hai dato un nome si apre il lettore con una clip di 10 secondi di quella voce: ascoltala e conferma che è davvero quella persona. Se non sei sicuro, rispondi `a` e ascolti la clip successiva. Solo quando confermi il nome va nella trascrizione e la voce entra nella libreria `voci`, così le prossime volte viene riconosciuta. Alla fine ti dice in quale cartella sono le clip aggiunte.
 6. Se il nome che scrivi somiglia a quello di una persona già nella libreria (per esempio "Marco Rosi" quando c'è "Marco Rossi", "M. Rossi" o solo "Marco"), il programma ti chiede se intendevi lei o una persona nuova, prima di salvare qualsiasi cosa.
 
-Accanto alla registrazione trovi una cartella con il suo nome, scritto senza spazi, accenti e maiuscole, con un trattino al posto di ogni spazio o segno: per esempio `2026-10-29 14-30-12.mkv` diventa `2026-10-29-14-30-12`. Dentro ci sono:
+Accanto alla registrazione trovi una cartella con il suo nome, scritto senza spazi, accenti e maiuscole, con un trattino al posto di ogni gruppo di spazi o segni e nessun trattino all'inizio o alla fine: per esempio `2026-10-29 14-30-12.mkv` diventa `2026-10-29-14-30-12`. Dentro ci sono:
 
 - `<nome>-trascrizione.txt`: il testo da leggere. In cima ci sono il nome della registrazione, la durata, se è stata elaborata su GPU o CPU e chi parla; poi una riga per ogni intervento, con l'ora e il nome. Le parole che il programma non riesce ad attribuire a nessuno compaiono come "Voce non attribuita";
 - `<nome>-trascrizione.json`: gli stessi dati per i programmi, con la sicurezza del riconoscimento di ogni voce e l'inizio e la fine di ogni frase;

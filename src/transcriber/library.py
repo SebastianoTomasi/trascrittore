@@ -369,19 +369,21 @@ def remove_clips(library_dir: str | os.PathLike[str], person: str, filenames: li
     """
     Delete the given added clips of a person, as the person confirmed, and drop them from their clip records.
 
-    A file that is not a recorded clip in one of the person's added pools is refused, never deleted.
+    A file that is not a recorded clip in one of the person's added pools is refused, never deleted, and so is
+    one whose name is in more than one pool, since the person could not tell which they confirmed.
     """
     pools = {folder: _present_record(folder) for folder in added_pools(Path(library_dir) / person)}
     removed, refused, changed = [], [], set()
     for filename in filenames:
         wanted = Path(filename).name.casefold()
-        found = next(
-            ((folder, key) for folder, (_, present) in pools.items() for key in present if key.casefold() == wanted), None
-        )
-        if found is None:
+        found = [(folder, key) for folder, (_, present) in pools.items() for key in present if key.casefold() == wanted]
+        if not found:
             refused.append({"clip": filename, "reason": "non è una clip aggiunta dal trascrittore per questa persona"})
             continue
-        folder, key = found
+        if len(found) > 1:
+            refused.append({"clip": filename, "reason": "è in più di un gruppo di clip: cancellala a mano da quello giusto"})
+            continue
+        folder, key = found[0]
         record, present = pools[folder]
         clip = present.pop(key)
         (folder / clip).unlink()
