@@ -1,9 +1,12 @@
 # syntax=docker/dockerfile:1.7
 # Transcriber: one recording in, a transcript with the speakers' names out.
-# Build with docker/build.ps1, which passes the Hugging Face token as a secret.
-ARG MODEL_STAGE=downloaded
+# Build with docker/build.ps1, which passes the Hugging Face token as a secret and keeps
+# dependencies and models as an image of their own, passed in as BASE.
+ARG BASE=downloaded
 ARG MODEL_IMAGE=trascrittore:latest
-FROM python:3.12-slim-bookworm AS dependencies
+# The digest keeps the Python image fixed, so a Docker Hub refresh of its tag does not reinstall
+# PyTorch and redownload the models. The current digest: docker buildx imagetools inspect python:3.12-slim-bookworm
+FROM python:3.12-slim-bookworm@sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337 AS dependencies
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
@@ -45,7 +48,7 @@ FROM ${MODEL_IMAGE} AS model_source
 FROM dependencies AS copied
 COPY --from=model_source /models /models
 
-FROM ${MODEL_STAGE} AS runtime
+FROM ${BASE} AS runtime
 ENV HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1 \
     TRANSCRIBER_DEFAULTS=/app/docker/defaults.ini
