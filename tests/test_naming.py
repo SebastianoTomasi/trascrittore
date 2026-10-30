@@ -592,8 +592,8 @@ def test_listening_at_a_time_plays_its_segment_with_a_second_on_each_side(transc
 
     assert _passage(summary) == ("ok", 11.0, 21.0, "Poi i tempi.")
     assert (summary["command"], summary["note"]) == ("listen", None)
-    assert summary["file"] == str(out_dir / "ascolta registrazione - 00-00-12.wav")
-    assert round(sf.info(out_dir / "ascolta registrazione - 00-00-12.wav").duration, 2) == 10.0
+    assert summary["file"] == str(out_dir / "ascolta registrazione - 00-00-12.000.wav")
+    assert round(sf.info(out_dir / "ascolta registrazione - 00-00-12.000.wav").duration, 2) == 10.0
 
 
 @pytest.mark.parametrize(("time", "text"), [("11.5", "Poi i tempi."), ("10.5", "Partiamo dal budget.")])
@@ -635,14 +635,30 @@ def test_a_time_outside_the_recording_is_refused_with_its_duration(transcript_an
     assert "00:01:35" in summary["message"]
 
 
-@pytest.mark.parametrize("time", ["", "dopo", "4m09s", "00:04:09:01"])
+@pytest.mark.parametrize("time", ["", "dopo", "4m09s", "00:04:09:01", "1:75", "00:60:00"])
 def test_a_time_that_cannot_be_read_is_refused(transcript_and_library, tmp_path, time):
     transcript, _ = transcript_and_library
 
     summary = naming.prepare_listening_at(str(transcript), time, out_dir=str(tmp_path))
 
     assert summary["status"] == "invalid_arguments"
-    assert "HH:MM:SS" in summary["message"]
+    assert "00:04:09.62" in summary["message"]
+
+
+def test_segments_that_start_in_the_same_second_are_heard_from_files_of_their_own(transcript_and_library, tmp_path):
+    transcript, _ = transcript_and_library
+    payload = json.loads(transcript.read_text(encoding="utf-8"))
+    payload["turns"][0]["segments"] = [
+        {"start_sec": 12.2, "end_sec": 12.6, "text": "Sì."},
+        {"start_sec": 12.8, "end_sec": 20.0, "text": "Poi i tempi."},
+    ]
+    transcript.write_text(json.dumps(payload), encoding="utf-8")
+
+    first = naming.prepare_listening_at(str(transcript), "12.3", out_dir=str(tmp_path))
+    second = naming.prepare_listening_at(str(transcript), "15", out_dir=str(tmp_path))
+
+    assert Path(first["file"]).name == "ascolta registrazione - 00-00-12.200.wav"
+    assert Path(second["file"]).name == "ascolta registrazione - 00-00-12.800.wav"
 
 
 def test_a_transcript_without_segments_has_no_passage_to_play(transcript_and_library, tmp_path):
@@ -677,13 +693,13 @@ def test_listening_at_a_time_keeps_the_other_transcripts_listening_clips(transcr
     second = naming.prepare_listening_at(str(mine), "45", out_dir=str(out_dir))
 
     assert sorted(path.name for path in out_dir.iterdir()) == [
-        "ascolta altra - 00-00-40.wav",
+        "ascolta altra - 00-00-40.000.wav",
         "ascolta registrazione - Persona 1 - 1.wav",
     ]
     assert other["file"] == str(out_dir / "ascolta registrazione - Persona 1 - 1.wav")
     assert (first["file"], second["file"]) == (
-        str(out_dir / "ascolta altra - 00-00-12.wav"),
-        str(out_dir / "ascolta altra - 00-00-40.wav"),
+        str(out_dir / "ascolta altra - 00-00-12.000.wav"),
+        str(out_dir / "ascolta altra - 00-00-40.000.wav"),
     )
 
 
@@ -693,7 +709,7 @@ def test_a_passage_still_open_in_the_player_is_played_again_from_its_file(transc
     _with_segments(transcript)
     out_dir = tmp_path / "ascolto"
     naming.prepare_listening_at(str(transcript), "13", out_dir=str(out_dir))
-    playing = out_dir / "ascolta registrazione - 00-00-12.wav"
+    playing = out_dir / "ascolta registrazione - 00-00-12.000.wav"
 
     with playing.open("rb"):
         summary = naming.prepare_listening_at(str(transcript), "14", out_dir=str(out_dir))
