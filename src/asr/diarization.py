@@ -7,8 +7,10 @@ from typing import Any
 import numpy as np
 import torch
 import whisperx
+from faster_whisper.transcribe import get_compression_ratio
+from whisperx.audio import SAMPLE_RATE
 
-from src.asr.transcript_cleaning import clean_transcript_turns
+from src.asr.transcript_cleaning import clean_transcript_turns, is_obvious_transcript_noise
 from src.asr.utils.config import (
     ensure_data_directories,
     get_diarization_settings,
@@ -268,8 +270,58 @@ def load_audio(recording_path: str) -> np.ndarray:
         raise RuntimeError(f"Failed to load input audio '{recording_path}'.") from exc
 
 
+def recover_repetition_loops(model: Any, audio: np.ndarray, segments: list[dict[str, Any]]) -> list[dict[str, float]]:
+    """
+    Decode again, on its own, each VAD window whose text Whisper repeated in a loop, and return those still looping.
+
+    whisperX's batched pipeline decodes each window once and never checks the compression ratio, so a loop
+    runs to the decoder's maximum length and takes the rest of the window's speech with it. faster-whisper's
+    sequential decoding checks it and falls back to higher temperatures. The new text replaces the looping
+    one when it holds speech and repeats itself less. Windows under the threshold are left as they are, and
+    a loop of invented boilerplate, which cleaning removes, is not returned.
+    """
+    options = model.options
+    threshold = options.compression_ratio_threshold
+    unrecovered: list[dict[str, float]] = []
+    for segment in segments:
+        if get_compression_ratio(segment["text"]) <= threshold:
+            continue
+        window = audio[int(segment["start"] * SAMPLE_RATE) : int(segment["end"] * SAMPLE_RATE)]
+        pieces, _ = model.model.transcribe(
+            window,
+            language=whisper_language,
+            beam_size=options.beam_size,
+            temperature=options.temperatures,
+            compression_ratio_threshold=threshold,
+            log_prob_threshold=options.log_prob_threshold,
+            no_speech_threshold=options.no_speech_threshold,
+            condition_on_previous_text=options.condition_on_previous_text,
+            initial_prompt=options.initial_prompt,
+            suppress_tokens=options.suppress_tokens,
+        )
+        text = "".join(piece.text for piece in pieces)
+        if text.strip() and get_compression_ratio(text) < get_compression_ratio(segment["text"]):
+            segment["text"] = text
+        looping = get_compression_ratio(segment["text"]) > threshold
+        log_event(
+            logger,
+            "repetition loop decoded again",
+            level=logging.DEBUG,
+            start=segment["start"],
+            end=segment["end"],
+            recovered=not looping,
+        )
+        if looping and not is_obvious_transcript_noise(segment["text"]):
+            unrecovered.append({"start_sec": segment["start"], "end_sec": segment["end"]})
+    return unrecovered
+
+
 def transcribe(audio: np.ndarray) -> dict:
-    """Run Whisper ASR on pre-loaded audio and return the raw result dict."""
+    """
+    Run Whisper ASR on pre-loaded audio and return the raw result dict.
+
+    Its `repetition_loops` lists the windows whose loop decoding again could not undo.
+    """
     model = None
     try:
         log_event(
@@ -292,6 +344,7 @@ def transcribe(audio: np.ndarray) -> dict:
         )
         with torch.inference_mode():
             result = model.transcribe(audio, batch_size=batch_size)
+            result["repetition_loops"] = recover_repetition_loops(model, audio, result["segments"])
         log_event(
             logger,
             "Whisper transcription completed",

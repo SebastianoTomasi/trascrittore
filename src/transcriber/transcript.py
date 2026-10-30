@@ -151,18 +151,32 @@ def render_text(
     return "\n".join(lines)
 
 
-def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
-    stretches = ", ".join(
-        f"{format_offset(stretch['start_sec'])}–{format_offset(stretch['end_sec'])}" for stretch in unaligned
+def _stretches(stretches: list[dict[str, float]]) -> str:
+    return ", ".join(
+        f"{format_offset(stretch['start_sec'])}–{format_offset(stretch['end_sec'])}" for stretch in stretches
     )
+
+
+def _unaligned_warning(unaligned: list[dict[str, float]]) -> str:
     return (
         "In alcuni tratti il parlato non si è potuto allineare parola per parola, "
-        f"e orari e chi parla sono approssimativi: {stretches}."
+        f"e orari e chi parla sono approssimativi: {_stretches(unaligned)}."
     )
 
 
-def _warnings(fallback_reason: str | None, unaligned: list[dict[str, float]]) -> list[str]:
+def _loop_warning(repetition_loops: list[dict[str, float]]) -> str:
+    return (
+        "In alcuni tratti la trascrizione si è inceppata ripetendo le stesse sillabe, "
+        f"e lì può mancare del parlato: {_stretches(repetition_loops)}."
+    )
+
+
+def _warnings(
+    fallback_reason: str | None, unaligned: list[dict[str, float]], repetition_loops: list[dict[str, float]]
+) -> list[str]:
     warnings = [f"{_CPU_WARNING_PREFIX}{fallback_reason}"] if fallback_reason else []
+    if repetition_loops:
+        warnings.append(_loop_warning(repetition_loops))
     if unaligned:
         warnings.append(_unaligned_warning(unaligned))
     return warnings
@@ -177,6 +191,7 @@ def build_payload(
     compute_type: str,
     fallback_reason: str | None,
     unaligned: list[dict[str, float]],
+    repetition_loops: list[dict[str, float]],
     elapsed_sec: float,
     turns: list[dict[str, Any]],
     labels: dict[str, str],
@@ -185,7 +200,8 @@ def build_payload(
     """
     Build the machine-readable transcript saved next to the text file.
 
-    `unaligned` holds the stretches whose speech whisperX could not align word by word.
+    `unaligned` holds the stretches whose speech whisperX could not align word by word, and
+    `repetition_loops` the windows where Whisper looped even when decoding them again.
     """
     return {
         "file": source_name,
@@ -193,7 +209,7 @@ def build_payload(
         "duration_sec": round(duration_sec, 1),
         "device": device,
         "compute_type": compute_type,
-        "warnings": _warnings(fallback_reason, unaligned),
+        "warnings": _warnings(fallback_reason, unaligned, repetition_loops),
         "elapsed_sec": round(elapsed_sec, 1),
         "speakers": speakers,
         "turns": [

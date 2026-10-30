@@ -218,7 +218,7 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
         del audio
         _say(f"Durata: {format_offset(duration_sec)}")
 
-        _step(1, "Trascrizione del parlato", diarization.transcribe_recording, work_copy)
+        asr_path = _step(1, "Trascrizione del parlato", diarization.transcribe_recording, work_copy)
         _step(2, "Allineamento delle parole", diarization.align_transcript, work_copy)
         _step(3, "Separazione delle voci", diarization.diarize_transcript, work_copy, num_speakers=speakers)
         _, transcript_path, diagnostics_path = _step(
@@ -227,6 +227,8 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
         with open(transcript_path, encoding="utf-8") as f:
             transcript = json.load(f)
         turns = transcript["turns"]
+        with open(asr_path, encoding="utf-8") as f:
+            repetition_loops = json.load(f)["repetition_loops"]
         with open(diagnostics_path, encoding="utf-8") as f:
             diagnostics = json.load(f)
 
@@ -243,6 +245,7 @@ def _transcribe(source: Path, *, speakers: int | None, out_dir: str | None) -> d
         compute_type=settings.compute_type,
         fallback_reason=settings.fallback_reason,
         unaligned=transcript["unaligned"],
+        repetition_loops=repetition_loops,
         elapsed_sec=elapsed_sec,
         turns=turns,
         labels=labels,

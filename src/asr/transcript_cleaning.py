@@ -13,6 +13,7 @@ _BOILERPLATE_SNIPPET_RES = (
     re.compile(r"\bgrazie\s+per\s+la\s+visione\b", re.IGNORECASE),
     re.compile(r"\bgrazie\s+per\s+aver\s+guardato\s+il\s+video\b", re.IGNORECASE),
     re.compile(r"\bgrazie\s+a\s+tutti\s+per\s+aver\s+guardato\s+il\s+video\b", re.IGNORECASE),
+    re.compile(r"\bgrazie\s+(?:a\s+tutti\s+)?per\s+aver(?:mi|ci)\s+seguit[oaie]\b[.!?…]?", re.IGNORECASE),
     re.compile(
         r"\b(?:autore\s+dei\s+)?sottotitoli?\s+e\s+revisione\s+a\s+cura\s+di\s+qtss(?:\s+grazie)?\b",
         re.IGNORECASE,
