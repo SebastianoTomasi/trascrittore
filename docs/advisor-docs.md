@@ -1,9 +1,8 @@
 # Documentation rules and navigation
 
-This page defines the common documentation contract and routes subjects to  
-their owning authority. Shared reading guidance is in  
-[`advisor-agents.md`](../advisor-agents.md); skills own the workflows that apply  
-these rules.
+This page defines the common documentation contract, routes subjects to their
+owning authority, and closes with the procedure of grill-with-docs sessions.
+Shared reading guidance is in [`advisor-agents.md`](../advisor-agents.md).
 
 ## Decisions and authority
 
@@ -11,17 +10,24 @@ An artifact records decisions established with the user, including choices the
 user explicitly delegates to the agent. Within that delegation, the agent's
 choice is settled and can be accepted without further user confirmation when
 the usual acceptance conditions hold. A choice made without the user's
-agreement or outside their delegation remains proposed. A session is the
-ordinary way to establish decisions and the one to recommend; a document
-written another way is held to the same acceptance rules. Acceptance records
-a settled decision, not evidence that it has been implemented.
+agreement or outside their delegation remains proposed. A decision already
+settled in the conversation can be written into the artifact that owns it right
+away, propagating the change when it replaces an accepted rule; the user need
+not open a grill-with-docs session for it. Recommend a session only when the
+work still has decisions to settle, such as a new feature or phase, because a
+session's value lies in asking those questions. A document is held to the same
+acceptance rules however it was written. Acceptance records a settled decision,
+not evidence that it has been implemented.
 
 Code establishes what is implemented. Existing behavior absent from the docs  
 creates no obligation to change or document it. Accepted documentation guides  
-the work it specifies that has not yet been implemented. When code and docs  
-explicitly contradict one another, the discrepancy needs clarification with  
-the user; it proves neither a bug nor outdated documentation. Preserve the  
-implementation while the intended change is clarified.
+the work it specifies that has not yet been implemented. For behavior the  
+project may already have, read the code before the docs and answer from both.  
+When they contradict each other, say so, preserve the implementation, and  
+propose bringing the docs in line with the code; the contradiction alone  
+changes no document and proves no bug, and the user may instead confirm the  
+docs as the intended direction. A ticket or request contradicting an accepted  
+decision is likewise clarified with the user before acting on it.
 
 The advisor’s position is advice. Accepted decisions guide the agent’s  
 reasoning, while the user remains free to change direction. Proceeding against  
@@ -128,15 +134,12 @@ constrains work only when the owning artifact states the adopted decision in
 the project’s own words. A contradiction with an accepted artifact is a  
 question for the user, not an override. Preserve informative source links using  
 the provenance rule below; updating a source alone changes no accepted rule.  
-Source discovery follows [the shared reading guidance](../advisor-agents.md#reading-guidance);  
-the workflow determines when that reading is needed.
+Source discovery follows [the shared reading guidance](../advisor-agents.md#reading-guidance).
 
 ## What a document says about itself
 
-Deferred work lives in project-owned `advisor:deferred` issues in the
-configured tracker, outside every authority and phase. Issue open/closed state
-is distinct from the artifact statuses below. Legacy `docs/deferred/` files
-are an archive and are not recovered unless explicitly migrated.
+Deferred work lives in `deferred` issues, outside every authority and phase;
+an issue's open or closed state is not an artifact status.
 
 An artifact places one line directly below its title, never in frontmatter:
 
@@ -230,8 +233,7 @@ precedes Architecture because it sharpens the behavior the system must support.
 Each catalog gives the usual inputs and sequence within its phase; these steps  
 create no extra folders, markers, or completion states.  
 Catalogs own subject-specific decisions, their dependencies, and recommended  
-order. Skills use those inputs and the decisions already settled to conduct the  
-work; the catalogs do not define the session procedure.
+order.
 
 A decision is ready when its necessary inputs are accepted and compatible,  
 and remaining open choices cannot invalidate it. A later-phase decision can  
@@ -256,8 +258,7 @@ Do not declare the whole Architecture phase complete from this one decision.
 A phase is complete when accepted, mutually compatible artifacts cover every  
 question or explicitly dismiss it, and no unresolved decision needed by that  
 coverage remains. All markers being accepted is insufficient; an unrelated  
-proposed extension does not remove accepted coverage. The workflow’s semantic  
-acceptance check establishes whether these conditions hold.
+proposed extension does not remove accepted coverage.
 
 Security, Deployment, Operations, Development, and Stack have no phase of their  
 own. Their screening questions occur in the phase catalogs where the necessary  
@@ -274,3 +275,31 @@ questions measure coverage; they do not prescribe the document’s sections.
 Content already owned by an artifact’s Scope belongs there. Additional artifacts  
 exist only when distinct scopes require them; their placement and boundaries  
 may be revised as decisions settle.
+
+## Grill-with-docs sessions
+
+A grill-with-docs session settles decisions with the user through `grilling`
+and writes each one, as it settles, into the documents that own it.
+
+1.  **Prepare** before the first question: read the owning authority's
+    boundary, the catalog for the current scope or triggered need, and the
+    relevant artifacts and sources, and the code of any behavior the project
+    already has. The catalog's decisions and dependencies, with the answers
+    already settled in documents or in code, form the design tree whose
+    frontier the session asks. For a new capability, apply
+    [Feature identity](features/advisor-features.md#feature-identity) before
+    the first write.
+2.  **Write** each answer into the artifact whose Scope owns it, reusing that
+    artifact or creating the minimum new one as `proposed` under
+    [Where a document goes](#where-a-document-goes). Record resolved terms and
+    qualifying ADRs through `domain-modeling`; the artifact states the rule and
+    links the ADR for its reasons.
+3.  **Accept** an artifact once its routing envelope and Dependencies are sound
+    and it meets the `accepted` status above, including any question that
+    triggered it, even while unrelated catalog questions stay open. Accept
+    coupled artifacts together, as
+    [readiness](#usual-phase-order-and-decision-readiness) describes.
+4.  **Before claiming a phase complete**, read its catalog and every artifact in
+    its folder, including proposals and `absent.md`. Map each question to an
+    accepted passage or a named dismissal, following linked screening answers
+    and inputs, and report that mapping and what remains open.
