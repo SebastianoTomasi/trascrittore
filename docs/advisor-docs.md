@@ -50,7 +50,7 @@ close cases without requiring any separate question catalog.
 | [Security](security/advisor-security.md) | Security policy and control requirements |
 | [Deployment](deployment/advisor-deployment.md) | Procedures for delivering and deploying the system |
 | [Operations](operations/advisor-operations.md) | Procedures for operating the system in production |
-| [Development](development/advisor-development.md) | Development and test guidance |
+| [Development](development/advisor-development.md) | Development and test guidance, and the repository's coding standards |
 | [Stack](stack/advisor-stack.md) | The selected technology inventory, versions, and shared defaults |
 
 The line between Architecture and Implementation follows the guarantees offered
@@ -87,9 +87,12 @@ Create a feature authority folder with its first artifact, never in advance.
 Shared rules remain at project scope; feature-specific applications link to  
 them. Folder presence shows where documentation exists, not phase completion.
 
-There is one fixed name: `absent.md`, the document that closes a phase this  
-feature has nothing to decide in. Its name is fixed so the dismissal is visible  
-in a listing.
+Two names are fixed. `absent.md` is the document that closes a phase this
+feature has nothing to decide in; its name is fixed so the dismissal is visible
+in a listing. `docs/development/CODING_STANDARDS.md` is the project's
+[coding standards](development/advisor-development.md#the-coding-standards-document);
+its name and place are fixed because review tools look for a file of that name,
+and it exists at project scope only, since it holds for every change.
 
 Two positions belong to the advisor’s process but hold content the project  
 owns: `GLOSSARY.md` at the project root, and `docs/adr/` for decision records.  
@@ -138,7 +141,7 @@ Source discovery follows [the shared reading guidance](../advisor-agents.md#read
 
 ## What a document says about itself
 
-Deferred work lives in `deferred` issues, outside every authority and phase;
+Deferred work lives in tracker issues, outside every authority and phase;
 an issue's open or closed state is not an artifact status.
 
 An artifact places one line directly below its title, never in frontmatter:

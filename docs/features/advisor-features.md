@@ -72,7 +72,9 @@ remain unresolved before acceptance.
 A negative applicability answer alone is insufficient, and a dedicated
 applicability question is not required. Any substantive answer belongs in a
 normal artifact, with links to answers owned elsewhere, and rules out blanket
-absence for the phase. The session's acceptance workflow checks these conditions.
+absence for the phase. Write `absent.md` after checking every catalog question
+against the accepted decisions, asking the user only the decision-critical
+questions they leave unresolved.
 
 ## Phase order and reading route
 

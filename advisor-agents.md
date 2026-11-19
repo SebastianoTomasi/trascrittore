@@ -4,8 +4,8 @@ This project follows the delivery process advisor: a project-local process for
 turning an idea into software that is clear enough to build. Its normative
 documentation lives under `docs/`. Catalogs define the decisions to address,
 their dependencies, and the usual order. This file provides shared reading
-guidance and navigation, and says how sessions, tickets, handoffs, and deferred
-work fit the process.
+guidance and navigation, says what a decision rests on, and says how sessions,
+tickets, coding standards, handoffs, and deferred work fit the process.
 
 ## Using project documentation
 
@@ -41,6 +41,24 @@ creates no additional permission step or deviation record. The full document,
 status, dependency, and acceptance rules are in
 [`docs/advisor-docs.md`](docs/advisor-docs.md).
 
+## Decisions rest on data
+
+A decision that turns on a fact, such as a number, a limit, a cost, or how an
+external system or library behaves, rests on that fact, not on a guess. A
+choice that depends only on what the user wants needs no research. Before
+recommending an answer, look in the code, the documents, and the sources for
+the facts that could change it. When one is missing or has no source behind
+it, research it thoroughly in primary sources first, in a subagent where the
+host offers one, to keep this session's context for the decision. Do so even
+when the fact seems too specific to this project to be found, because that is
+known only after looking, and stop when further searching is unlikely to
+change the answer. Save the findings, with where the research looked, as a
+[source](docs/advisor-docs.md#where-material-that-is-not-a-document-sits) and
+cite it from the artifact that records the decision. A fact the research does
+not find, or derives only from similar cases, stays uncertain: the artifact
+states it as an estimate or an assumption, never as a fact, and says what
+would verify it.
+
 ## Where things are
 
 - [`docs/advisor-docs.md`](docs/advisor-docs.md) defines common documentation
@@ -67,23 +85,54 @@ status, dependency, and acceptance rules are in
 - **Ticket breakdowns and implementation.** Before drafting tickets or building,
   put to the user, each with a recommended answer, the decisions the work
   depends on that neither an accepted artifact, its ticket, nor the
-  conversation settles.
+  conversation settles. The pull request that delivers a ticket closes it,
+  through a closing keyword in its description. When a plan or breakdown is
+  replaced, close its remaining tickets as not planned, each with a link to
+  what replaces it. A ticket left open after its work is later taken for work
+  still to do.
+- **Coding standards.** Where the project has
+  `docs/development/CODING_STANDARDS.md`, it states what is particular to this
+  repository's code, and a change is written and reviewed against it. When a
+  session settles a convention for the code, or a review raises a point an
+  earlier review already raised and that document does not state, propose
+  recording it there, as
+  [its description](docs/development/advisor-development.md#the-coding-standards-document)
+  says; a project without the document starts it then.
+- **Opening an issue.** Before opening any issue, search the open and closed
+  ones for its subject. Where one exists, comment on it, reopening it if
+  closed, in place of opening another.
 - **Delegation.** A brief that delegates work names the documents that own its
   subject, with their status, because a delegate finds documents through its
   brief before anything else.
 - **Handoffs** name the decisions settled in the conversation but not yet
   written to their artifacts, so the next session can write them, and leave
-  work that can wait beyond the next session to `deferred` issues.
-- **Deferred work**, a question, idea, or concern that can wait beyond the next
-  session, is an open `deferred` issue in the tracker configured by
-  `docs/agents/issue-tracker.md` (if it is missing, ask the user to run
-  `/setup-matt-pocock-skills`), stating what to revisit, why it can wait, and
-  when to revisit it. Open one directly, or publish a deferred breakdown through
-  `to-tickets` with `deferred` in place of `ready-for-agent`. Before a
-  grill-with-docs session, a ticket breakdown, a propagation, a migration, or
-  next-work advice, read the open `deferred` issues relevant to it. Close an
-  issue with a link to its answer once that answer is written in its artifact.
-  Legacy `docs/deferred/` files are an archive.
+  work that can wait beyond the next session to deferred issues.
+- **Deferred work** is something an artifact, a ticket, or a release will need
+  that can wait beyond the next session. An idea nothing depends on is not
+  deferred work: mention it to the user and file it only if they ask. Deferred
+  work is an open issue carrying the deferred label in the tracker configured
+  by `docs/agents/issue-tracker.md` (if it is missing, ask the user to run
+  `/setup-matt-pocock-skills`). The deferred label is the one
+  `docs/agents/triage-labels.md` assigns to deferred work, or `deferred` where
+  it assigns none. The issue states what to revisit, why it can wait, and the
+  date or event that makes it due. The event is one a later session can verify
+  from the repository or the tracker, such as an issue closing, a document
+  being accepted, or a release. Open one directly, or publish a deferred
+  breakdown through `to-tickets` with the deferred label in place of
+  `ready-for-agent`, so no agent starts its tickets before their time.
+  Before a grill-with-docs session, a ticket breakdown, a propagation, a
+  migration, or next-work advice, read the open deferred issues relevant to it
+  and check each against its due condition, the code, and the documents:
+  - Due: take it up in the work at hand, or tell the user it is due. Work that
+    starts from it keeps the issue, with the deferred label replaced by its
+    triage label, rather than opening a new ticket.
+  - Answered or delivered: close it with a link to the artifact or pull
+    request.
+  - Apparently dropped or overtaken: ask the user, then close it as not planned
+    with the reason.
+
+  Next-work advice reports these findings and changes nothing. Legacy
+  `docs/deferred/` files are an archive.
 
 ## Reading guidance
 
