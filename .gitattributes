@@ -1,4 +1,7 @@
+# LF in every checkout, on every machine, whatever core.autocrlf says.
+* text=auto eol=lf
 # cmd.exe misparses labels in LF-only batch files.
 *.bat text eol=crlf
+*.cmd text eol=crlf
 # Keep dependency-layer cache stable across Windows checkouts.
 pyproject.toml text eol=lf
